@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Activity,
-  GitFork,
   Globe,
   Home,
   Image as ImageIcon,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../i18n';
+import { BrandLogoIcon } from './brand-logo-icon';
 import { Drawer } from './drawer';
 import { ThemeMode } from '../../types/common';
 
@@ -60,7 +60,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       id: 'tree',
       label: t('nav.tree'),
       href: '/tree',
-      icon: <GitFork className="h-5 w-5" />,
+      icon: <BrandLogoIcon className="h-5 w-5" />,
     },
     {
       id: 'people',

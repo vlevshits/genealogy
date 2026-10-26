@@ -3,6 +3,9 @@
 ## 1. Overview & Objective
 The Merge & Reconciliation view guides researchers through safely merging external tree files (GEDCOM / GEDZIP) into the active tree. It features a **Step-by-Step Staged Wizard**, an **Interactive Side-by-Side Diff Comparison**, and **Field-Level Conflict Resolution**.
 
+> [!IMPORTANT] Administrator-Only Boundary:
+> The Tree Import & Reconciliation Wizard (`/settings/merge`) is strictly restricted to **Administrators** (`RequireRole::<Admin>`). Because external tree ingestion creates global snapshots and alters genealogical topologies across the entire database, it is blocked for Viewers and Editors (`403 Forbidden`). (In-tree duplicate merging of two existing individual records is handled separately on `/people/merge` for Administrators).
+
 ---
 
 ## 2. Page Wireframe & Layout
@@ -79,6 +82,7 @@ The Merge & Reconciliation view guides researchers through safely merging extern
 
 ## 4. Definition of Done (DoD)
 
+- [ ] **Administrator-Only Access:** The merge wizard (`/settings/merge`) is accessible only to Administrators; Viewers, Editors, and unauthenticated visitors receive `403 Forbidden` / redirect to `/login`.
 - [ ] **Linear Stepper Progression:** User cannot jump to merge commit without resolving or skipping flagged conflicts.
 - [ ] **Field-Level Diff Highlight:** Discrepancies between current and incoming records are clearly highlighted with accessible color contrast.
 - [ ] **Atomic Transaction:** Committing merges records, creates pre-merge snapshot, and recalculates relationships inside a single database transaction.

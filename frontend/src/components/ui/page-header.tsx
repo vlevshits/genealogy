@@ -32,7 +32,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     >
       <div className="space-y-1">
         <div className="flex items-center gap-2.5">
-          <h1 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-primary">
+          <h1 className="font-sans text-xl sm:text-2xl font-semibold tracking-tight text-primary">
             {title}
           </h1>
           {count !== undefined && (

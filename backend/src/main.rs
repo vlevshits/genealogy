@@ -2,17 +2,20 @@ mod config;
 mod error;
 pub mod models;
 mod routes;
+pub mod services;
 mod state;
 
-use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
-use std::time::Duration;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::AppConfig;
 use crate::routes::create_router;
+use crate::services::{
+    backup::BackupService, db_init::connect_and_migrate, scheduler::spawn_background_scheduler,
+};
 use crate::state::AppState;
 
 #[tokio::main]
@@ -39,33 +42,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting Family Tree backend service"
     );
 
-    // 4. Initialize Database Connection Pool
-    let pool = match PgPoolOptions::new()
-        .max_connections(10)
-        .acquire_timeout(Duration::from_secs(5))
-        .connect(&config.database_url)
+    // 4. Connect to PostgreSQL with exponential retry loop, advisory-locked migrations,
+    //    and automatic pre-upgrade backup when pending migrations exist.
+    let backup_service = BackupService::new(Arc::new(config.clone()));
+    let pool = connect_and_migrate(&config, &backup_service)
         .await
-    {
-        Ok(pool) => {
-            tracing::info!("Connected to PostgreSQL database successfully");
-            // Run automatic migrations
-            match sqlx::migrate!("./migrations").run(&pool).await {
-                Ok(_) => tracing::info!("Database migrations executed successfully"),
-                Err(e) => tracing::error!("Failed to execute database migrations: {e}"),
-            }
-            Some(pool)
-        }
-        Err(err) => {
-            tracing::warn!(
-                error = %err,
-                "Could not connect to PostgreSQL immediately. Backend will run in degraded/standalone mode until DB is available."
-            );
-            None
-        }
-    };
+        .map_err(|e| format!("Database initialization error: {e}"))?;
 
-    // 5. Initialize application state and router
+    // 5. Initialize application state, background scheduler, and router
     let state = AppState::new(pool, config.clone());
+    spawn_background_scheduler(state.clone());
     let app = create_router(state);
 
     // 6. Bind listener and run Axum server

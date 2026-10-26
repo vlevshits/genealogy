@@ -14,6 +14,7 @@ Photographs and historical documents (scanned birth certificates, census records
   - Audio (optional): MP3/WAV oral history recordings.
 - **Metadata Fields:** Title, Description, Date Taken (supports fuzzy genealogy dates, e.g. `abt 1935`), Place Taken, Associated Individuals, and Notes. A scan can also be attached directly to an event as its documentary evidence.
 - **Storage Architecture:** Stored locally in a dedicated persistent Docker volume (e.g. `/data/media`) with hashed filenames; configurable S3-compatible backend for cloud deployments.
+- **GEDCOM Stubs & External Reconciliation:** When importing a standalone `.ged` file whose media binaries were not bundled, stub entries are created with `is_missing = TRUE`, recording the original filename and external path (e.g. `/root/gramps/000085_*.jpg`). Uploading a matching photos folder or archive later reconciles the assets by base filename, clearing `is_missing` and linking thumbnails ([03 §3.5](03-gedcom-import-export.md#35-step-5-import-report--post-import-media-reconciliation)).
 
 ### 2.2 Interactive Face Tagging
 1. In the photo detail viewer, an Editor or Admin clicks **"Tag Faces"**.
@@ -46,6 +47,8 @@ CREATE TABLE media_assets (
     date_taken VARCHAR(100) NULL, -- Supports fuzzy dates like "Circa 1920"
     place_id UUID NULL REFERENCES places(id) ON DELETE SET NULL,
     is_private BOOLEAN NOT NULL DEFAULT FALSE,
+    is_missing BOOLEAN NOT NULL DEFAULT FALSE, -- TRUE when imported from GEDCOM without binary asset
+    external_path TEXT NULL,                   -- Preserved raw path from GEDCOM e.g. /root/gramps/000085_*.jpg
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

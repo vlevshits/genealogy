@@ -3,6 +3,9 @@
 ## 1. Overview & Objective
 The Printable PDF Studio allows users to configure, preview, and generate wall charts and home-printable tiled posters. It uses a **Dual-Pane Studio Layout** with an interactive configuration sidebar on the left and a live real-time preview canvas on the right.
 
+> [!IMPORTANT] Administrator-Only Isolation:
+> Generating printable PDF posters and wall charts (`/export/print` and `POST /api/v1/export/pdf`) is an **Administrator-only administrative tool** (`RequireRole::<Admin>`). To prevent heavy background rendering abuse and bulk data harvesting, this page is inaccessible to Viewers and Editors (`403 Forbidden`) as well as unauthenticated visitors (redirected to `/login`).
+
 ---
 
 ## 2. Page Wireframe & Layout
@@ -79,6 +82,7 @@ The Printable PDF Studio allows users to configure, preview, and generate wall c
 
 ## 4. Definition of Done (DoD)
 
+- [ ] **Administrator-Only Isolation:** Access to `/export/print` and `POST /api/v1/export/pdf` is restricted exclusively to Administrators; unauthenticated visitors are redirected to `/login`, and Viewers/Editors receive `403 Forbidden`.
 - [ ] **Dual-Pane Responsiveness:** Configuration on left, live interactive preview on right; stacks cleanly on small screens.
 - [ ] **Accurate Sheet Estimation:** The UI dynamically calculates and displays the exact sheet count and grid layout before downloading.
 - [ ] **Theme Switching in Preview:** Switching between Modern Clean and Heritage Antique instantly updates the preview styling.

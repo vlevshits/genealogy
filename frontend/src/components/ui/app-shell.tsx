@@ -1,32 +1,33 @@
 import React, { useState } from 'react';
 import {
   ChevronDown,
-  GitBranch,
-  Globe,
-  Laptop,
+  LogIn,
   Menu,
-  Moon,
   Plus,
   Search,
-  Sun,
   User,
 } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { useTheme } from '../../lib/theme';
+import { useAuth } from '../../lib/auth-context';
 import { NavLink } from './nav-link';
 import { DropdownMenu } from './dropdown-menu';
 import { Kbd } from './kbd';
+import { Button } from './button';
 import { IconButton } from './icon-button';
+import { BrandLogoIcon } from './brand-logo-icon';
+import { LanguageToggleButton } from './language-toggle-button';
+import { ThemeToggleButton } from './theme-toggle-button';
 import { Drawer } from './drawer';
 import { BottomNav } from './bottom-nav';
 import { CommandPalette, CommandPaletteItem } from './command-palette';
 import { Breadcrumbs, BreadcrumbItem } from './breadcrumbs';
 import { SAMPLE_PEOPLE, SAMPLE_PLACES } from '../../lib/mock-data';
-import { ThemeMode } from '../../types/common';
 
 export interface AppShellProps {
   currentPath?: string;
   onNavigate?: (path: string) => void;
+  instanceTitle?: string;
   breadcrumbs?: BreadcrumbItem[];
   contextAction?: React.ReactNode;
   children: React.ReactNode;
@@ -35,14 +36,17 @@ export interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({
   currentPath = '/',
   onNavigate,
+  instanceTitle,
   breadcrumbs,
   contextAction,
   children,
 }) => {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const { theme, setTheme } = useTheme();
+  const { user, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [omniboxOpen, setOmniboxOpen] = useState(false);
+  const resolvedTitle = instanceTitle || t('app.instanceName');
 
   const navigate = (path: string) => {
     setMobileMenuOpen(false);
@@ -52,6 +56,11 @@ export const AppShell: React.FC<AppShellProps> = ({
       window.history.pushState({}, '', path);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
+  };
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login');
   };
 
   const omniboxItems: CommandPaletteItem[] = [
@@ -83,11 +92,9 @@ export const AppShell: React.FC<AppShellProps> = ({
     },
   ];
 
-  const cycleTheme = () => {
-    const order: ThemeMode[] = ['light', 'dark', 'system'];
-    const next = order[(order.indexOf(theme) + 1) % order.length];
-    setTheme(next);
-  };
+  const userInitials = user
+    ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() || 'U'
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas text-primary pb-20 md:pb-0 transition-colors duration-200">
@@ -114,10 +121,10 @@ export const AppShell: React.FC<AppShellProps> = ({
               className="flex items-center gap-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-surface shadow-xs">
-                <GitBranch className="h-4.5 w-4.5" />
+                <BrandLogoIcon className="h-5 w-5" />
               </div>
-              <span className="font-serif text-base sm:text-lg font-semibold tracking-tight text-primary">
-                {t('app.instanceName')}
+              <span className="font-sans text-base sm:text-lg font-semibold tracking-tight text-primary">
+                {resolvedTitle}
               </span>
             </a>
 
@@ -179,16 +186,17 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           {/* Right: Omnibox Trigger, +Add, Locale, Theme, User Menu */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setOmniboxOpen(true)}
+            <Button
+              variant="secondary"
+              size="md"
               aria-label={t('nav.searchTrigger')}
-              className="flex min-h-11 items-center gap-2.5 rounded-xl border border-border bg-surface-muted/70 px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary transition-colors cursor-pointer"
+              onClick={() => setOmniboxOpen(true)}
+              leftIcon={<Search className="h-3.5 w-3.5" />}
+              rightIcon={<Kbd className="hidden sm:inline-flex">⌘K</Kbd>}
+              className="rounded-xl bg-surface-muted/70 px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary"
             >
-              <Search className="h-3.5 w-3.5" />
               <span className="hidden lg:inline">{t('nav.searchTrigger')}</span>
-              <Kbd className="hidden sm:inline-flex">⌘K</Kbd>
-            </button>
+            </Button>
 
             <DropdownMenu
               ariaLabel={t('nav.add')}
@@ -204,55 +212,67 @@ export const AppShell: React.FC<AppShellProps> = ({
               ]}
             />
 
-            {/* Language Selector */}
-            <button
-              type="button"
-              onClick={() => setLocale(locale === 'en' ? 'ru' : 'en')}
-              aria-label={t('common.language')}
-              title={t('common.language')}
-              className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-secondary hover:bg-surface-muted hover:text-primary transition-colors cursor-pointer"
-            >
-              <Globe className="h-3.5 w-3.5" />
-              <span>{locale.toUpperCase()}</span>
-            </button>
+            {/* Reusable Language & Theme Toggle Buttons */}
+            <LanguageToggleButton />
+            <ThemeToggleButton />
 
-            {/* Theme Selector (Light / Dark / System) */}
-            <button
-              type="button"
-              onClick={cycleTheme}
-              aria-label={t('common.themeSelector')}
-              title={`${t('common.themeSelector')}: ${theme}`}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-surface text-secondary hover:bg-surface-muted hover:text-primary transition-colors cursor-pointer"
-            >
-              {theme === 'light' && <Sun className="h-4 w-4" />}
-              {theme === 'dark' && <Moon className="h-4 w-4" />}
-              {theme === 'system' && <Laptop className="h-4 w-4" />}
-            </button>
-
-            {/* User Profile Menu */}
-            <DropdownMenu
-              ariaLabel={t('nav.userMenu')}
-              trigger={
-                <span
-                  aria-label={t('nav.userMenu')}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-brand/15 text-xs font-semibold text-brand"
-                >
-                  <User className="h-4 w-4" />
-                </span>
-              }
-              items={[
-                { id: 'profile', label: t('nav.myProfile'), onSelect: () => navigate('/persons/I0001') },
-                { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
-                { id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') },
-                {
-                  id: 'logout',
-                  label: t('nav.signOut'),
-                  danger: true,
-                  separatorBefore: true,
-                  onSelect: () => navigate('/login'),
-                },
-              ]}
-            />
+            {/* User Profile Menu or Sign-In Button in Public Mode */}
+            {!isAuthenticated && currentPath !== '/login' && user === null ? (
+              <DropdownMenu
+                ariaLabel={t('nav.userMenu')}
+                trigger={
+                  <span
+                    aria-label={t('nav.userMenu')}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-brand/15 text-xs font-semibold text-brand"
+                  >
+                    <User className="h-4 w-4" />
+                  </span>
+                }
+                items={[
+                  { id: 'profile', label: t('nav.myProfile'), onSelect: () => navigate('/settings/profile') },
+                  { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
+                  { id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') },
+                  {
+                    id: 'signin',
+                    label: t('nav.signIn'),
+                    icon: <LogIn className="h-3.5 w-3.5" />,
+                    separatorBefore: true,
+                    onSelect: () => navigate('/login'),
+                  },
+                ]}
+              />
+            ) : (
+              <DropdownMenu
+                ariaLabel={t('nav.userMenu')}
+                trigger={
+                  <span
+                    aria-label={t('nav.userMenu')}
+                    title={user?.display_name ?? t('nav.userMenu')}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-brand/15 text-xs font-semibold text-brand"
+                  >
+                    {userInitials ?? <User className="h-4 w-4" />}
+                  </span>
+                }
+                items={[
+                  {
+                    id: 'profile',
+                    label: user ? `${user.display_name} (${t('nav.myProfile')})` : t('nav.myProfile'),
+                    onSelect: () => navigate('/settings/profile'),
+                  },
+                  { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
+                  { id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') },
+                  {
+                    id: 'logout',
+                    label: t('nav.signOut'),
+                    danger: true,
+                    separatorBefore: true,
+                    onSelect: () => {
+                      void handleSignOut();
+                    },
+                  },
+                ]}
+              />
+            )}
           </div>
         </div>
 
@@ -272,7 +292,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         open={mobileMenuOpen}
         onOpenChange={setMobileMenuOpen}
         side="right"
-        title={t('app.instanceName')}
+        title={resolvedTitle}
       >
         <div className="flex flex-col gap-1">
           <NavLink href="/" active={currentPath === '/'} onNavigate={navigate}>
@@ -289,6 +309,9 @@ export const AppShell: React.FC<AppShellProps> = ({
           </NavLink>
           <NavLink href="/places" active={currentPath.startsWith('/places')} onNavigate={navigate}>
             {t('nav.places')}
+          </NavLink>
+          <NavLink href="/settings" active={currentPath.startsWith('/settings')} onNavigate={navigate}>
+            {t('nav.adminSettings')}
           </NavLink>
         </div>
       </Drawer>

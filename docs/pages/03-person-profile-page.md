@@ -3,6 +3,12 @@
 ## 1. Overview & Objective
 The Person Profile page provides an immersive, biographical deep-dive into an individual ancestor's life. It balances historical storytelling with structured genealogical data, featuring a **Hero Identity Header**, an **Interactive Life Map**, a **Chronological Timeline of Life Events**, and dedicated tabs for family relations, photos, and notes.
 
+> [!IMPORTANT] Access Tiers & Living Person Privacy:
+> - **Default Private Instance (`ENABLE_PUBLIC_ACCESS=false`):** Unauthenticated visitors cannot access `/persons/:id` and are redirected to `/login`.
+> - **Public Tree Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):** If the requested person is living, the page returns a masked placeholder profile (`Living` / `Живущий`, neutral silhouette avatar, zero dates, places, notes, maps, or media). Deceased persons render their public biographical profile without edit controls.
+> - **Authenticated Viewers (`Viewer`):** Trusted family members view complete personal records (full names, patronymics, dates, places, timeline, life map, photos, notes) for all living relatives. The page is strictly read-only: inline edit pencils, `Edit Profile`, `+ Add Event`, and mutating dropdown actions are hidden.
+> - **Authenticated Editors & Admins (`Editor`, `Admin`):** Full living person visibility plus full in-place editing, life event authoring, photo tagging, and duplicate merge tools.
+
 ---
 
 ## 2. Page Wireframe & Layout
@@ -44,18 +50,22 @@ The Person Profile page provides an immersive, biographical deep-dive into an in
 ## 3. Structural Sections
 
 ### 3.1 Hero Identity Header
-- **Portrait Avatar:** Large rounded-2xl avatar (`w-28 h-28`). If multiple photos exist, an indicator shows *"1 of 4 photos"*, allowing one-click avatar changes.
-- **Name Typography:** Large Serif heading (`font-serif text-3xl font-semibold`): Given Name, Patronymic (*Отчество*), and Surname.
+- **Portrait Avatar:** Large rounded-2xl avatar (`w-28 h-28`). If multiple photos exist, an indicator shows *"1 of 4 photos"*, allowing one-click avatar changes (Editors+). Living persons in public mode render a neutral silhouette.
+- **Name Typography:** Large Serif heading (`font-serif text-3xl font-semibold`): Given Name, Patronymic (*Отчество*), and Surname. Masked as `Living` / `Живущий` for unauthenticated visitors in public mode.
 - **Life Span & Vital Dates:**
   - Formatted exact or approximate dates (`b. 14 Mar 1912 – d. 22 Oct 1989 • Age 77`).
-  - Living person badge (`Living / Живущий`) with privacy masking when viewed without permissions.
-- **Dynamic Kinship Pill:** Computes relationship relative to the viewer's **home person** ([16 §2](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md#2-home-person)) (e.g., *"Your Great-Grandfather"* / *"Ваш Прадедушка"*). Hidden when no home person is set or no relationship exists.
+  - Living person badge (`Living / Живущий`). In public mode, all vital dates and locations are hidden.
+- **Dynamic Kinship Pill:** Computes relationship relative to the viewer's **home person** ([16 §2](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md#2-home-person)) (e.g., *"Your Great-Grandfather"* / *"Ваш Прадедушка"*). Hidden when no home person is set, for anonymous visitors, or if no relationship exists.
 - **Header Actions:**
-  - `Edit Profile` (Editors/Admins only)
-  - `View in Tree` (smoothly navigates to `/tree`, centering on this node)
-  - `+ Add Event / Relative` quick buttons.
-  - `⋯` menu: *Set as my home person*, *History* ([14](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md)), *Merge with…* ([15](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md)), *Mark private*, *Delete* (Editors+), *Copy link*.
-  - Footer: `gid` (e.g. `I0042`), last modified by/when; ⚠️ data-quality badge for Editors.
+  - `Edit Profile` (Editors and Admins only; hidden for Viewers and public guests).
+  - `View in Tree` (smoothly navigates to `/tree`, centering on this node).
+  - `+ Add Event / Relative` quick buttons (Editors and Admins only).
+  - `⋯` menu:
+    - Public Guests: *Copy link*.
+    - Viewers: *Set as my home person*, *Copy link*.
+    - Editors: *Set as my home person*, *Mark private*, *Delete*, *Copy link*.
+    - Admins: *Set as my home person*, *History* ([14](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md)), *Merge with…* ([15](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md)), *Mark private*, *Delete*, *Copy link*.
+  - Footer: `gid` (e.g. `I0042`), last modified by/when; ⚠️ data-quality badge for Admins only.
 
 ### 3.2 Standard Tabbed Navigation
 - **Tab 1: Chronology & Map (Default):**
@@ -89,7 +99,8 @@ Editing happens **in place** on the profile — no separate editor page, no nest
 
 - [ ] **Unified Information Architecture:** All person profiles share the identical header, tabs, and dual-pane layout structure.
 - [ ] **Interactive Geocoded Life Map:** Life events with coordinates automatically render numbered pins and connected migration polylines on the map.
-- [ ] **Living Privacy Guard:** When an anonymous visitor accesses a living person's profile, sensitive dates, maps, and photos are masked with privacy placeholders.
+- [ ] **Living Privacy Guard:** When an anonymous visitor accesses a living person's profile in public mode, sensitive dates, maps, notes, and photos are masked with privacy placeholders; in default private mode, unauthenticated access redirects to `/login`.
+- [ ] **Role-Segregated Profile Actions:** Authenticated Viewers view full living person records in read-only mode with zero edit controls; inline edit pencils, the `Edit Profile` button, and `+ Add Event` render for Editors and Admins; `Merge with…` and the header ⚠️ data-quality badge are accessible exclusively to Administrators.
 - [ ] **Fast Navigation to Tree:** Clicking "View in Tree" opens the tree canvas and centers the camera on the person in <300ms.
 - [ ] **Inline Editing:** All person data (identity, events, biography, relationships) can be edited from the profile without leaving the page.
 - [ ] **Single Request Load:** Profile renders from one API call using `?include=` expansion.

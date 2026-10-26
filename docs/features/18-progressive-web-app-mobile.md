@@ -170,7 +170,7 @@ Breakpoints:
   - Right: Quick Omnibox search trigger (`🔍`), User Avatar menu.
 - **Bottom Navigation Bar (`BottomNav`):** Fixed at screen bottom, height `h-16` + `env(safe-area-inset-bottom)`.
   - 5 thumb-friendly items: `[ 🏠 Home ] [ 🌳 Tree ] [ 👥 People ] [ 🖼 Media ] [ ⋯ More ]`.
-  - `More` button opens a bottom sheet with Places, Print/PDF, Recent Changes, Data Quality, Settings, Language switcher, Theme toggle.
+  - `More` button opens a bottom sheet with role-filtered items: Places, Language switcher, Theme toggle for all authenticated users; Print/PDF, Recent Changes, Data Quality, Duplicate Person Merge, and Admin Settings for Administrators.
 
 #### Tablet Navigation (`768px – 1024px`)
 - Topbar or vertical icon navigation rail (`w-16`).

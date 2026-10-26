@@ -3,6 +3,9 @@
 ## 1. Overview & Objective
 The authentication views (`/login`, `/register`, `/setup`, `/magic-link/verify`) provide a clean, distraction-free environment centered entirely on security and effortless sign-in. The layout is stripped of full app navigation chrome, featuring an elegant centered card, subtle warm background, and top-right language/theme switches.
 
+> [!IMPORTANT] Default Private Landing Page:
+> Under the default instance configuration (`ENABLE_PUBLIC_ACCESS=false`), the Sign-In view (`/login`) is the **exclusive entry point** for unauthenticated visitors. Any request to root (`/`), the tree canvas (`/tree`), or internal resources is intercepted by the router/middleware and immediately redirected to `/login`. Only when public access is explicitly enabled does `/tree` accept unauthenticated traffic.
+
 ---
 
 ## 2. Layout Wireframe
@@ -36,6 +39,7 @@ The authentication views (`/login`, `/register`, `/setup`, `/magic-link/verify`)
 ## 3. Page Variants & Structures
 
 ### 3.1 Sign-In View (`/login`)
+- **Default Entry Point:** Serves as the landing page for unauthenticated visitors when the archive is private.
 - **Hero Element:** Large, prominent **"Sign in with Passkey"** button (`bg-brand text-white py-3 rounded-lg font-medium shadow-sm hover:opacity-95`).
 - **Conditional UI / Autofill:** If the browser supports WebAuthn autofill, a gentle prompt allows instant biometric login without typing.
 - **Divider:** Subtle rule with *"or sign in with email"*.
@@ -70,6 +74,7 @@ The authentication views (`/login`, `/register`, `/setup`, `/magic-link/verify`)
 
 ## 4. Definition of Done (DoD)
 
+- [ ] **Default Private Landing:** In the default private configuration (`ENABLE_PUBLIC_ACCESS=false`), unauthenticated visitors to `/` or `/tree` land on `/login`; no tree topology or living identities are leaked.
 - [ ] **Distraction-Free Design:** Auth pages hide the global topbar and center the card with responsive padding on mobile screens.
 - [ ] **One-Touch Passkey Login:** Clicking "Sign in with Passkey" initiates the biometric dialog immediately.
 - [ ] **Magic Link State:** Requesting a magic link displays an instant confirmation view: *"Check your inbox. We sent a sign-in link to user@example.com"*.

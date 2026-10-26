@@ -54,10 +54,10 @@ CREATE TABLE tree_snapshots (
   *"🟡 Lev edited birth date of **Елена Морозова**: `1915` → `abt 1914`"*
   *"🔴 Lev deleted **Unknown Child** — [Restore]"*
 - Filters: user, entity type, date range, "only deletions".
-- Visible to Editors and Admins. Viewers do not see history.
+- **Access Control:** Restricted exclusively to **Administrators** per [02 §2](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/02-rbac-access-control.md#2-master-segregation--rbac-permission-matrix). Editors, Viewers, and unauthenticated visitors receive 403 Forbidden.
 
 ### 3.2 Per-Record History
-- Every profile/family/place has a *History* entry in its `⋯` menu → slide-over drawer listing that record's changes with field-level diffs.
+- Every profile/family/place has a *History* entry in its `⋯` menu → slide-over drawer listing that record's changes with field-level diffs (accessible to Editors and Admins).
 
 ### 3.3 Restore & Undo
 | Action | Who | Behavior |
@@ -102,3 +102,4 @@ The dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/fe
 - [ ] **No Silent Overwrites:** Two editors saving the same record → the second receives `409` and a resolution dialog.
 - [ ] **Snapshot Rollback:** Admin can roll back a merge/import snapshot; a pre-rollback snapshot is created automatically.
 - [ ] **Retention:** Entries older than `HISTORY_RETENTION_DAYS` and expired snapshots are pruned by the nightly job.
+- [ ] **Admin-Only Audit Feed:** Access to `/history` and `GET /api/v1/history` is restricted to Administrators; Editors and Viewers receive 403 Forbidden.

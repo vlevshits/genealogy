@@ -1,35 +1,72 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Compass, Sparkles, Layers, Shield, FileText, GitFork } from 'lucide-react';
+import { Compass, Sparkles, Layers, Shield, FileText } from 'lucide-react';
 import { SystemStatusCard } from './components/SystemStatusCard';
-import { AppShell, Button, Badge, Spinner } from './components/ui';
+import { AppShell, BrandLogoIcon, Button, Badge, Spinner } from './components/ui';
+import { SettingsPage } from './pages/SettingsPage';
+import { AuthPages } from './pages/AuthPages';
+import { fetchSystemInfo } from './api/client';
+import { useAuth } from './lib/auth-context';
 import { useI18n } from './i18n';
 
 const DevUiWorkbench = React.lazy(() => import('./pages/DevUiWorkbench'));
 
 export const App: React.FC = () => {
   const { t } = useI18n();
+  const { setupStatus, isAuthenticated, isLoading, backendReachable } = useAuth();
   const [path, setPath] = useState<string>(() =>
     typeof window !== 'undefined' ? window.location.pathname : '/'
   );
+  const [search, setSearch] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.location.search : ''
+  );
+  const [instanceTitle, setInstanceTitle] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    const onPopState = () => setPath(window.location.pathname);
+    const onPopState = () => {
+      setPath(window.location.pathname);
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchSystemInfo()
+      .then((info) => {
+        if (!cancelled && info.tree_title) {
+          setInstanceTitle(info.tree_title);
+          if (typeof document !== 'undefined') {
+            document.title = info.tree_title;
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully to localized default when backend is offline
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const navigate = (nextPath: string) => {
+    const baseOrigin =
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const parsed = new URL(nextPath, baseOrigin);
     if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', nextPath);
+      window.history.pushState({}, '', `${parsed.pathname}${parsed.search}`);
     }
-    setPath(nextPath);
+    setPath(parsed.pathname);
+    setSearch(parsed.search);
   };
 
+  // 1. Dev UI Workbench route
   if (path.startsWith('/dev/ui')) {
     return (
       <AppShell
         currentPath={path}
         onNavigate={navigate}
+        instanceTitle={instanceTitle}
         breadcrumbs={[
           { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
           { id: 'dev-ui', label: t('nav.devWorkbench') },
@@ -49,8 +86,97 @@ export const App: React.FC = () => {
     );
   }
 
+  // 2. First-run uninitialized instance guard -> /setup (01 §2.1)
+  if (!isLoading && backendReachable && setupStatus && !setupStatus.is_initialized) {
+    return (
+      <AuthPages
+        currentPath="/setup"
+        instanceTitle={instanceTitle || setupStatus.tree_title}
+        onNavigate={navigate}
+        onInstanceTitleChange={(nextTitle) => {
+          setInstanceTitle(nextTitle);
+          if (typeof document !== 'undefined') {
+            document.title = nextTitle;
+          }
+        }}
+      />
+    );
+  }
+
+  // 3. Explicit Auth routes (/setup, /login, /register, /magic-link/verify)
+  if (
+    path.startsWith('/setup') ||
+    path.startsWith('/login') ||
+    path.startsWith('/register') ||
+    path.startsWith('/magic-link/verify')
+  ) {
+    return (
+      <AuthPages
+        currentPath={path}
+        search={search}
+        instanceTitle={instanceTitle || setupStatus?.tree_title}
+        onNavigate={navigate}
+        onInstanceTitleChange={(nextTitle) => {
+          setInstanceTitle(nextTitle);
+          if (typeof document !== 'undefined') {
+            document.title = nextTitle;
+          }
+        }}
+      />
+    );
+  }
+
+  // 4. Default Private Landing Guard (01-auth-pages.md §1, §4 DoD #1):
+  // When instance is initialized, private (enable_public_access === false), and visitor is unauthenticated
+  if (
+    !isLoading &&
+    backendReachable &&
+    setupStatus &&
+    setupStatus.is_initialized &&
+    !setupStatus.enable_public_access &&
+    !isAuthenticated
+  ) {
+    return (
+      <AuthPages
+        currentPath="/login"
+        instanceTitle={instanceTitle || setupStatus.tree_title}
+        onNavigate={navigate}
+      />
+    );
+  }
+
+  // 5. Settings & Administration routes (/settings/*)
+  if (path.startsWith('/settings')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'settings', label: t('settings.pageTitle') },
+        ]}
+      >
+        <SettingsPage
+          currentPath={path}
+          onNavigate={navigate}
+          onInstanceTitleChange={(nextTitle) => {
+            setInstanceTitle(nextTitle);
+            if (typeof document !== 'undefined') {
+              document.title = nextTitle;
+            }
+          }}
+        />
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell currentPath={path} onNavigate={navigate}>
+    <AppShell
+      currentPath={path}
+      onNavigate={navigate}
+      instanceTitle={instanceTitle}
+    >
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Archival Hero Banner */}
         <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-b from-surface to-surface/80 p-8 sm:p-12 shadow-xs">
@@ -60,8 +186,8 @@ export const App: React.FC = () => {
               <span>{t('app.badge')}</span>
             </div>
 
-            <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-primary leading-tight">
-              {t('app.title')}
+            <h1 className="font-sans text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-primary leading-tight">
+              {instanceTitle || t('app.title')}
             </h1>
 
             <p className="text-base sm:text-lg text-secondary leading-relaxed">
@@ -72,7 +198,7 @@ export const App: React.FC = () => {
               <Button
                 variant="primary"
                 size="lg"
-                leftIcon={<GitFork className="h-4 w-4" />}
+                leftIcon={<BrandLogoIcon className="h-4.5 w-4.5" />}
                 onClick={() => navigate('/tree')}
               >
                 {t('app.openWorkbench')}

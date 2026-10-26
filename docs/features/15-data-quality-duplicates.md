@@ -35,7 +35,7 @@ Fixed set; thresholds configurable via env:
 
 ### 2.3 Inline Presentation
 - In edit forms, a yellow hint under the field: *"Mother would be 9 years old at this birth. Check the date?"* — save still allowed.
-- On profiles, a discreet ⚠️ badge in the header opens the list of warnings (Editors only).
+- On profiles, a discreet ⚠️ badge in the header opens the list of warnings (Admins only).
 
 ---
 
@@ -46,8 +46,8 @@ Fixed set; thresholds configurable via env:
 - Runs as a background job (nightly + on demand); results cached in `duplicate_candidates(person_a, person_b, score, computed_at)`.
 - **Real-time check when adding a person:** the quick-add drawer shows *"Possible match: Пётр Щеглов (1868–1931) — Use existing?"* if score ≥ 80%, which prevents most duplicates at the source.
 
-### 3.2 Merge Flow (`/people/merge?a=…&b=…`)
-Entry points: Data Quality page, People Directory (select 2 → *Compare / Merge*), profile `⋯ → Merge with…`.
+### 3.2 Merge Flow (`/people/merge?a=…&b=…`, Admin only)
+Entry points: Data Quality page, People Directory (select 2 → *Compare / Merge*, Admins only), profile `⋯ → Merge with…` (Admins only).
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -79,7 +79,8 @@ Family merge (two duplicate families with the same partners) uses the same UI in
 
 ---
 
-## 4. Data Quality Page (`/quality`, Editor+)
+## 4. Data Quality Page (`/quality`, Admin only)
+The Data Quality page, its soft warning reviews, and candidate duplicate queues are restricted strictly to **Administrators** (`RequireRole::<Admin>`). Viewers and Editors attempting to access `/quality` receive `403 Forbidden`.
 - Summary chips: *"12 warnings · 5 possible duplicates · 48 people missing birth dates · 3 unconnected"*.
 - Tabs: **Warnings**, **Possible duplicates** (pairs with score, *Compare* button, *Not a duplicate* button), **Incomplete** (shortcut to People Directory filter).
 - Each row links to the record; fixing it removes the row on the next recompute (immediately for the edited person).
@@ -87,21 +88,22 @@ Family merge (two duplicate families with the same partners) uses the same UI in
 ---
 
 ## 5. API Endpoints
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/quality/summary` | Counts per category. |
-| `GET` | `/api/v1/quality/warnings?code=&cursor=` | Warning list. |
-| `POST` | `/api/v1/quality/warnings/dismiss` | `{ entity_id, code }`. |
-| `GET` | `/api/v1/quality/duplicates` | Candidate pairs. |
-| `POST` | `/api/v1/quality/duplicates/not-duplicate` | `{ person_a, person_b }`. |
-| `GET` | `/api/v1/people/match?given=&surname=&birth=` | Real-time duplicate check for quick-add. |
-| `GET` | `/api/v1/people/merge/preview?a=&b=` | Field-by-field comparison payload. |
-| `POST` | `/api/v1/people/merge` | `{ keep_id, merge_id, field_choices }`. |
+| Method | Endpoint | Access Level | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/quality/summary` | Admin only | Counts per category. |
+| `GET` | `/api/v1/quality/warnings?code=&cursor=` | Admin only | Warning list. |
+| `POST` | `/api/v1/quality/warnings/dismiss` | Admin only | `{ entity_id, code }`. |
+| `GET` | `/api/v1/quality/duplicates` | Admin only | Candidate pairs. |
+| `POST` | `/api/v1/quality/duplicates/not-duplicate` | Admin only | `{ person_a, person_b }`. |
+| `GET` | `/api/v1/people/match?given=&surname=&birth=` | Editors & Admins | Real-time duplicate check for quick-add. |
+| `GET` | `/api/v1/people/merge/preview?a=&b=` | Admin only | Field-by-field comparison payload. |
+| `POST` | `/api/v1/people/merge` | Admin only | `{ keep_id, merge_id, field_choices }`. |
 
 ---
 
 ## 6. Definition of Done (DoD)
 
+- [ ] **Administrator-Only Isolation:** Access to `/quality`, `/people/merge`, and the underlying endpoints (`/api/v1/quality/*`, `/api/v1/people/merge*`) is strictly restricted to Administrators (`RequireRole::<Admin>`); Viewers and Editors receive `403 Forbidden`.
 - [ ] **Non-Blocking Warnings:** Implausible dates show inline hints but never prevent saving.
 - [ ] **Fuzzy-Date Aware:** `abt`/`bet` dates do not produce false warnings within their range.
 - [ ] **Dismissal:** A dismissed warning stays dismissed for that record.

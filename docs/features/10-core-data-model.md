@@ -69,7 +69,7 @@ Stored as `JSONB` + a denormalized integer sort key. Produced by the bilingual d
 | `family.relationship_type` | `married`, `civil_union`, `partners`, `unknown` — *divorce is an **event**, not a type* |
 | `child_relation` | `birth`, `adopted`, `foster`, `step`, `unknown` |
 | `person event_type` | `birth`, `baptism`, `death`, `burial`, `cremation`, `residence`, `occupation`, `education`, `military`, `emigration`, `immigration`, `naturalization`, `census`, `religion`, `custom` |
-| `family event_type` | `engagement`, `marriage`, `divorce`, `residence`, `custom` |
+| `family event_type` | `engagement`, `marriage`, `marriage_license`, `divorce`, `residence`, `custom` |
 | `place_type` | `country`, `region`, `district`, `city`, `village`, `parish`, `cemetery`, `address`, `other` |
 
 `custom` events carry a free-text `custom_type` label (e.g. *"Раскулачивание"*, *"Evacuation"*).
@@ -99,6 +99,7 @@ CREATE TABLE individuals (
     avatar_media_id UUID NULL REFERENCES media_assets(id) ON DELETE SET NULL,
     avatar_crop     JSONB NULL,                 -- {x,y,w,h} normalized 0..1 (set by face tagging or manual crop)
     is_private      BOOLEAN NOT NULL DEFAULT FALSE,
+    external_ids    JSONB NOT NULL DEFAULT '{}',-- e.g. {"uid": "CF665D02-7132-46C3-868D-7BF37FD03AC5", "mh_rin": "MH:I10"}
     -- denormalized, maintained by backend on event changes:
     birth_sort      INT NULL,
     death_sort      INT NULL,
@@ -126,6 +127,7 @@ CREATE TABLE families (
     partner2_id       UUID NULL REFERENCES individuals(id) ON DELETE SET NULL,
     relationship_type VARCHAR(20) NOT NULL DEFAULT 'married',
     is_private        BOOLEAN NOT NULL DEFAULT FALSE,
+    external_ids      JSONB NOT NULL DEFAULT '{}',-- e.g. {"uid": "65952E5DA9D66F783EC3856809EA9F21", "mh_rin": "MH:F500033"}
     CHECK (partner1_id IS NULL OR partner2_id IS NULL OR partner1_id <> partner2_id)
 );
 

@@ -3,6 +3,9 @@
 ## 1. Overview & Objective
 Every view in the application (with the exception of isolated full-screen auth pages) is hosted within a **Universal App Shell**. The shell provides a consistent top header, immediate access to global omnibox search, language switching (EN/RU), theme switching (Light/Dark), and standardized drawer/modal presentation.
 
+> [!IMPORTANT] Access Segregation & Default Private Posture:
+> Out of the box (`ENABLE_PUBLIC_ACCESS=false`), the application operates as a **Default Private Instance**: unauthenticated visitors never enter the universal app shell and are automatically redirected to the Sign-In page (`/login`). When public access is explicitly enabled (`ENABLE_PUBLIC_ACCESS=true`), unauthenticated guests access a stripped, read-only shell with masked living data. Authenticated family members (`Viewer`, `Editor`, `Admin`) access the full shell with role-segregated navigation per [02-rbac-access-control.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/02-rbac-access-control.md).
+
 ---
 
 ## 2. Shell Layout Wireframe
@@ -45,24 +48,31 @@ Every view in the application (with the exception of isolated full-screen auth p
 ## 3. Persistent Shell Elements
 
 ### 3.1 Top Navigation Bar (Header)
-- **Brand Identity:** Subtle leaf/tree icon + Instance Tree Name (e.g. *"Levshits Family Archive"*). Clicking navigates to `/` (Home).
-- **Primary Navigation Links** (kept to 4 to stay simple):
-  - `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md)). Hidden for anonymous visitors.
+- **Brand Identity:** Subtle leaf/tree icon + Instance Tree Name (e.g. *"Levshits Family Archive"*). Clicking navigates to `/` (Home for authenticated users; `/tree` for public guests).
+- **Public Guest Header (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):**
+  - Renders a minimal read-only bar: Brand Logo/Title, single `Tree` (`/tree`) navigation link, Language toggle (`RU/EN`), Theme switch, and a discreet **"Sign In"** button.
+  - All other links (`Home`, `People`, `Media`, `More ▾`, `+ Add`) and global Omnibox search are strictly hidden.
+- **Authenticated Primary Navigation Links (Viewers, Editors, Admins):**
+  - `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md)).
   - `Tree` (`/tree`): Interactive canvas visualizer.
   - `People` (`/people`): People Directory & surnames ([13](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/13-search-people-directory.md)).
   - `Media` (`/media`): Archive gallery of photographs and documents.
-- **`More ▾` menu** (secondary, role-aware):
-  - `Places` (`/places`), `Print` (`/export/print`)
-  - Editors+: `Recent Changes` (`/history`), `Data Quality` (`/quality`), `Import / Export` (`/settings/gedcom`)
-- **`+ Add` button** (Editors+): *Add person* (unconnected), *Upload photos*.
+- **`More ▾` Menu (Role-Aware Dropdown):**
+  - **All Authenticated (Viewer+):** `Places` (`/places`).
+  - **Administrators Only:** `Data Quality` (`/quality`), `In-Tree Person Merge` (`/people/merge`), `Print / Posters` (`/export/print`), `Recent Changes` (`/history`), `GEDCOM Import & Export` (`/settings/gedcom`), `Tree Merge Wizard` (`/settings/merge`), and `Instance Settings` (`/settings`).
+- **`+ Add` Button (Editor & Admin only):**
+  - Quick action menu: *Add Person* (unconnected or family node), *Upload Photos*.
+  - Hidden completely for unauthenticated guests and Viewers.
 - **Global Omnibox Search (`Cmd+K` / `Ctrl+K`):**
+  - Accessible to all authenticated users (Viewer, Editor, Admin).
   - Instant fuzzy search by first name, patronymic, surname, maiden name, or birth year.
   - Shows recent searches, quick jumps to persons, and shortcut navigation.
+  - Hidden from unauthenticated public visitors.
 - **Right Utilities:**
   - **Language Selector:** Toggle between `EN` and `RU`.
   - **Theme Toggle:** Switch between `Light`, `Dark`, and `System` mode.
-  - **User Profile Menu:** Shows avatar or initials; links to Profile, Security/Passkeys, Admin Settings (if Admin/Editor), and Logout.
-  - **Public Guest Indicator:** If the visitor is unauthenticated in public mode, displays a discreet *"Sign In"* button.
+  - **User Profile Menu:** Shows avatar or initials; links to Profile (`/settings/profile`), Security & Passkeys, Admin Settings (Admins only), and Logout.
+  - **Public Guest Indicator:** If the visitor is unauthenticated in public mode, displays a discreet *"Sign In"* button in place of the avatar menu.
 
 ### 3.2 Context Sub-Bar (Breadcrumbs & Page Header)
 - For content pages (Person Profiles, Settings, Media), a standardized sub-bar renders:
@@ -81,20 +91,24 @@ Every view in the application (with the exception of isolated full-screen auth p
 - Keyboard controls: `Esc` closes modal; `Enter` submits primary action.
 
 ### 3.5 Route Map
-| Route | Page | Spec |
-| :--- | :--- | :--- |
-| `/setup`, `/login`, `/register`, `/magic-link/verify` | Auth | [01 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md) |
-| `/` | Home dashboard / empty-tree welcome | [16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md) |
-| `/tree` | Tree canvas | [02 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/02-tree-view-page.md) |
-| `/people`, `/people/surnames`, `/people/merge` | People directory, surnames, merge | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
-| `/persons/:id` | Person profile (UUID or `gid`) | [03 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/03-person-profile-page.md) |
-| `/places`, `/places/:id` | Places | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
-| `/media` | Media archive | [04 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/04-media-gallery-page.md) |
-| `/export/print` | PDF generator | [05 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/05-printable-pdf-page.md) |
-| `/settings/merge` | Tree merge wizard | [06 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/06-tree-merge-page.md) |
-| `/history`, `/quality` | Recent changes, data quality | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
-| `/settings/*` | Settings & admin | [07 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/07-admin-settings-page.md) |
-| `*` | 404 page with search box and link home | — |
+| Route | Page | Access Level / Role | Spec |
+| :--- | :--- | :--- | :--- |
+| `/setup` | First-time instance setup | Unconfigured only (0 users exist) | [01 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md) |
+| `/login`, `/register`, `/magic-link/verify` | Auth & invite acceptance | Public / Unauthenticated | [01 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md) |
+| `/` | Home dashboard / empty onboarding | Authenticated (Viewer+) *(Unauthenticated redirects to `/login` if private, or `/tree` if public)* | [16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md) |
+| `/tree` | Tree canvas visualizer | Authenticated (Viewer+) or Public Guest (Masked living data when `ENABLE_PUBLIC_ACCESS=true`) | [02 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/02-tree-view-page.md) |
+| `/people`, `/people/surnames` | People directory & surnames | Authenticated (Viewer+) | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
+| `/people/merge` | In-tree duplicate merge | Administrators Only | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
+| `/persons/:id` | Person profile (UUID or `gid`) | Authenticated (Viewer+); Public Guest if public enabled (Masked living data) | [03 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/03-person-profile-page.md) |
+| `/places`, `/places/:id` | Places directory & detail | Authenticated (Viewer+) | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
+| `/media` | Media archive & face tagging | Authenticated (Viewer+) | [04 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/04-media-gallery-page.md) |
+| `/export/print` | Printable PDF studio | Administrators Only | [05 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/05-printable-pdf-page.md) |
+| `/settings/merge` | Tree import & merge wizard | Administrators Only | [06 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/06-tree-merge-page.md) |
+| `/history` | Global audit & change history feed | Administrators Only | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
+| `/quality` | Data quality & soft warnings | Administrators Only | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
+| `/settings/profile` | User profile, language, start page | Authenticated (All users) | [07 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/07-admin-settings-page.md) |
+| `/settings/*` | Instance settings, users, backups | Administrators Only | [07 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/07-admin-settings-page.md) |
+| `*` | 404 page with search box and link | All | — |
 
 ### 3.6 Global States
 - **Loading:** skeleton placeholders matching final layout (no spinners on full pages).
@@ -116,12 +130,16 @@ Every view in the application (with the exception of isolated full-screen auth p
 ### 3.8 Mobile Bottom Navigation (`BottomNav`)
 - **Activation:** Displayed exclusively on mobile screens (`< 768px`). Replaces desktop top-navigation links to bring primary navigation within thumb reach.
 - **Dimensions & Safe Area:** `h-16` base height + `padding-bottom: max(0.5rem, env(safe-area-inset-bottom))`.
-- **Navigation Tabs (5 fixed items, 48×48px tap targets):**
+- **Public Guest Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):**
+  - Renders a minimal 2-action bar: `[🌳 Tree]` and `[🔐 Sign In]`.
+- **Authenticated Navigation Tabs (5 fixed items, 48×48px tap targets):**
   1. `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md))
   2. `Tree` (`/tree`): Canvas visualizer ([04](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/04-tree-visualizations.md))
   3. `People` (`/people`): Directory & surnames ([13](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/13-search-people-directory.md))
   4. `Media` (`/media`): Photos & documents archive ([06](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/06-media-face-tagging.md))
-  5. `More` (`⋯`): Opens a swipeable bottom sheet containing Places, Print PDF, Recent Changes, Data Quality, Admin Settings, Language toggle, Theme switch, and *"Install App"* ([18](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md)).
+  5. `More` (`⋯`): Opens a swipeable bottom sheet containing role-filtered navigation items:
+     - All Authenticated: Places (`/places`), Language toggle, Theme switch, User Profile (`/settings/profile`), *"Install App"* ([18](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md)).
+     - Admins Only: Data Quality (`/quality`), Duplicate Person Merge (`/people/merge`), Print PDF (`/export/print`), Recent Changes (`/history`), Admin Settings (`/settings`).
 
 ### 3.9 PWA Standalone Mode & Safe-Area Architecture
 - **Standalone Launch:** When running as a standalone PWA, browser address bar and controls are absent.
@@ -135,7 +153,10 @@ Every view in the application (with the exception of isolated full-screen auth p
 ## 4. Definition of Done (DoD)
 
 - [ ] **Universal Consistency:** Topbar, search trigger, theme switcher, and language switcher remain identical across all non-auth pages.
-- [ ] **Mobile Bottom Navigation:** On screens `< 768px`, navigation shifts to a fixed, thumb-accessible `BottomNav` with 5 items and safe-area padding.
+- [ ] **Default Private Redirection:** Out of the box (`ENABLE_PUBLIC_ACCESS=false`), unauthenticated requests to `/` or any internal route immediately redirect to `/login`; no shell chrome or genealogical data is exposed.
+- [ ] **Role-Segregated Navigation:** The `+ Add` button is hidden for Viewers; `Data Quality` (`/quality`), `Duplicate Merge` (`/people/merge`), `Print / Posters` (`/export/print`), `Recent Changes` (`/history`), `Import / Export`, and `Instance Settings` are rendered exclusively for Administrators.
+- [ ] **Public Mode Minimalist Shell:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated guests receive a stripped header showing only `Tree`, language/theme toggles, and a *"Sign In"* button, with living data masked.
+- [ ] **Mobile Bottom Navigation:** On screens `< 768px`, navigation shifts to a fixed, thumb-accessible `BottomNav` with safe-area padding and role-filtered `More` sheet.
 - [ ] **PWA Standalone & Safe-Area Insets:** In standalone PWA mode, headers, toolbars, bottom sheets, and bottom navigation render clear of device notches and home indicator bars in both portrait and landscape.
 - [ ] **Touch Target Standard:** All interactive controls (tabs, buttons, dropdown triggers) maintain a minimum hit area of 44×44px (48×48px for primary mobile actions).
 - [ ] **Zero Layout Shift:** Theme and language switches execute instantaneously with zero content jump or layout flicker.

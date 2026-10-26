@@ -3,6 +3,9 @@
 ## 1. Overview & Objective
 The Settings page manages instance configuration, user invitations, security passkeys, database backups, and privacy controls. It follows a **Standard Two-Column Admin Layout** with a persistent vertical sub-navigation sidebar on the left and content panels on the right.
 
+> [!IMPORTANT] Administrator-Only Boundary & User Profile Exception:
+> The administrative settings panels (`/settings`, `/settings/users`, `/settings/security`, `/settings/gedcom`, `/settings/backups`) are restricted strictly to **Administrators** (`RequireRole::<Admin>`). Viewers and Editors attempting to access these panels receive `403 Forbidden`. The **sole exception** is User Profile (`/settings/profile`), which is self-service and accessible to all authenticated users (Viewer, Editor, Admin).
+
 ---
 
 ## 2. Page Wireframe & Layout
@@ -26,6 +29,8 @@ The Settings page manages instance configuration, user invitations, security pas
 |                          | [✓] Enable Public Site for Anonymous Visitors           |
 |                          |     When enabled, living persons' vital dates and       |
 |                          |     photos will be strictly masked.                     |
+|                          |     When disabled (default), anonymous visitors see     |
+|                          |     only the Sign-In page.                              |
 |                          |                                                         |
 |                          | Living Person Age Threshold: [ 110 years             ▼] |
 |                          |                                                         |
@@ -38,12 +43,12 @@ The Settings page manages instance configuration, user invitations, security pas
 ## 3. Structural Sections & Tabs
 
 ### 3.1 Settings Sub-Navigation (Left Column, `w-64`)
-- **My Profile (`/settings/profile`, all users):** display name, email, language, theme, start page (Home / Tree), home person, linked person, monthly digest opt-in.
-- **General & Archive (`/settings`):** Tree metadata, default language, public access toggle, living person threshold, **default home person** for visitors, and a read-only **System** card (version, DB/media size, free disk, last backup — [17 §6.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md#61-health--info)). The System card uses functional, plain labels ("Database: Connected", "Server: Healthy", "Storage: X GB used", "Version: vX.Y.Z"), strictly omitting framework and database branding per [00 §3.4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#34-permitted-exceptions--functional-terminology). Fields managed by env show *"Managed by server configuration"* when `SETTINGS_LOCKED_FROM_ENV=true`.
-- **Family Members & RBAC (`/settings/users`):** Member table, invite links, role management (Admin, Editor, Viewer).
-- **Security & Passkeys (`/settings/security`):** Passkey device manager, enrollment of new authenticators, emergency recovery code regeneration.
-- **GEDCOM Data Portability (`/settings/gedcom`):** Standard export (5.5.1 / 7.0), GEDZIP export, Clean Slate import.
-- **Backups & Recovery (`/settings/backups`):** One-click full backup download, automated nightly snapshots, merge rollback logs.
+- **My Profile (`/settings/profile`, all authenticated users):** display name, email, language, theme, start page (Home / Tree), home person, linked person, monthly digest opt-in.
+- **General & Archive (`/settings`, Admin only):** Tree metadata, default language, public access toggle (controls default private instance vs public tree mode), living person threshold, **default home person** for visitors, and a read-only **System** card (version, DB/media size, free disk, last backup — [17 §6.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md#61-health--info)). The System card uses functional, plain labels ("Database: Connected", "Server: Healthy", "Storage: X GB used", "Version: vX.Y.Z"), strictly omitting framework and database branding per [00 §3.4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#34-permitted-exceptions--functional-terminology). Fields managed by env show *"Managed by server configuration"* when `SETTINGS_LOCKED_FROM_ENV=true`.
+- **Family Members & RBAC (`/settings/users`, Admin only):** Member table, invite links, role management (Admin, Editor, Viewer).
+- **Security & Passkeys (`/settings/security`, Admin only for instance-wide credentials):** Passkey device manager, enrollment of new authenticators, emergency recovery code regeneration.
+- **GEDCOM Data Portability (`/settings/gedcom`, Admin only):** Standard export (5.5.1 / 7.0), GEDZIP export, Clean Slate import.
+- **Backups & Recovery (`/settings/backups`, Admin only):** One-click full backup download, automated nightly snapshots, merge rollback logs.
 
 ### 3.2 Key Panel Contents
 
@@ -74,8 +79,9 @@ The Settings page manages instance configuration, user invitations, security pas
 
 ## 4. Definition of Done (DoD)
 
+- [ ] **Administrator Route Isolation:** All `/settings` sub-pages (except `/settings/profile`) return `403 Forbidden` for Viewers and Editors, and redirect to `/login` for unauthenticated visitors.
 - [ ] **Unified Two-Column Shell:** All settings tabs render inside the identical navigation sidebar and panel structure.
-- [ ] **Instant Public Toggle:** Toggling "Enable Public Site" updates instance permissions immediately with validation feedback.
+- [ ] **Default Private vs. Public Posture:** Toggling "Enable Public Site" properly flips instance posture between default private (unauthenticated redirected to `/login`) and public tree mode (masked living data on `/tree`).
 - [ ] **Role Protection:** Prevents an administrator from demoting or deleting their own account if they are the sole admin.
 - [ ] **One-Click Backup Generation:** Generates and downloads a valid full archive containing database and media files.
 - [ ] **Operational Plain Language:** System status indicators, backup actions, and settings descriptions display in clean, functional terminology with zero tech-stack bragging or promotional jargon.

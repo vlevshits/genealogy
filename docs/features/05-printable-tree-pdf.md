@@ -1,7 +1,9 @@
 # Feature Specification: Printable PDF Tree Export (Single & Multi-Page Tiled)
 
 ## 1. Overview & Objective
-Enable users to transform their digital family tree into beautiful, physical keepsakes. The system must generate professional-grade, high-resolution vector PDF documents in two distinct printing formats:
+Enable administrators to transform digital family trees into high-resolution, physical keepsakes. Generating and exporting printable PDFs is restricted exclusively to the **Administrator** role per [02 §2](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/02-rbac-access-control.md#2-master-segregation--rbac-permission-matrix) (to prevent bulk extraction of family data by viewers or unauthenticated users).
+
+The system generates professional-grade, high-resolution vector PDF documents in two distinct printing formats:
 1. **Single-Page Poster:** Standard large-format engineering/poster sizes (A0, A1, A2, A3) suitable for professional print shops.
 2. **Multi-Page Tiled PDF:** Automatically sliced into a grid of standard home-printer pages (A4 or US Letter) complete with **cut lines, overlap margins, and assembly coordinates** so family members can easily trim and glue them together.
 
@@ -101,3 +103,4 @@ Users can customize the visual aesthetic before generating the PDF:
 - [ ] **Theme Support:** User can switch between at least two distinct visual themes (Modern Clean and Heritage Antique).
 - [ ] **Photo Inclusion:** Profile photos are properly cropped into circles/rounded rectangles and embedded in the PDF without pixelation.
 - [ ] **Preview Modal:** Before downloading, user sees a visual preview displaying sheet counts (e.g., *"This tree will print across 6 sheets (3x2 grid) of A4 paper"*).
+- [ ] **Admin-Only Isolation:** Access to `/export/print` and `POST /api/v1/export/pdf` is restricted exclusively to Administrators; non-Admins receive 403 Forbidden.
