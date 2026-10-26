@@ -1,0 +1,87 @@
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Reverse Proxy & Frontend Web Application (React 19 + Tailwind v4 + Nginx)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: genealogy/frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: genealogy-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:80"
+    environment:
+      - VITE_APP_TITLE=${TREE_TITLE:-Family Tree Archive}
+      - VITE_DEFAULT_LOCALE=${DEFAULT_LOCALE:-en}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - genealogy-net
+
+  # ---------------------------------------------------------------------------
+  # 2. Core API Backend Engine (Rust Axum + ged_io + webauthn-rs + background job workers)
+  # ---------------------------------------------------------------------------
+  backend:
+    image: genealogy/backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: genealogy-backend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      - MEDIA_STORAGE_PATH=/app/data/media
+      - BACKUP_PATH=/app/data/backups
+    volumes:
+      - media-data:/app/data/media
+      - backup-data:/app/data/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - genealogy-net
+
+  # ---------------------------------------------------------------------------
+  # 3. Primary Relational Database (PostgreSQL 16)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: genealogy-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-genealogy}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Database password required}
+      - POSTGRES_DB=${POSTGRES_DB:-genealogy}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-genealogy} -d ${POSTGRES_DB:-genealogy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - genealogy-net
+
+volumes:
+  postgres-data:
+    driver: local
+  media-data:
+    driver: local
+  backup-data:
+    driver: local
+
+networks:
+  genealogy-net:
+    driver: bridge
