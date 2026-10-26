@@ -20,6 +20,10 @@ In genealogy, localization is not merely translating labels—it fundamentally s
 - **Strict Zero-Hardcoding Rule:**
   - All UI text, tooltips, validation messages, aria-labels, and modal dialogs must use translation keys via `useTranslation()` (e.g. `t('auth.login_with_passkey')`, `t('tree.add_father')`).
   - CI lint rule ensures no untranslated hardcoded strings in JSX components.
+- **No Icons or Glyphs in Translation Strings:**
+  - Translation strings in `en.json` and `ru.json` must contain pure text only and must **never** include leading/trailing icon characters (`+ `, `← `, `→ `, `✓ `, `✕ `) or decorative emojis (`⚙️`, `📥`, `🔐`, `👥`).
+  - Visual icons must be rendered exclusively via component props (e.g., `leftIcon={<Plus />}` or `leftIcon={<ArrowLeft />}`) so icons are never duplicated.
+  - Automated i18n parity tests (`frontend/tests/i18n/parity.test.ts`) must fail if any translation string starts with icon glyphs (`+ `, `← `, `→ `) or contains decorative emojis.
 
 ### 2.2 Slavic Genealogy Name Structure (Patronymics / Отчество)
 In Russian and post-Soviet genealogy records, names follow a tripartite structure:
@@ -172,6 +176,7 @@ backend/
 
 - [ ] **Instant Language Switching:** Language toggle changes all visible UI text instantaneously without requiring a full page reload.
 - [ ] **100% Translation Parity:** Both `en` and `ru` translation files cover all keys; no fallback warnings in development console.
+- [ ] **Zero Icon Glyphs in Translation Strings:** No translation value in en.json or ru.json starts with icon symbols (+ , ← , → ) or contains decorative emojis that duplicate rendered SVG icons.
 - [ ] **Anti-Fluff & Tech-Agnostic UI Copy:** All user-facing web pages, cards, tooltips, dialogs, footers, and translation files (`en.json`, `ru.json`) are completely free of marketing buzzwords (*"next-gen"*, *"cutting-edge"*, SaaS promotional slogans) and tech stack mentions (*Rust*, *Axum*, *React*, *PostgreSQL*, *Tailwind*, etc.), using clean, functional, family-centered copy.
 - [ ] **Patronymic Support:** Individuals have an optional `patronymic` field that displays properly in person cards and profiles in both languages.
 - [ ] **Russian Date Parser:** Natural phrases like *"ок. 1895"*, *"до мая 1917"*, and *"между 1914 и 1918 гг."* parse into correct GEDCOM date records.

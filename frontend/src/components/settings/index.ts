@@ -4,3 +4,6 @@ export * from './BackupsSettingsPanel';
 export * from './ProfileSettingsPanel';
 export * from './SecurityPasskeysPanel';
 export * from './FamilyMembersInvitesPanel';
+export * from './RoleChangeDialog';
+export * from './UserDeactivateDialog';
+export * from './UserTableRow';

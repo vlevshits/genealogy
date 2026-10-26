@@ -348,10 +348,40 @@ export interface AdminUserSummaryDto {
   role: string;
   person_id: string | null;
   is_active: boolean;
+  deactivated_at?: string | null;
   passkeys_count: number;
   has_password: boolean;
   created_at: string;
   last_login_at: string | null;
+}
+
+export interface UpdateAdminUserInput {
+  role?: 'admin' | 'editor' | 'viewer';
+  is_active?: boolean;
+  linked_person_id?: string | null;
+}
+
+export interface TreePersonNodeDto {
+  id: string;
+  gid: string;
+  sex: 'M' | 'F' | 'U';
+  is_living: boolean;
+  is_private: boolean;
+  primary_name: {
+    given_name: string;
+    patronymic: string | null;
+    surname: string;
+  };
+  birth: { date: string; place: string | null } | null;
+  death: { date: string; place: string | null } | null;
+  avatar_url: string | null;
+  notes: string | null;
+}
+
+export interface TreeDataResponse {
+  access_tier: 'public_anonymous' | 'viewer' | 'editor' | 'admin';
+  enable_public_access: boolean;
+  nodes: TreePersonNodeDto[];
 }
 
 export interface AdminUsersListResponse {
@@ -716,3 +746,25 @@ export async function revokeAdminUserSessions(
     }
   );
 }
+
+// =============================================================================
+// Phase 1.3 RBAC User Governance & Tree Privacy Endpoints
+// =============================================================================
+
+export async function updateAdminUser(
+  userId: string,
+  payload: UpdateAdminUserInput
+): Promise<AdminUserSummaryDto> {
+  return apiFetch<AdminUserSummaryDto>(
+    `/admin/users/${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function fetchTreeData(): Promise<TreeDataResponse> {
+  return apiFetch<TreeDataResponse>('/tree');
+}
+

@@ -193,9 +193,9 @@
     "groupPlaces": "Places",
     "groupActions": "Quick Actions",
     "empty": "No matching records found.",
-    "hintNavigate": "↑↓ to navigate",
-    "hintSelect": "↵ to open",
-    "hintClose": "Esc to close"
+    "hintNavigate": "to navigate",
+    "hintSelect": "to open",
+    "hintClose": "to close"
   },
   "comparison": {
     "field": "Field",
@@ -224,8 +224,8 @@
     "addSpouse": "Add partner",
     "addChild": "Add child",
     "addSibling": "Add sibling",
-    "createNewPerson": "+ Create new person \"{query}\"",
-    "createNewPlace": "+ Create place \"{query}\"",
+    "createNewPerson": "Create new person \"{query}\"",
+    "createNewPlace": "Create place \"{query}\"",
     "placeHierarchy": "Full hierarchy",
     "sex": {
       "male": "Male",
@@ -409,7 +409,7 @@
     "security": {
       "passkeysTitle": "Registered Passkeys & Devices",
       "passkeysSubtitle": "Sign in across devices using Touch ID, Face ID, Windows Hello, or a hardware security key.",
-      "registerPasskeyBtn": "+ Register Another Passkey",
+      "registerPasskeyBtn": "Register Another Passkey",
       "deviceNameLabel": "Device Name",
       "deviceNamePlaceholder": "e.g. MacBook Touch ID, iPhone 15",
       "enrolledLabel": "Enrolled",
@@ -445,7 +445,7 @@
     "users": {
       "title": "Family Members & Access Roles",
       "subtitle": "Invite relatives to explore or contribute to the family archive.",
-      "inviteBtn": "+ Invite Family Member",
+      "inviteBtn": "Invite Family Member",
       "inviteModalTitle": "Invite Family Member",
       "inviteModalDesc": "Generate a one-time invitation link to share with your relative.",
       "inviteeNameLabel": "Relative's Name",
@@ -468,7 +468,69 @@
       "expiresLabel": "Expires",
       "revokeInviteBtn": "Revoke",
       "inviteRevokedToast": "Invitation revoked",
-      "userSessionsRevokedToast": "Revoked active sessions for member"
+      "userSessionsRevokedToast": "Revoked active sessions for member",
+      "changeRoleBtn": "Change role",
+      "deactivateBtn": "Deactivate",
+      "reactivateBtn": "Reactivate",
+      "statusActive": "Active",
+      "statusDeactivated": "Deactivated",
+      "linkedPersonBadge": "Node {personId}",
+      "roleUpdatedToast": "Updated member role",
+      "userDeactivatedToast": "Member account deactivated and sessions revoked",
+      "userReactivatedToast": "Member account reactivated",
+      "roleModal": {
+        "title": "Change Family Member Role",
+        "subtitle": "Assign access permissions for {name}.",
+        "roleSelectLabel": "Access Role",
+        "roleAdminDesc": "Full archive governance, backups, GEDCOM import/export, quality & merges.",
+        "roleEditorDesc": "Can create and edit people, unions, events, places, and upload photos.",
+        "roleViewerDesc": "Read-only access to the full family tree, including living relatives.",
+        "soleAdminWarningTitle": "Sole Active Administrator",
+        "soleAdminWarningDesc": "This account is the only active administrator. Promote another family member to Administrator before changing this role.",
+        "saveBtn": "Save Role"
+      },
+      "deactivateModal": {
+        "deactivateTitle": "Deactivate Member Account",
+        "reactivateTitle": "Reactivate Member Account",
+        "deactivateDesc": "Deactivating {name} immediately signs out all of their active devices and blocks sign-in until reactivated.",
+        "reactivateDesc": "Reactivating {name} restores their ability to sign in with their assigned role.",
+        "soleAdminWarning": "The sole active administrator cannot be deactivated.",
+        "confirmDeactivateBtn": "Deactivate Account",
+        "confirmReactivateBtn": "Reactivate Account"
+      }
+    }
+  },
+  "rbac": {
+    "accessDeniedTitle": "Administrator Access Required",
+    "accessDeniedDesc": "This section is restricted to archive administrators. You can manage your own profile and passkeys or return to the family tree.",
+    "adminOnlyBadge": "Administrator Only",
+    "openMyProfileBtn": "Open My Profile",
+    "backToTreeBtn": "Back to Family Tree",
+    "backToHomeBtn": "Back to Home",
+    "viewerReadOnlyBadge": "Viewer · Read-Only",
+    "editorCuratorBadge": "Editor · Curator",
+    "adminOwnerBadge": "Administrator",
+    "privateRecordBadge": "Private Record",
+    "soleAdminError": "Cannot demote or deactivate the sole remaining active administrator."
+  },
+  "tree": {
+    "publicBanner": {
+      "badge": "Public Guest View",
+      "title": "Living Family Members Are Protected",
+      "desc": "You are browsing the public archive view. Names, birth dates, locations, and photographs of living relatives are masked as \"Living\". Sign in as a family member to view the complete tree.",
+      "signInBtn": "Sign In to Family Archive"
+    },
+    "privacyPreview": {
+      "title": "Family Tree & Living-Person Privacy",
+      "subtitle": "Server-enforced visibility based on your current access tier",
+      "tierPublicAnonymous": "Public Visitor (Living Masked)",
+      "tierViewer": "Authenticated Viewer (Full Living Visibility, Read-Only)",
+      "tierEditor": "Authenticated Editor (Full Visibility + Private Records)",
+      "tierAdmin": "Administrator (Full Visibility + Governance)",
+      "livingMaskedLabel": "Living",
+      "birthHiddenLabel": "Vital dates & locations protected",
+      "deceasedBadge": "Deceased",
+      "livingBadge": "Living"
     }
   },
   "auth": {

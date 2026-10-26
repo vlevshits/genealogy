@@ -5,7 +5,7 @@ The Tree Canvas is the interactive visual heart of the application. It occupies 
 
 > [!IMPORTANT] Tier-Based Access & Privacy Behavior:
 > - **Default Private Instance (`ENABLE_PUBLIC_ACCESS=false`):** Unauthenticated visitors cannot access `/tree` and are immediately redirected to `/login`.
-> - **Public Tree Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):** Public visitors see the tree canvas in **Strictly Masked Mode**. Living persons display as `Living` / `Живущий(ая)` with silhouette avatars, and zero dates, places, notes, or photos. Canvas editing controls, add buttons, and search omnibox are hidden.
+> - **Public Tree Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):** Public visitors see the tree canvas in **Strictly Masked Mode**. Living persons display as a single initial character with dot (e.g. `И.` / `J.`) with silhouette avatars, and zero dates, places, notes, or photos. Surnames, patronymics, and full given names are never exposed. Canvas editing controls, add buttons, and search omnibox are hidden.
 > - **Authenticated Viewers (`Viewer`):** Trusted family members see the complete tree with all living relatives' data (names, patronymics, dates, places, photos) fully visible. Canvas is strictly read-only (node add handles and edit triggers are hidden).
 > - **Authenticated Editors & Admins (`Editor`, `Admin`):** Full living person visibility plus interactive node edit handles, quick-add relative triggers (`+`), and contextual menus.
 
@@ -80,7 +80,7 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
 ### 3.5 Selected Person Inspection (Drawer vs. Mobile Bottom Sheet)
 - **Desktop (`> 1024px`):** Right slide-over panel (`w-[440px]`):
   - **Header:**
-    - Public Mode (Living): Shows silhouette and `Living` / `Живущий`.
+    - Public Mode (Living): Shows silhouette and single initial character with dot (e.g. `И.` / `J.`) without surname or patronymic.
     - Authenticated / Deceased: Photo avatar, full name with patronymic, sex badge, life dates.
   - **Core Facts:**
     - Public Mode (Living): Suppressed completely (empty state: *"Private details hidden"*).
@@ -113,7 +113,7 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
 
 - [ ] **Full Viewport Canvas:** Canvas stretches to full screen height with no scrollbars on the parent container.
 - [ ] **Default Private Redirection:** In default private posture (`ENABLE_PUBLIC_ACCESS=false`), unauthenticated access to `/tree` redirects directly to `/login`.
-- [ ] **Public Mode Living Masking:** When accessed unauthenticated under `ENABLE_PUBLIC_ACCESS=true`, cards of living persons display `Living` placeholders and neutral silhouettes; facts and photos are completely stripped.
+- [ ] **Public Mode Living Masking:** When accessed unauthenticated under `ENABLE_PUBLIC_ACCESS=true`, cards of living persons display single initial character placeholders (e.g. `И.` / `J.`) and neutral silhouettes; surnames, patronymics, facts, and photos are completely stripped.
 - [ ] **Viewer Living Visibility & Read-Only:** Authenticated Viewers see complete personal records (full names, patronymics, dates, places, media) for living relatives, while write handles and edit buttons remain hidden.
 - [ ] **Editor & Admin Node Authoring:** Node hover handles (`+`), quick-add controls, and drawer edit buttons are accessible to Editors and Admins.
 - [ ] **Smooth Mode Switching:** Changing visualization mode transitions smoothly without page reload or lost selection.

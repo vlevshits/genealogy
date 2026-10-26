@@ -1,6 +1,8 @@
 use crate::config::AppConfig;
 use crate::error::AppError;
-use crate::services::{auth::AuthMemoryStore, security::RateLimiter};
+use crate::services::{
+    auth::AuthMemoryStore, privacy::GenealogyPrivacyStore, security::RateLimiter,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use std::collections::HashMap;
@@ -39,6 +41,7 @@ pub struct AppState {
     pub config: Arc<AppConfig>,
     pub settings_override: Arc<RwLock<InstanceSettingsValues>>,
     pub auth_store: Arc<RwLock<AuthMemoryStore>>,
+    pub privacy_store: Arc<RwLock<GenealogyPrivacyStore>>,
     pub rate_limiter: RateLimiter,
 }
 
@@ -55,6 +58,7 @@ impl AppState {
             config: Arc::new(config),
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
+            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::default())),
             rate_limiter: RateLimiter::new(),
         }
     }

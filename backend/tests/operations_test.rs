@@ -330,6 +330,23 @@ async fn test_operations_and_settings_endpoints() {
     };
 
     let state = AppState::new(None, config);
+    let (setup_res, _) = genealogy_backend::services::auth::AuthService::setup_initial_admin(
+        &state,
+        genealogy_backend::services::auth::SetupRequest {
+            tree_title: None,
+            first_name: "Ops".to_string(),
+            last_name: "Admin".to_string(),
+            email: "ops-admin@levshits.family".to_string(),
+            passkey: None,
+            password: Some("StrongOpsPassword123!".to_string()),
+            emergency_token: None,
+        },
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let admin_auth = format!("Bearer {}", setup_res.session_token);
     let app = create_router(state);
 
     // 1. GET /api/v1/system/info returns initial env defaults
@@ -366,6 +383,7 @@ async fn test_operations_and_settings_endpoints() {
                 .method(Method::PATCH)
                 .uri("/api/v1/admin/settings")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .header("x-requested-with", "genealogy")
                 .body(Body::from(patch_body.to_string()))
                 .unwrap(),
@@ -409,6 +427,7 @@ async fn test_operations_and_settings_endpoints() {
                 .method(Method::PATCH)
                 .uri("/api/v1/admin/settings")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .header("x-requested-with", "genealogy")
                 .body(Body::from(invalid_body.to_string()))
                 .unwrap(),
@@ -439,6 +458,7 @@ async fn test_operations_and_settings_endpoints() {
                 .method(Method::POST)
                 .uri("/api/v1/admin/backups")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .header("x-requested-with", "genealogy")
                 .body(Body::from(r#"{"include_gedcom":true}"#))
                 .unwrap(),
@@ -457,6 +477,7 @@ async fn test_operations_and_settings_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/api/v1/admin/backups")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -475,6 +496,7 @@ async fn test_operations_and_settings_endpoints() {
         .oneshot(
             Request::builder()
                 .uri(&download_uri)
+                .header(header::AUTHORIZATION, &admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -496,6 +518,7 @@ async fn test_operations_and_settings_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/api/v1/admin/backups/..%2Fetc%2Fpasswd")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -509,6 +532,7 @@ async fn test_operations_and_settings_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/api/v1/admin/backups/backup-19990101-000000-000.tar.gz")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -525,6 +549,7 @@ async fn test_operations_and_settings_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/api/v1/admin/system")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -547,6 +572,23 @@ async fn test_settings_locked_from_env_blocks_mutation() {
     };
 
     let state = AppState::new(None, config);
+    let (setup_res, _) = genealogy_backend::services::auth::AuthService::setup_initial_admin(
+        &state,
+        genealogy_backend::services::auth::SetupRequest {
+            tree_title: None,
+            first_name: "Ops".to_string(),
+            last_name: "Admin".to_string(),
+            email: "ops-admin@levshits.family".to_string(),
+            passkey: None,
+            password: Some("StrongOpsPassword123!".to_string()),
+            emergency_token: None,
+        },
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let admin_auth = format!("Bearer {}", setup_res.session_token);
     let app = create_router(state);
 
     let res = app
@@ -555,6 +597,7 @@ async fn test_settings_locked_from_env_blocks_mutation() {
                 .method(Method::PATCH)
                 .uri("/api/v1/admin/settings")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, &admin_auth)
                 .header("x-requested-with", "genealogy")
                 .body(Body::from(r#"{"tree_title":"Attempted Override"}"#))
                 .unwrap(),

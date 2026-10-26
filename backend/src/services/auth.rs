@@ -285,7 +285,17 @@ pub struct AdminUserSummaryDto {
     pub passkeys_count: usize,
     pub has_password: bool,
     pub last_login_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deactivated_at: Option<String>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct UpdateAdminUserRequest {
+    pub role: Option<String>,
+    pub is_active: Option<bool>,
+    #[serde(alias = "linked_person_id")]
+    pub person_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -320,6 +330,7 @@ pub struct UserRecord {
     pub failed_login_attempts: i32,
     pub locked_until: Option<DateTime<Utc>>,
     pub last_login_at: Option<DateTime<Utc>>,
+    pub deactivated_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -624,6 +635,7 @@ impl AuthService {
             failed_login_attempts: 0,
             locked_until: None,
             last_login_at: Some(now),
+            deactivated_at: None,
             created_at: now,
             updated_at: now,
         };
@@ -885,6 +897,7 @@ impl AuthService {
             failed_login_attempts: 0,
             locked_until: None,
             last_login_at: Some(now),
+            deactivated_at: None,
             created_at: now,
             updated_at: now,
         };
@@ -1752,6 +1765,151 @@ impl AuthService {
             revoked_at: inv.revoked_at.map(|d| d.to_rfc3339()),
             created_at: inv.created_at.to_rfc3339(),
         }
+    }
+
+    pub fn to_admin_user_summary(u: &UserRecord, passkeys_count: usize) -> AdminUserSummaryDto {
+        AdminUserSummaryDto {
+            id: u.id.to_string(),
+            email: u.email.clone(),
+            first_name: u.first_name.clone(),
+            last_name: u.last_name.clone(),
+            display_name: format!("{} {}", u.first_name, u.last_name),
+            role: u.role.clone(),
+            person_id: u.person_id.map(|p| p.to_string()),
+            is_active: u.is_active,
+            passkeys_count,
+            has_password: u.password_hash.is_some(),
+            last_login_at: u.last_login_at.map(|d| d.to_rfc3339()),
+            deactivated_at: u.deactivated_at.map(|d| d.to_rfc3339()),
+            created_at: u.created_at.to_rfc3339(),
+        }
+    }
+
+    pub async fn update_admin_user(
+        state: &AppState,
+        target_user_id: Uuid,
+        req: UpdateAdminUserRequest,
+    ) -> Result<AdminUserSummaryDto, AppError> {
+        let normalized_role = if let Some(ref raw_role) = req.role {
+            let r = raw_role.trim().to_ascii_lowercase();
+            if !matches!(r.as_str(), "admin" | "editor" | "viewer") {
+                let mut fields = HashMap::new();
+                fields.insert("role".to_string(), "invalid_role".to_string());
+                return Err(AppError::ValidationFailed(
+                    "Role must be 'admin', 'editor', or 'viewer'".to_string(),
+                    Some(fields),
+                ));
+            }
+            Some(r)
+        } else {
+            None
+        };
+
+        let parsed_person_id = match req.person_id.as_deref() {
+            Some("") => Some(None),
+            Some(s) => {
+                let id = Uuid::parse_str(s.trim()).map_err(|_| {
+                    let mut fields = HashMap::new();
+                    fields.insert("person_id".to_string(), "invalid_uuid".to_string());
+                    AppError::ValidationFailed(
+                        "person_id must be a valid UUID".to_string(),
+                        Some(fields),
+                    )
+                })?;
+                Some(Some(id))
+            }
+            None => None,
+        };
+
+        let now = Utc::now();
+        let (updated_user, passkeys_count, purge_sessions) = {
+            let mut store = state.auth_store.write().await;
+            let active_admins_count = store
+                .users
+                .iter()
+                .filter(|u| u.role == "admin" && u.is_active)
+                .count();
+
+            let target_idx = store
+                .users
+                .iter()
+                .position(|u| u.id == target_user_id)
+                .ok_or(AppError::NotFound)?;
+
+            let target_currently_active_admin =
+                store.users[target_idx].role == "admin" && store.users[target_idx].is_active;
+
+            let would_lose_admin_role = normalized_role
+                .as_deref()
+                .map(|r| r != "admin")
+                .unwrap_or(false);
+            let would_be_deactivated = req.is_active == Some(false);
+
+            // Sole Admin Protection (`02 §5.2 & §7 DoD #10`)
+            if target_currently_active_admin
+                && (would_lose_admin_role || would_be_deactivated)
+                && active_admins_count <= 1
+            {
+                return Err(AppError::SoleAdminProtected);
+            }
+
+            let u = &mut store.users[target_idx];
+            if let Some(ref r) = normalized_role {
+                u.role = r.clone();
+            }
+            if let Some(pid_opt) = parsed_person_id {
+                u.person_id = pid_opt;
+            }
+
+            let mut purge = false;
+            if let Some(active) = req.is_active {
+                u.is_active = active;
+                if !active {
+                    u.deactivated_at = Some(now);
+                    purge = true;
+                } else {
+                    u.deactivated_at = None;
+                }
+            }
+            u.updated_at = now;
+            let cloned_user = u.clone();
+
+            if purge {
+                store.sessions.retain(|s| s.user_id != target_user_id);
+            }
+
+            let pk_cnt = store
+                .passkeys
+                .iter()
+                .filter(|p| p.user_id == target_user_id)
+                .count();
+
+            (cloned_user, pk_cnt, purge)
+        };
+
+        if let Some(pool) = &state.db {
+            let _ = sqlx::query(
+                "UPDATE users
+                 SET role = $1, person_id = $2, is_active = $3, deactivated_at = $4, updated_at = NOW()
+                 WHERE id = $5",
+            )
+            .bind(&updated_user.role)
+            .bind(updated_user.person_id)
+            .bind(updated_user.is_active)
+            .bind(updated_user.deactivated_at)
+            .bind(updated_user.id)
+            .execute(pool)
+            .await;
+
+            if purge_sessions {
+                let _ = sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+                    .bind(target_user_id)
+                    .execute(pool)
+                    .await;
+            }
+        }
+
+        Ok(Self::to_admin_user_summary(&updated_user, passkeys_count))
     }
 
     fn validate_user_names_and_email(

@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod health;
+pub mod rbac;
 pub mod system;
 
 use axum::{
@@ -26,11 +27,19 @@ use crate::{
             list_admin_users, list_passkeys, list_sessions, login_with_password,
             login_with_recovery_code, logout, preview_invitation, regenerate_recovery_codes,
             rename_passkey, request_magic_link, revoke_admin_invite, revoke_all_user_sessions,
-            revoke_other_sessions, revoke_session, set_user_password, update_current_user,
-            verify_add_passkey, verify_invite_registration, verify_magic_link_get,
-            verify_magic_link_post, verify_passkey_login,
+            revoke_other_sessions, revoke_session, set_user_password, update_admin_user,
+            update_current_user, verify_add_passkey, verify_invite_registration,
+            verify_magic_link_get, verify_magic_link_post, verify_passkey_login,
         },
         health::{health_check, HealthResponse},
+        rbac::{
+            create_person, delete_person, export_gedcom, export_printable_pdf, get_audit_history,
+            get_data_quality_warnings, get_media_file, get_person, get_tree, import_gedcom,
+            list_media_archive, list_people_directory, list_places_directory,
+            merge_duplicate_people, update_person, AdminToolOperationResponse, CreatePersonRequest,
+            MediaArchiveResponse, PeopleDirectoryResponse, PersonMergeRequest,
+            PlacesDirectoryResponse, TreeResponse, UpdatePersonRequest,
+        },
         system::{
             download_admin_backup, get_admin_settings, get_admin_system, get_system_info,
             list_admin_backups, trigger_admin_backup, update_admin_settings, AdminBackupStatus,
@@ -49,9 +58,13 @@ use crate::{
             PasswordLoginRequest, RecoveryCodeLoginRequest, RecoveryCodeLoginResponse,
             RegenerateRecoveryCodesResponse, RenamePasskeyRequest, SessionDto, SessionListResponse,
             SetPasswordRequest, SetupCompleteResponse, SetupRequest, SetupStatusResponse,
-            UpdateProfileRequest, UserDto, WebAuthnChallengeResponse,
+            UpdateAdminUserRequest, UpdateProfileRequest, UserDto, WebAuthnChallengeResponse,
         },
         backup::{BackupArchiveInfo, BackupFileEntry, BackupManifest, BackupStats},
+        privacy::{
+            FaceTagDto, MediaAssetSummaryDto, PersonNameDto, PlaceSummaryDto, TreePersonNodeDto,
+            VitalEventSummaryDto,
+        },
         security::csrf_protection_middleware,
     },
     state::{AppState, InstanceSettingsDto, UpdateInstanceSettingsRequest},
@@ -94,11 +107,27 @@ use crate::{
         auth::revoke_session,
         auth::revoke_other_sessions,
         auth::list_admin_users,
+        auth::update_admin_user,
         auth::create_admin_invite,
         auth::list_admin_invites,
         auth::revoke_admin_invite,
         auth::create_user_sign_in_link,
         auth::revoke_all_user_sessions,
+        rbac::get_tree,
+        rbac::get_person,
+        rbac::create_person,
+        rbac::update_person,
+        rbac::delete_person,
+        rbac::get_media_file,
+        rbac::list_people_directory,
+        rbac::list_places_directory,
+        rbac::list_media_archive,
+        rbac::export_gedcom,
+        rbac::import_gedcom,
+        rbac::export_printable_pdf,
+        rbac::get_audit_history,
+        rbac::get_data_quality_warnings,
+        rbac::merge_duplicate_people,
     ),
     components(
         schemas(
@@ -155,14 +184,30 @@ use crate::{
             InvitationListResponse,
             InvitePreviewResponse,
             AdminUserSummaryDto,
+            UpdateAdminUserRequest,
             AdminUserListResponse,
             AdminSignInLinkResponse,
+            PersonNameDto,
+            VitalEventSummaryDto,
+            TreePersonNodeDto,
+            FaceTagDto,
+            MediaAssetSummaryDto,
+            PlaceSummaryDto,
+            TreeResponse,
+            CreatePersonRequest,
+            UpdatePersonRequest,
+            PeopleDirectoryResponse,
+            PlacesDirectoryResponse,
+            MediaArchiveResponse,
+            AdminToolOperationResponse,
+            PersonMergeRequest,
         )
     ),
     tags(
         (name = "System", description = "System operations and health monitoring"),
         (name = "Auth", description = "Authentication, Passkeys (WebAuthn), sessions, and recovery"),
-        (name = "Admin", description = "Instance administration, settings, family members, and backups")
+        (name = "Admin", description = "Instance administration, settings, family members, and backups"),
+        (name = "Tree & Privacy", description = "RBAC-enforced tree nodes, living-person privacy masking, and media shield")
     ),
     info(
         title = "Genealogy Family Tree API",
@@ -231,6 +276,23 @@ pub fn create_router(state: AppState) -> Router {
             get(list_sessions).delete(revoke_other_sessions),
         )
         .route("/auth/sessions/{id}", delete(revoke_session))
+        // Tree, Privacy & RBAC Matrix Endpoints
+        .route("/tree", get(get_tree))
+        .route("/persons", post(create_person))
+        .route(
+            "/persons/{id}",
+            get(get_person).patch(update_person).delete(delete_person),
+        )
+        .route("/media/{id}/file", get(get_media_file))
+        .route("/people", get(list_people_directory))
+        .route("/places", get(list_places_directory))
+        .route("/media", get(list_media_archive))
+        .route("/gedcom/export", get(export_gedcom))
+        .route("/gedcom/import", post(import_gedcom))
+        .route("/export/pdf", post(export_printable_pdf))
+        .route("/history", get(get_audit_history))
+        .route("/quality", get(get_data_quality_warnings))
+        .route("/people/merge", post(merge_duplicate_people))
         // Admin Operations, Users & Invitations
         .route("/admin/system", get(get_admin_system))
         .route(
@@ -243,6 +305,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/admin/backups/{filename}", get(download_admin_backup))
         .route("/admin/users", get(list_admin_users))
+        .route("/admin/users/{id}", patch(update_admin_user))
         .route(
             "/admin/users/{id}/sign-in-link",
             post(create_user_sign_in_link),

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Save } from 'lucide-react';
 import {
-  Badge,
   Button,
+  RoleBadge,
   Select,
   TextInput,
   useToast,
@@ -108,13 +108,7 @@ export const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
               {currentUser.email}
             </div>
           </div>
-          <Badge variant="brand">
-            {currentUser.role === 'admin'
-              ? t('settings.users.roleAdmin')
-              : currentUser.role === 'editor'
-                ? t('settings.users.roleEditor')
-                : t('settings.users.roleViewer')}
-          </Badge>
+          <RoleBadge role={currentUser.role} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct BackupFileEntry {

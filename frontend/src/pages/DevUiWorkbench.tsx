@@ -487,7 +487,15 @@ export const DevUiWorkbench: React.FC = () => {
               icon={<MapPin className="h-6 w-6" />}
               title="No places recorded in this region yet"
               description="Add historical parishes, cities, or guberniyas to visualize family migration paths."
-              action={<Button size="sm" variant="primary">+ Add Place</Button>}
+              action={
+                <Button
+                  size="sm"
+                  variant="primary"
+                  leftIcon={<Plus className="h-4 w-4" />}
+                >
+                  Add Place
+                </Button>
+              }
             />
           </section>
 

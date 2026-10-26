@@ -53,6 +53,9 @@ pub enum AppError {
     #[error("Cannot remove the last remaining authentication method")]
     LastAuthMethod,
 
+    #[error("Cannot demote or deactivate the sole remaining active administrator")]
+    SoleAdminProtected,
+
     #[error("Password authentication is disabled on this instance")]
     PasswordAuthDisabled,
 
@@ -105,6 +108,7 @@ impl AppError {
             Self::InvalidOrExpiredInvite => "invalid_or_expired_invite",
             Self::InvalidOrExpiredToken => "invalid_or_expired_token",
             Self::LastAuthMethod => "last_auth_method",
+            Self::SoleAdminProtected => "sole_admin_protected",
             Self::PasswordAuthDisabled => "password_auth_disabled",
             Self::CsrfValidationFailed => "csrf_validation_failed",
             Self::Forbidden(_) => "forbidden",
@@ -127,6 +131,7 @@ impl AppError {
             | Self::InvalidOrExpiredChallenge
             | Self::InvalidOrExpiredToken
             | Self::LastAuthMethod
+            | Self::SoleAdminProtected
             | Self::ChecksumMismatch(_)
             | Self::IncompatibleSchema(_) => StatusCode::BAD_REQUEST,
             Self::NotAuthenticated

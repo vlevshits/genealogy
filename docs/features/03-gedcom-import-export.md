@@ -162,7 +162,7 @@ When an **Administrator** triggers **"Export Tree"** (restricted exclusively to 
    - **Standalone `.ged`:** Only text records and internal references.
    - **Full Package (.zip / .gdz):** Bundles all photos, scanned documents, and relative media paths into an archive ready for importing into desktop tools.
 3. **Privacy Filter Checkboxes:**
-   - [x] Redact living individuals (replaces living names with `Living`, suppresses private birth dates).
+   - [x] Redact living individuals (replaces living names with single initial e.g. `И.` / `J.`, completely suppresses surnames, patronymics, and private birth dates).
    - [ ] Include private notes and internal research logs.
 4. **Subtree Export (Optional):**
    - Export entire tree.
@@ -220,5 +220,5 @@ When an **Administrator** triggers **"Export Tree"** (restricted exclusively to 
 - [ ] **Pre-Import Review Screen:** Displays accurate counts and warning highlights before writing changes to the database.
 - [ ] **Progress Streaming:** Long imports display a responsive, live progress bar with percentage and step descriptions.
 - [ ] **Round-Trip Fidelity:** Exporting a tree to GEDCOM and re-importing it into a clean instance yields identical counts of individuals, parent-child relationships, dates, places, and media links.
-- [ ] **Privacy Filter Enforcement:** Exporting with "Redact Living Individuals" produces a file free of sensitive birthdates or personal notes of living persons.
+- [ ] **Privacy Filter Enforcement:** Exporting with "Redact Living Individuals" produces a file free of sensitive birthdates, surnames, or personal notes of living persons, masking names as single initials (e.g. `И.` / `J.`).
 - [ ] **Admin-Only Isolation:** GEDCOM import and export endpoints reject non-Admin requests with 403 Forbidden.

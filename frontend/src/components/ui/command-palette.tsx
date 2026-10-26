@@ -167,9 +167,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         <div className="flex items-center justify-between border-t border-border bg-surface-muted/50 px-4 py-2 text-[11px] text-tertiary">
-          <span>{t('omnibox.hintNavigate')}</span>
-          <span>{t('omnibox.hintSelect')}</span>
-          <span>{t('omnibox.hintClose')}</span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>↑↓</Kbd>
+            <span>{t('omnibox.hintNavigate')}</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>↵</Kbd>
+            <span>{t('omnibox.hintSelect')}</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd>Esc</Kbd>
+            <span>{t('omnibox.hintClose')}</span>
+          </span>
         </div>
       </div>
     </div>

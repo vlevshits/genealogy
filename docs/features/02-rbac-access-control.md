@@ -24,7 +24,7 @@ Access is partitioned into four distinct tiers:
 | **TREE & GENEALOGICAL BROWSING** | | | | | |
 | View Interactive Tree (`/tree`) | **No (Redirects `/login`)** | **Yes (Strictly Masked)** | **Yes (Full Unredacted)** | **Yes (Full Unredacted)** | **Yes (Full Unredacted)** |
 | View Deceased Individuals & Facts | No | Yes (Public only) | Yes | Yes | Yes |
-| View Living Persons' Names & Surnames | No | **Strictly Masked (`Living`)** | **Yes (Full Name)** | **Yes (Full Name)** | **Yes (Full Name)** |
+| View Living Persons' Names & Surnames | No | **Strictly Masked (Single Initial, e.g. `И.` / `J.`)** | **Yes (Full Name)** | **Yes (Full Name)** | **Yes (Full Name)** |
 | View Living Persons' Dates & Places | No | **Blocked (Hidden)** | **Yes (Full Dates/Places)** | **Yes (Full Dates/Places)** | **Yes (Full Dates/Places)** |
 | View Living Persons' Photos & Avatars | No | **Blocked (Silhouette)** | **Yes (Full Media)** | **Yes (Full Media)** | **Yes (Full Media)** |
 | View Private Records (`is_private=true`) | No | No | No | **Yes** | **Yes** |
@@ -68,7 +68,8 @@ By default, the application is strictly private (`ENABLE_PUBLIC_ACCESS=false`):
 When an administrator explicitly toggles public sharing (`ENABLE_PUBLIC_ACCESS=true` in Admin Settings or `.env`):
 - **Permitted Surface:** Unauthenticated visitors may access ONLY the tree visualizer (`/tree`) and individual profile views (`/persons/:id`).
 - **Strict Living Person Masking:** The backend response serialization layer redacts all personal data of living individuals:
-  - First Name & Surname: Replaced with `Living` / `Живущий` (or `[Living / Скрыто]`).
+  - Display Name (Single Initial): Masked to exactly one initial character with a dot (e.g. `[Given Initial].` / `И.` / `J.`). Full given name is never transmitted.
+  - Surname & Birth Surname: Completely redacted (`NULL`). Family surnames of living individuals are never exposed to unauthenticated visitors.
   - Patronymic: Stripped completely (`NULL`).
   - Birth, Baptism, Marriage Dates: Hidden completely (`NULL`).
   - Addresses, Locations, Coordinates: Stripped (`NULL`).
@@ -115,6 +116,14 @@ The backend computes `is_living` dynamically on read using the canonical algorit
 ### 4.2 Serialization Interceptor Redaction Contract
 When serializing responses for an **Unauthenticated Public Visitor** (`user_role = Anonymous`), the serializer executes field-level stripping:
 
+```rust
+// Backend Rust redaction formula for anonymous / public visitors:
+let masked_given_name = format!(
+    "{}.",
+    person.given_name.as_deref().and_then(|s| s.chars().next()).unwrap_or('?')
+);
+```
+
 ```json
 // Authenticated Viewer/Editor/Admin response for a living relative:
 {
@@ -124,7 +133,7 @@ When serializing responses for an **Unauthenticated Public Visitor** (`user_role
   "primary_name": {
     "given_name": "Elena",
     "patronymic": "Alexandrovna",
-    "surname": "Levshits"
+    "surname": "Petrova"
   },
   "birth": {
     "date": "1994-06-14",
@@ -139,9 +148,9 @@ When serializing responses for an **Unauthenticated Public Visitor** (`user_role
   "gid": "I0042",
   "is_living": true,
   "primary_name": {
-    "given_name": "Living",
+    "given_name": "E.",
     "patronymic": null,
-    "surname": "Levshits"
+    "surname": null
   },
   "birth": null,
   "avatar_url": null
@@ -188,7 +197,7 @@ All SQLx read queries pass through a privacy-filtering query pipeline:
 ## 7. Definition of Done (DoD)
 
 - [ ] **Default Private Gatekeeper:** On a fresh instance with `ENABLE_PUBLIC_ACCESS=false`, any unauthenticated visit to `/`, `/tree`, `/people`, or `/media` redirects to `/login`.
-- [ ] **Public Mode Masking:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors to `/tree` see living people masked as `"Living"` with zero birth dates, places, or photos.
+- [ ] **Public Mode Masking:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors to `/tree` see living people masked as a single initial character with dot (e.g. `"И."` / `"J."`) with surnames, patronymics, birth dates, places, and photos completely stripped.
 - [ ] **Direct Media Shield:** Attempting to fetch a photo of a living person via `/api/v1/media/:id/file` as an unauthenticated visitor returns `404 Not Found`.
 - [ ] **Viewer Full Living Visibility:** Authenticated Viewers can see full names, birth dates, places, relationships, and photos of living family members.
 - [ ] **Viewer Read-Only Boundary:** Any `POST`, `PUT`, `PATCH`, or `DELETE` attempt by a Viewer returns `403 Forbidden`.

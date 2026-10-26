@@ -182,7 +182,7 @@ Every configurable setting is externalized into environment variables:
 | `GEOCODING_URL` | No | `https://nominatim.openstreetmap.org` | Nominatim endpoint | |
 | `HISTORY_RETENTION_DAYS` | No | `365` | Change-log retention (`0` = forever) | `0` |
 | `SETTINGS_LOCKED_FROM_ENV` | No | `false` | Env values override Admin UI settings ([10 §7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/10-core-data-model.md#7-configuration-precedence-env-vs-admin-ui)) | `true` |
-| `PUBLIC_SEARCH_SHOW_LIVING` | No | `false` | In public mode, show masked "Living [Surname]" results in search | `false` |
+| `PUBLIC_SEARCH_SHOW_LIVING` | No | `false` | In public mode, show masked initial results (e.g. "И." / "J.") in search | `false` |
 
 ---
 

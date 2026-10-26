@@ -48,7 +48,7 @@ Transform the family tree browsing experience from slow, static tables into a fa
 ### 3.1 Card States & Styling
 - **Default State:** Clean card with subtle border, subtle drop shadow, gender accent pill (soft slate/indigo for male, rose/coral for female, neutral grey for unspecified).
 - **Hover / Active State:** Elevated card with glowing border, displaying the quick action toolbar.
-- **Living Individual State:** Distinct badge (`Living`) with privacy-masked details when viewed by restricted users.
+- **Living Individual State:** Distinct badge (`Living`) with privacy-masked details (display name masked as single initial character with dot, e.g. `И.` / `J.`, with surnames, patronymics, dates, places, and media completely stripped) when viewed by unauthenticated public users.
 - **Direct Lineage Highlighter:** Glowing connector lines tracing the direct biological ancestry path.
 
 ---

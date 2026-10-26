@@ -15,7 +15,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, ErrorResponse},
-    services::backup::{BackupArchiveInfo, BackupService},
+    services::{
+        backup::{BackupArchiveInfo, BackupService},
+        rbac::RequireAdmin,
+    },
     state::{AppState, InstanceSettingsDto, UpdateInstanceSettingsRequest},
 };
 
@@ -110,11 +113,15 @@ pub async fn get_system_info(State(state): State<AppState>) -> Json<SystemInfoRe
     get,
     path = "/api/v1/admin/system",
     responses(
-        (status = 200, description = "Operational diagnostics for Settings System card", body = AdminSystemResponse)
+        (status = 200, description = "Operational diagnostics for Settings System card", body = AdminSystemResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
-pub async fn get_admin_system(State(state): State<AppState>) -> Json<AdminSystemResponse> {
+pub async fn get_admin_system(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+) -> Json<AdminSystemResponse> {
     let mut db_status = "standalone_ready".to_string();
     let mut db_size_bytes = 0u64;
     let mut tables_count = 3u32;
@@ -195,11 +202,15 @@ pub async fn get_admin_system(State(state): State<AppState>) -> Json<AdminSystem
     get,
     path = "/api/v1/admin/settings",
     responses(
-        (status = 200, description = "Current instance settings", body = InstanceSettingsDto)
+        (status = 200, description = "Current instance settings", body = InstanceSettingsDto),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
-pub async fn get_admin_settings(State(state): State<AppState>) -> Json<InstanceSettingsDto> {
+pub async fn get_admin_settings(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+) -> Json<InstanceSettingsDto> {
     Json(state.resolve_instance_settings().await)
 }
 
@@ -210,11 +221,12 @@ pub async fn get_admin_settings(State(state): State<AppState>) -> Json<InstanceS
     responses(
         (status = 200, description = "Updated instance settings", body = InstanceSettingsDto),
         (status = 400, description = "Validation error", body = ErrorResponse),
-        (status = 403, description = "Settings locked by SETTINGS_LOCKED_FROM_ENV", body = ErrorResponse)
+        (status = 403, description = "Settings locked by SETTINGS_LOCKED_FROM_ENV or non-admin", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn update_admin_settings(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
     Json(payload): Json<UpdateInstanceSettingsRequest>,
 ) -> Result<Json<InstanceSettingsDto>, AppError> {
@@ -226,11 +238,13 @@ pub async fn update_admin_settings(
     get,
     path = "/api/v1/admin/backups",
     responses(
-        (status = 200, description = "List of available backup archives", body = BackupListResponse)
+        (status = 200, description = "List of available backup archives", body = BackupListResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn list_admin_backups(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
 ) -> Result<Json<BackupListResponse>, AppError> {
     let backup_service = BackupService::new(state.config.clone());
@@ -249,11 +263,13 @@ pub async fn list_admin_backups(
     request_body(content = Option<TriggerBackupRequest>, description = "Optional backup options"),
     responses(
         (status = 201, description = "On-demand backup created", body = TriggerBackupResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
         (status = 500, description = "Backup creation failed", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn trigger_admin_backup(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
     payload: Option<Json<TriggerBackupRequest>>,
 ) -> Result<(StatusCode, Json<TriggerBackupResponse>), AppError> {
@@ -281,11 +297,13 @@ pub async fn trigger_admin_backup(
     responses(
         (status = 200, description = "Gzipped tar backup archive stream", content_type = "application/gzip"),
         (status = 400, description = "Invalid backup filename", body = ErrorResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
         (status = 404, description = "Backup archive not found", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn download_admin_backup(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
     Path(filename): Path<String>,
 ) -> Result<Response, AppError> {

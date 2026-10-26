@@ -271,7 +271,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       {/* 1. Registered Passkeys Card */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Fingerprint className="h-4.5 w-4.5 text-brand" />
               <h2 className="text-base font-semibold text-primary">
@@ -283,7 +283,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2 shrink-0 sm:ml-auto">
             <div className="w-48">
               <TextInput
                 size="sm"
@@ -299,6 +299,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
               loading={addingPasskey}
               onClick={handleRegisterPasskey}
               leftIcon={<Plus className="h-4 w-4" />}
+              className="shrink-0"
             >
               {t('settings.security.registerPasskeyBtn')}
             </Button>
@@ -393,7 +394,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       {/* 2. Emergency Recovery Codes Card */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <KeyRound className="h-4.5 w-4.5 text-brand" />
               <h2 className="text-base font-semibold text-primary">
@@ -404,7 +405,10 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
               {t('settings.security.recoverySubtitle')}
             </p>
           </div>
-          <Badge variant={remainingCodes > 3 ? 'success' : 'warning'}>
+          <Badge
+            variant={remainingCodes > 3 ? 'success' : 'warning'}
+            className="shrink-0 sm:ml-auto"
+          >
             {t('settings.security.recoveryStatus', {
               remaining: remainingCodes,
             })}
@@ -486,7 +490,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       {/* 4. Active Sessions Card */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Laptop className="h-4.5 w-4.5 text-brand" />
               <h2 className="text-base font-semibold text-primary">
@@ -502,6 +506,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
               variant="secondary"
               size="sm"
               onClick={handleRevokeOtherSessions}
+              className="shrink-0 sm:ml-auto"
             >
               {t('settings.security.signOutEverywhereBtn')}
             </Button>

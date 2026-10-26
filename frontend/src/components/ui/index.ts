@@ -7,6 +7,8 @@ export * from './button-group';
 export * from './segmented-control';
 export * from './copy-button';
 export * from './badge';
+export * from './role-badge';
+export * from './access-denied-card';
 export * from './kbd';
 export * from './spinner';
 export * from './skeleton';

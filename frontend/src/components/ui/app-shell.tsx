@@ -198,19 +198,21 @@ export const AppShell: React.FC<AppShellProps> = ({
               <span className="hidden lg:inline">{t('nav.searchTrigger')}</span>
             </Button>
 
-            <DropdownMenu
-              ariaLabel={t('nav.add')}
-              trigger={
-                <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('nav.add')}</span>
-                </span>
-              }
-              items={[
-                { id: 'add-person', label: t('nav.addPerson'), onSelect: () => navigate('/people') },
-                { id: 'upload-photos', label: t('nav.uploadPhotos'), onSelect: () => navigate('/media') },
-              ]}
-            />
+            {(!user || user.role !== 'viewer') && (
+              <DropdownMenu
+                ariaLabel={t('nav.add')}
+                trigger={
+                  <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">{t('nav.add')}</span>
+                  </span>
+                }
+                items={[
+                  { id: 'add-person', label: t('nav.addPerson'), onSelect: () => navigate('/people') },
+                  { id: 'upload-photos', label: t('nav.uploadPhotos'), onSelect: () => navigate('/media') },
+                ]}
+              />
+            )}
 
             {/* Reusable Language & Theme Toggle Buttons */}
             <LanguageToggleButton />
@@ -260,7 +262,9 @@ export const AppShell: React.FC<AppShellProps> = ({
                     onSelect: () => navigate('/settings/profile'),
                   },
                   { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
-                  { id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') },
+                  ...(!user || user.role === 'admin'
+                    ? [{ id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') }]
+                    : []),
                   {
                     id: 'logout',
                     label: t('nav.signOut'),

@@ -1,7 +1,15 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { Compass, Sparkles, Layers, Shield, FileText } from 'lucide-react';
 import { SystemStatusCard } from './components/SystemStatusCard';
-import { AppShell, BrandLogoIcon, Button, Badge, Spinner } from './components/ui';
+import {
+  AccessDeniedCard,
+  AppShell,
+  BrandLogoIcon,
+  Button,
+  Badge,
+  Spinner,
+} from './components/ui';
+import { TreePrivacyPreviewCard } from './components/tree';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuthPages } from './pages/AuthPages';
 import { fetchSystemInfo } from './api/client';
@@ -12,7 +20,8 @@ const DevUiWorkbench = React.lazy(() => import('./pages/DevUiWorkbench'));
 
 export const App: React.FC = () => {
   const { t } = useI18n();
-  const { setupStatus, isAuthenticated, isLoading, backendReachable } = useAuth();
+  const { user, setupStatus, isAuthenticated, isLoading, backendReachable } =
+    useAuth();
   const [path, setPath] = useState<string>(() =>
     typeof window !== 'undefined' ? window.location.pathname : '/'
   );
@@ -145,7 +154,83 @@ export const App: React.FC = () => {
     );
   }
 
-  // 5. Settings & Administration routes (/settings/*)
+  // 4b. Public Tree Mode Guard (02-rbac-access-control.md §3.2):
+  // When enable_public_access === true and visitor is unauthenticated, only /tree and /persons/* are accessible;
+  // auxiliary routes (/people, /media, /places, /settings, /history, /quality, /export/print) redirect to /login
+  if (
+    !isLoading &&
+    backendReachable &&
+    setupStatus &&
+    setupStatus.is_initialized &&
+    setupStatus.enable_public_access &&
+    !isAuthenticated &&
+    (path.startsWith('/people') ||
+      path.startsWith('/media') ||
+      path.startsWith('/places') ||
+      path.startsWith('/settings') ||
+      path.startsWith('/history') ||
+      path.startsWith('/quality') ||
+      path.startsWith('/export'))
+  ) {
+    return (
+      <AuthPages
+        currentPath="/login"
+        instanceTitle={instanceTitle || setupStatus.tree_title}
+        onNavigate={navigate}
+      />
+    );
+  }
+
+  // 4c. Admin-only route RBAC guard (/history, /quality, /people/merge, /export/print) (02 §2 & §7 DoD #6, #7, #8)
+  if (
+    path.startsWith('/history') ||
+    path.startsWith('/quality') ||
+    path.startsWith('/people/merge') ||
+    path.startsWith('/export/print')
+  ) {
+    if (user && user.role !== 'admin') {
+      return (
+        <AppShell
+          currentPath={path}
+          onNavigate={navigate}
+          instanceTitle={instanceTitle}
+          breadcrumbs={[
+            { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+            { id: 'restricted', label: t('rbac.adminOnlyBadge') },
+          ]}
+        >
+          <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <AccessDeniedCard
+              currentRole={user.role}
+              onOpenProfile={() => navigate('/settings/profile')}
+              onBackToTree={() => navigate('/tree')}
+            />
+          </div>
+        </AppShell>
+      );
+    }
+  }
+
+  // 5. Tree route (/tree) — renders server-enforced Living-Person Privacy & Access Tier view
+  if (path.startsWith('/tree')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'tree', label: t('nav.tree') },
+        ]}
+      >
+        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <TreePrivacyPreviewCard onSignIn={() => navigate('/login')} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  // 6. Settings & Administration routes (/settings/*)
   if (path.startsWith('/settings')) {
     return (
       <AppShell

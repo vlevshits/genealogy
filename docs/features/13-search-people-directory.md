@@ -33,7 +33,7 @@ Computed by the backend whenever a name changes, stored in `individuals.search_t
 
 ### 2.4 Performance
 - Omnibox returns top 8 people + 3 places + 3 media in **<100 ms** for trees up to 50,000 individuals.
-- Privacy filters (living/private) are applied **in SQL**, never post-filtered in the client — anonymous users must not be able to discover living people by name. Living people are matched for anonymous users **only** by surname and appear as *"Living Petrov"* without dates (configurable: `PUBLIC_SEARCH_SHOW_LIVING=false` hides them entirely).
+- Privacy filters (living/private) are applied **in SQL**, never post-filtered in the client — anonymous users must not be able to discover living people by full name or surname. When enabled (`PUBLIC_SEARCH_SHOW_LIVING=true`), living people appear masked with single initial character (e.g. *"И."* / *"J."*) with no surname, patronymic, or dates revealed (configurable: default `PUBLIC_SEARCH_SHOW_LIVING=false` hides living individuals entirely from public search).
 
 ---
 

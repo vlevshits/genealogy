@@ -105,7 +105,7 @@ export const BackupsSettingsPanel: React.FC<BackupsSettingsPanelProps> = ({
       {/* Primary Full Archive Backup Card */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <h2 className="text-base font-semibold text-primary">
               {t('settings.backups.title')}
             </h2>
@@ -118,6 +118,7 @@ export const BackupsSettingsPanel: React.FC<BackupsSettingsPanelProps> = ({
             loading={creatingBackup}
             onClick={handleCreateBackup}
             leftIcon={<Download className="h-4 w-4" />}
+            className="shrink-0 sm:ml-auto"
           >
             {creatingBackup
               ? t('settings.backups.creatingCta')

@@ -31,7 +31,7 @@ frontend/src/components/
 1. **Typed props**, `className` passthrough merged with `cn()`, `ref` forwarded (React 19 `ref` prop).
 2. Standard props where applicable: `size: 'sm' | 'md' | 'lg'` (default `md`), `variant`, `disabled`, `loading`, `invalid`.
 3. **Controlled & uncontrolled** support for all inputs (`value`/`onChange` and `defaultValue`).
-4. **No hardcoded text.** All labels, placeholders, empty states, and ARIA labels are props or come from `t()` keys in `common.json` (e.g. `common.actions.cancel`). See [00-internationalization](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md).
+4. **No hardcoded text.** All labels, placeholders, empty states, and ARIA labels are props or come from `t()` keys in `common.json` (e.g. `common.actions.cancel`). See [00-internationalization](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md). Translation strings must never contain icon glyphs or emojis; visual icons are supplied exclusively via component props (`leftIcon`, `rightIcon`).
 5. **Theme-only colors:** components use semantic tokens (`bg-surface`, `text-secondary`, `border-border`, `ring-focus`) — never raw hex — so light/dark modes work automatically.
 6. **Accessibility & Touch Baseline:** keyboard operable, visible focus ring, correct roles/labels, WCAG 2.2 AA contrast, touch target ≥ 44×44 px on touch devices (48×48 px on primary mobile actions per [theme-and-tokens §4.6](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/design-system/theme-and-tokens.md#46-touch-targets--coarse-pointer-ergonomics)), safe-area inset adaptation for PWA standalone mode, respects `prefers-reduced-motion`.
 7. **States** every interactive component must render: default, hover, focus-visible, active/pressed, disabled, loading (where async), invalid (inputs), read-only (inputs).
@@ -91,7 +91,7 @@ frontend/src/components/
 | `loading` | Shows spinner, keeps width, sets `aria-busy`, blocks clicks |
 | `fullWidth`, `asChild` | `asChild` renders as router `Link` |
 
-Rules: one `primary` button per view region; destructive actions use `danger` and always go through `ConfirmDialog`.
+Rules: one `primary` button per view region; destructive actions use `danger` and always go through `ConfirmDialog`. Never include icon glyphs (`+ `, `← `, `→ `) or decorative emojis in button translation strings — icons must be rendered exclusively via `leftIcon` / `rightIcon` props (see [00 §2.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#21-ui-localization-react--i18next)).
 
 #### `IconButton`
 Square button for icon-only actions (`⋯`, zoom `+/-`, close `✕`). **`label` prop is required** (used as `aria-label` and tooltip). Variants: `ghost` (default), `secondary`, `floating` (frosted pill for canvas controls).

@@ -231,7 +231,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     );
 
     expect(securityHtml).toContain('MacBook Pro Touch ID');
-    expect(securityHtml).toContain('+ Register Another Passkey');
+    expect(securityHtml).toContain('Register Another Passkey');
     expect(securityHtml).toContain('10 codes generated · 9 unused remaining');
     expect(securityHtml).toContain('Safari on macOS');
     expect(securityHtml).toContain('Current Device');
@@ -276,7 +276,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     expect(usersHtml).toContain('2 passkey(s)');
     expect(usersHtml).toContain('Create sign-in link');
     expect(usersHtml).toContain('Elena Kuznetsova');
-    expect(usersHtml).toContain('+ Invite Family Member');
+    expect(usersHtml).toContain('Invite Family Member');
   });
 
   it('DEF-001 & DEF-002 regression: base64UrlToUint8Array decodes base64url challenge bytes without double-encoding', () => {

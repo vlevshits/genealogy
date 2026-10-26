@@ -9,17 +9,21 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, ErrorResponse},
-    services::auth::{
-        AdminSignInLinkResponse, AdminUserListResponse, AdminUserSummaryDto, AuthService,
-        AuthSessionResponse, CreateInviteRequest, InvitationListResponse, InviteCreatedResponse,
-        InvitePreviewResponse, InviteRegisterRequest, LoginChallengeRequest,
-        LoginChallengeResponse, MagicLinkRequest, MagicLinkRequestResponse, MagicLinkVerifyRequest,
-        PasskeyCredentialDto, PasskeyListResponse, PasskeyLoginVerifyRequest,
-        PasskeyRegistrationInput, PasswordLoginRequest, RecoveryCodeLoginRequest,
-        RecoveryCodeLoginResponse, RegenerateRecoveryCodesResponse, RenamePasskeyRequest,
-        SessionDto, SessionListResponse, SessionRecord, SetPasswordRequest, SetupCompleteResponse,
-        SetupRequest, SetupStatusResponse, UpdateProfileRequest, UserDto, UserRecord,
-        WebAuthnChallengeResponse,
+    services::{
+        auth::{
+            AdminSignInLinkResponse, AdminUserListResponse, AdminUserSummaryDto, AuthService,
+            AuthSessionResponse, CreateInviteRequest, InvitationListResponse,
+            InviteCreatedResponse, InvitePreviewResponse, InviteRegisterRequest,
+            LoginChallengeRequest, LoginChallengeResponse, MagicLinkRequest,
+            MagicLinkRequestResponse, MagicLinkVerifyRequest, PasskeyCredentialDto,
+            PasskeyListResponse, PasskeyLoginVerifyRequest, PasskeyRegistrationInput,
+            PasswordLoginRequest, RecoveryCodeLoginRequest, RecoveryCodeLoginResponse,
+            RegenerateRecoveryCodesResponse, RenamePasskeyRequest, SessionDto, SessionListResponse,
+            SessionRecord, SetPasswordRequest, SetupCompleteResponse, SetupRequest,
+            SetupStatusResponse, UpdateAdminUserRequest, UpdateProfileRequest, UserDto, UserRecord,
+            WebAuthnChallengeResponse,
+        },
+        rbac::RequireAdmin,
     },
     state::AppState,
 };
@@ -45,30 +49,7 @@ fn extract_client_meta(headers: &HeaderMap) -> (Option<String>, String) {
 }
 
 pub fn extract_session_token(headers: &HeaderMap) -> Option<String> {
-    if let Some(auth) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-    {
-        if let Some(token) = auth.strip_prefix("Bearer ") {
-            let trimmed = token.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-
-    if let Some(cookie_str) = headers.get(header::COOKIE).and_then(|v| v.to_str().ok()) {
-        for part in cookie_str.split(';') {
-            let trimmed = part.trim();
-            if let Some(val) = trimmed.strip_prefix("session=") {
-                if !val.trim().is_empty() {
-                    return Some(val.trim().to_string());
-                }
-            }
-        }
-    }
-
-    None
+    crate::services::rbac::extract_session_token(headers)
 }
 
 async fn require_authenticated(
@@ -77,27 +58,6 @@ async fn require_authenticated(
 ) -> Result<(UserRecord, SessionRecord), AppError> {
     let token = extract_session_token(headers).ok_or(AppError::NotAuthenticated)?;
     AuthService::authenticate_session(state, &token).await
-}
-
-async fn require_admin_or_unbootstrapped(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<Option<UserRecord>, AppError> {
-    if let Some(token) = extract_session_token(headers) {
-        let (user, _) = AuthService::authenticate_session(state, &token).await?;
-        if user.role != "admin" {
-            return Err(AppError::Forbidden(
-                "Administrator privileges required".to_string(),
-            ));
-        }
-        return Ok(Some(user));
-    }
-
-    if AuthService::is_initialized(state).await {
-        return Err(AppError::NotAuthenticated);
-    }
-
-    Ok(None)
 }
 
 #[utoipa::path(
@@ -783,33 +743,45 @@ pub async fn revoke_other_sessions(
     tag = "Admin"
 )]
 pub async fn list_admin_users(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<AdminUserListResponse>, AppError> {
-    let _ = require_admin_or_unbootstrapped(&state, &headers).await?;
     let store = state.auth_store.read().await;
     let items = store
         .users
         .iter()
         .map(|u| {
             let passkeys_count = store.passkeys.iter().filter(|p| p.user_id == u.id).count();
-            AdminUserSummaryDto {
-                id: u.id.to_string(),
-                email: u.email.clone(),
-                first_name: u.first_name.clone(),
-                last_name: u.last_name.clone(),
-                display_name: format!("{} {}", u.first_name, u.last_name),
-                role: u.role.clone(),
-                person_id: u.person_id.map(|p| p.to_string()),
-                is_active: u.is_active,
-                passkeys_count,
-                has_password: u.password_hash.is_some(),
-                last_login_at: u.last_login_at.map(|d| d.to_rfc3339()),
-                created_at: u.created_at.to_rfc3339(),
-            }
+            AuthService::to_admin_user_summary(u, passkeys_count)
         })
         .collect();
     Ok(Json(AdminUserListResponse { items }))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/admin/users/{id}",
+    params(
+        ("id" = String, Path, description = "Target user UUID")
+    ),
+    request_body = UpdateAdminUserRequest,
+    responses(
+        (status = 200, description = "Updated user role or activation status", body = AdminUserSummaryDto),
+        (status = 400, description = "Validation error or sole admin protection", body = ErrorResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 404, description = "User not found", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn update_admin_user(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateAdminUserRequest>,
+) -> Result<Json<AdminUserSummaryDto>, AppError> {
+    let target_id = Uuid::parse_str(&id).map_err(|_| AppError::NotFound)?;
+    let updated = AuthService::update_admin_user(&state, target_id, req).await?;
+    Ok(Json(updated))
 }
 
 #[utoipa::path(
@@ -824,12 +796,11 @@ pub async fn list_admin_users(
     tag = "Admin"
 )]
 pub async fn create_admin_invite(
+    RequireAdmin(admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CreateInviteRequest>,
 ) -> Result<(StatusCode, Json<InviteCreatedResponse>), AppError> {
-    let admin = require_admin_or_unbootstrapped(&state, &headers).await?;
-    let created = AuthService::create_invitation(&state, admin.map(|u| u.id), req).await?;
+    let created = AuthService::create_invitation(&state, Some(admin.user.id), req).await?;
     Ok((StatusCode::CREATED, Json(created)))
 }
 
@@ -837,15 +808,15 @@ pub async fn create_admin_invite(
     get,
     path = "/api/v1/admin/invites",
     responses(
-        (status = 200, description = "List of pending invitations", body = InvitationListResponse)
+        (status = 200, description = "List of pending invitations", body = InvitationListResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn list_admin_invites(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<InvitationListResponse>, AppError> {
-    let _ = require_admin_or_unbootstrapped(&state, &headers).await?;
     let store = state.auth_store.read().await;
     let items = store
         .invitations
@@ -864,16 +835,16 @@ pub async fn list_admin_invites(
     ),
     responses(
         (status = 204, description = "Invitation revoked"),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
         (status = 404, description = "Invitation not found", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn revoke_admin_invite(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    let _ = require_admin_or_unbootstrapped(&state, &headers).await?;
     let inv_id = Uuid::parse_str(&id).map_err(|_| AppError::NotFound)?;
 
     let mut store = state.auth_store.write().await;
@@ -903,16 +874,16 @@ pub async fn revoke_admin_invite(
     ),
     responses(
         (status = 201, description = "24-hour one-time sign-in link created", body = AdminSignInLinkResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn create_user_sign_in_link(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<AdminSignInLinkResponse>), AppError> {
-    let _ = require_admin_or_unbootstrapped(&state, &headers).await?;
     let target_id = Uuid::parse_str(&id).map_err(|_| AppError::NotFound)?;
     let link = AuthService::create_admin_sign_in_link(&state, target_id).await?;
     Ok((StatusCode::CREATED, Json(link)))
@@ -926,16 +897,16 @@ pub async fn create_user_sign_in_link(
     ),
     responses(
         (status = 204, description = "All sessions for user revoked"),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn revoke_all_user_sessions(
+    RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    let _ = require_admin_or_unbootstrapped(&state, &headers).await?;
     let target_id = Uuid::parse_str(&id).map_err(|_| AppError::NotFound)?;
 
     let mut store = state.auth_store.write().await;

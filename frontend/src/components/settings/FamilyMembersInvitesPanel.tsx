@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Link2,
-  LogOut,
   Plus,
   Trash2,
   UserPlus,
@@ -9,7 +8,6 @@ import {
 } from 'lucide-react';
 import {
   Alert,
-  Avatar,
   Badge,
   Button,
   Card,
@@ -18,6 +16,7 @@ import {
   CopyButton,
   Dialog,
   EmailInput,
+  RoleBadge,
   Select,
   TextInput,
   useToast,
@@ -36,6 +35,9 @@ import {
   revokeAdminUserSessions,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { RoleChangeDialog } from './RoleChangeDialog';
+import { UserDeactivateDialog } from './UserDeactivateDialog';
+import { UserTableRow } from './UserTableRow';
 
 export interface FamilyMembersInvitesPanelProps {
   initialUsers?: AdminUserSummaryDto[];
@@ -70,6 +72,12 @@ export const FamilyMembersInvitesPanel: React.FC<
     data: AdminSignInLinkResponse;
   } | null>(null);
 
+  // Role Change & Deactivate Dialog state
+  const [roleTargetUser, setRoleTargetUser] =
+    useState<AdminUserSummaryDto | null>(null);
+  const [deactivateTargetUser, setDeactivateTargetUser] =
+    useState<AdminUserSummaryDto | null>(null);
+
   useEffect(() => {
     if (initialUsers !== undefined && initialInvites !== undefined) {
       return;
@@ -102,16 +110,6 @@ export const FamilyMembersInvitesPanel: React.FC<
     } catch {
       return iso;
     }
-  };
-
-  const formatRoleBadge = (role: string) => {
-    if (role === 'admin') {
-      return <Badge variant="brand">{t('settings.users.roleAdmin')}</Badge>;
-    }
-    if (role === 'editor') {
-      return <Badge variant="success">{t('settings.users.roleEditor')}</Badge>;
-    }
-    return <Badge variant="neutral">{t('settings.users.roleViewer')}</Badge>;
   };
 
   const handleCreateInvite = async (e: React.FormEvent) => {
@@ -190,6 +188,15 @@ export const FamilyMembersInvitesPanel: React.FC<
     }
   };
 
+  const handleUserUpdated = (updated: AdminUserSummaryDto) => {
+    setUsers((prev) =>
+      prev.map((item) => (item.id === updated.id ? updated : item))
+    );
+  };
+
+  const activeAdminCount = users.filter(
+    (u) => u.role === 'admin' && u.is_active
+  ).length;
   const pendingInvites = invites.filter((i) => !i.used_at && !i.revoked_at);
 
   return (
@@ -231,7 +238,7 @@ export const FamilyMembersInvitesPanel: React.FC<
       {/* Family Members Table Card */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Users className="h-4.5 w-4.5 text-brand" />
               <h2 className="text-base font-semibold text-primary">
@@ -248,6 +255,7 @@ export const FamilyMembersInvitesPanel: React.FC<
             size="sm"
             leftIcon={<Plus className="h-4 w-4" />}
             onClick={() => setInviteModalOpen(true)}
+            className="shrink-0 sm:ml-auto"
           >
             {t('settings.users.inviteBtn')}
           </Button>
@@ -256,49 +264,17 @@ export const FamilyMembersInvitesPanel: React.FC<
         <CardBody>
           <div className="divide-y divide-border">
             {users.map((u) => (
-              <div
+              <UserTableRow
                 key={u.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar name={u.display_name} size="md" />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-primary truncate">
-                        {u.display_name}
-                      </span>
-                      {formatRoleBadge(u.role)}
-                      <Badge variant="neutral" size="sm">
-                        {t('settings.users.devicesCount', {
-                          count: u.passkeys_count,
-                        })}
-                      </Badge>
-                    </div>
-                    <div className="font-mono text-xs text-secondary truncate">
-                      {u.email}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    leftIcon={<Link2 className="h-3.5 w-3.5" />}
-                    onClick={() => handleCreateSignInLink(u)}
-                  >
-                    {t('settings.users.createSignInLinkBtn')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    leftIcon={<LogOut className="h-3.5 w-3.5" />}
-                    onClick={() => handleRevokeUserSessions(u)}
-                  >
-                    {t('settings.users.revokeSessionsBtn')}
-                  </Button>
-                </div>
-              </div>
+                user={u}
+                isSoleActiveAdmin={
+                  u.role === 'admin' && u.is_active && activeAdminCount <= 1
+                }
+                onChangeRole={(target) => setRoleTargetUser(target)}
+                onToggleActive={(target) => setDeactivateTargetUser(target)}
+                onCreateSignInLink={handleCreateSignInLink}
+                onRevokeSessions={handleRevokeUserSessions}
+              />
             ))}
           </div>
         </CardBody>
@@ -330,7 +306,7 @@ export const FamilyMembersInvitesPanel: React.FC<
                       <span className="text-sm font-medium text-primary">
                         {inv.invitee_name || inv.email || inv.id}
                       </span>
-                      {formatRoleBadge(inv.role)}
+                      <RoleBadge role={inv.role} />
                     </div>
                     <div className="text-xs text-secondary">
                       {inv.email ? `${inv.email} · ` : ''}
@@ -419,6 +395,28 @@ export const FamilyMembersInvitesPanel: React.FC<
           </div>
         </form>
       </Dialog>
+
+      {/* Role Change Modal */}
+      <RoleChangeDialog
+        open={Boolean(roleTargetUser)}
+        onOpenChange={(open) => {
+          if (!open) setRoleTargetUser(null);
+        }}
+        user={roleTargetUser}
+        activeAdminCount={activeAdminCount}
+        onUserUpdated={handleUserUpdated}
+      />
+
+      {/* Deactivate / Reactivate Modal */}
+      <UserDeactivateDialog
+        open={Boolean(deactivateTargetUser)}
+        onOpenChange={(open) => {
+          if (!open) setDeactivateTargetUser(null);
+        }}
+        user={deactivateTargetUser}
+        activeAdminCount={activeAdminCount}
+        onUserUpdated={handleUserUpdated}
+      />
     </div>
   );
 };

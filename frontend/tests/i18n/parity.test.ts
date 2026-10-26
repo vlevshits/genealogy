@@ -79,4 +79,34 @@ describe('i18n Key Parity & Localization Helpers', () => {
       expect(ruRaw, `ru.json should not contain forbidden term "${term}"`).not.toContain(term);
     }
   });
+
+  it('forbids leading icon symbols (+, arrows, checkmarks) or decorative emojis in en.json and ru.json that cause duplicated UI icons', () => {
+    const leadingIconRegex = /^\s*[+＋←→↑↓↔✓✔✕✖✗✘]\s+/;
+    const emojiRegex = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+
+    const checkNoIconPrefixes = (
+      obj: Record<string, unknown>,
+      locale: string,
+      prefix = ''
+    ) => {
+      for (const [k, v] of Object.entries(obj)) {
+        const keyPath = prefix ? `${prefix}.${k}` : k;
+        if (v && typeof v === 'object') {
+          checkNoIconPrefixes(v as Record<string, unknown>, locale, keyPath);
+        } else if (typeof v === 'string') {
+          expect(
+            leadingIconRegex.test(v),
+            `${locale}.${keyPath} ("${v}") must not start with a leading icon symbol (+, arrow, checkmark); render icons via leftIcon/rightIcon instead`
+          ).toBe(false);
+          expect(
+            emojiRegex.test(v),
+            `${locale}.${keyPath} ("${v}") must not contain decorative UI emojis`
+          ).toBe(false);
+        }
+      }
+    };
+
+    checkNoIconPrefixes(en as Record<string, unknown>, 'en');
+    checkNoIconPrefixes(ru as Record<string, unknown>, 'ru');
+  });
 });
