@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces & Neutrals (Light Mode) */
+  --color-bg-canvas: #F8F9FA;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-muted: #F1F3F5;
+  --color-border-subtle: #E5E7EB;
+  --color-border-focus: #3B68A0;
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-tertiary: #9CA3AF;
+
+  /* Semantic & Brand Accents */
+  --color-brand-primary: #2D5584;
+  --color-brand-accent: #C68A34;
+  --color-status-success: #2E7D32;
+  --color-status-warning: #D97706;
+  --color-status-danger: #C53030;
+
+  /* Lineage & Gender Tokens */
+  --color-lineage-male: #45678F;
+  --color-lineage-female: #9B566E;
+  --color-lineage-neutral: #64748B;
+  --color-fan-1: #3B68A0;
+  --color-fan-2: #2E7D6C;
+  --color-fan-3: #C28432;
+  --color-fan-4: #A85252;
+}
+
+.dark {
+  /* Surfaces & Neutrals (Dark Mode) */
+  --color-bg-canvas: #0E1116;
+  --color-bg-surface: #171B22;
+  --color-bg-muted: #212630;
+  --color-border-subtle: #2E3542;
+  --color-border-focus: #5B8AC4;
+  --color-text-primary: #F3F4F6;
+  --color-text-secondary: #9CA3AF;
+  --color-text-tertiary: #6B7280;
+
+  /* Semantic & Brand Accents */
+  --color-brand-primary: #4F7EB5;
+  --color-brand-accent: #D9A04B;
+  --color-status-success: #4CAF50;
+  --color-status-warning: #F59E0B;
+  --color-status-danger: #EF4444;
+
+  /* Lineage & Gender Tokens */
+  --color-lineage-male: #658BB8;
+  --color-lineage-female: #BA728C;
+  --color-lineage-neutral: #8896AB;
+  --color-fan-1: #5B8AC4;
+  --color-fan-2: #4AA590;
+  --color-fan-3: #DB9D4A;
+  --color-fan-4: #C66C6C;
+}
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Lora', 'Playfair Display', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-canvas: var(--color-bg-canvas);
+  --color-surface: var(--color-bg-surface);
+  --color-surface-muted: var(--color-bg-muted);
+  --color-border: var(--color-border-subtle);
+  --color-border-ring: var(--color-border-focus);
+
+  --color-primary: var(--color-text-primary);
+  --color-secondary: var(--color-text-secondary);
+  --color-tertiary: var(--color-text-tertiary);
+
+  --color-brand: var(--color-brand-primary);
+  --color-accent: var(--color-brand-accent);
+
+  --color-success: var(--color-status-success);
+  --color-warning: var(--color-status-warning);
+  --color-danger: var(--color-status-danger);
+
+  --color-male: var(--color-lineage-male);
+  --color-female: var(--color-lineage-female);
+  --color-neutral: var(--color-lineage-neutral);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+}

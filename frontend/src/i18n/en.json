@@ -1,0 +1,29 @@
+{
+  "app": {
+    "title": "Family Tree Archive",
+    "subtitle": "Lightweight, private family tree platform"
+  },
+  "nav": {
+    "tree": "Tree",
+    "directory": "People",
+    "places": "Places",
+    "media": "Media",
+    "settings": "Settings"
+  },
+  "status": {
+    "title": "System Status",
+    "backend": "Backend API",
+    "database": "PostgreSQL",
+    "connected": "Connected",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "connecting": "Connecting...",
+    "version": "Version"
+  },
+  "common": {
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "language": "Language",
+    "loading": "Loading..."
+  }
+}
