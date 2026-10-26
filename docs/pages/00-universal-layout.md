@@ -20,6 +20,24 @@ Every view in the application (with the exception of isolated full-screen auth p
 +----------------------------------------------------------------------------------------------------+
 | Global Toast Notifications / Status Bar (Bottom Right / Floating)                                  |
 +----------------------------------------------------------------------------------------------------+
+| Footer: [Tree Title] © 2026 • Private Family Archive                                               |
++----------------------------------------------------------------------------------------------------+
+```
+
+#### Mobile Shell Wireframe (`< 768px` & Standalone PWA)
+```
++----------------------------------------------------------------+
+| [Logo] Family Archive                      [🔍]  [Avatar/Menu] | <- Compact Header (h-14 + safe-top)
++----------------------------------------------------------------+
+| Breadcrumb / Context Sub-Bar (horizontally scrollable)         |
++----------------------------------------------------------------+
+|                                                                |
+|                     PAGE CONTENT VIEWPORT                      |
+|             (Scrollable container or full canvas)              |
+|                                                                |
++----------------------------------------------------------------+
+| [🏠 Home]   [🌳 Tree]   [👥 People]   [🖼 Media]   [⋯ More]    | <- BottomNav (h-16 + safe-bottom)
++----------------------------------------------------------------+
 ```
 
 ---
@@ -85,11 +103,41 @@ Every view in the application (with the exception of isolated full-screen auth p
 - **Offline:** banner *"You're offline — changes can't be saved"*; forms keep their unsaved input.
 - **Unsaved changes guard:** navigating away from a dirty form asks for confirmation.
 
+### 3.7 Persistent Footer & Anti-Fluff Presentation Rules
+- **Footer Scope:** Rendered at the bottom of container-based views (`/`, `/people`, `/media`, `/settings`, etc.). On full-viewport canvas views (`/tree`), the footer is omitted to maximize vertical tree space.
+- **Footer Content:**
+  - Left: Tree instance title + copyright year (e.g. *"Levshits Family Archive © 2026"*).
+  - Right: Discreet archival statement (e.g. *"Private Family Archive"* / *"Частный семейный архив"*).
+- **Strictly Prohibited in Shell & Footer:**
+  - **No tech-stack strings:** Never display strings like `"Axum + React 19 + Tailwind v4 + PostgreSQL 16"`.
+  - **No marketing hype or badges:** No promotional slogans like `"Next-Gen Family Archive Platform"` or `"Zero-Cloud Dependency"`.
+  - **No developer links in user UI:** Internal tools like `/swagger-ui` (OpenAPI) and `/dev/ui` (workbench) must never appear in end-user navigation, footers, or cards.
+
+### 3.8 Mobile Bottom Navigation (`BottomNav`)
+- **Activation:** Displayed exclusively on mobile screens (`< 768px`). Replaces desktop top-navigation links to bring primary navigation within thumb reach.
+- **Dimensions & Safe Area:** `h-16` base height + `padding-bottom: max(0.5rem, env(safe-area-inset-bottom))`.
+- **Navigation Tabs (5 fixed items, 48×48px tap targets):**
+  1. `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md))
+  2. `Tree` (`/tree`): Canvas visualizer ([04](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/04-tree-visualizations.md))
+  3. `People` (`/people`): Directory & surnames ([13](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/13-search-people-directory.md))
+  4. `Media` (`/media`): Photos & documents archive ([06](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/06-media-face-tagging.md))
+  5. `More` (`⋯`): Opens a swipeable bottom sheet containing Places, Print PDF, Recent Changes, Data Quality, Admin Settings, Language toggle, Theme switch, and *"Install App"* ([18](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md)).
+
+### 3.9 PWA Standalone Mode & Safe-Area Architecture
+- **Standalone Launch:** When running as a standalone PWA, browser address bar and controls are absent.
+- **Safe-Area Insets:**
+  - Compact Topbar applies `padding-top: max(0.75rem, env(safe-area-inset-top))` to clear camera notches / dynamic islands.
+  - BottomNav applies `padding-bottom: max(0.5rem, env(safe-area-inset-bottom))` to avoid colliding with the iOS home indicator bar.
+  - Floating action buttons on canvas views clear safe-area left and right margins in landscape orientation.
+
 ---
 
 ## 4. Definition of Done (DoD)
 
 - [ ] **Universal Consistency:** Topbar, search trigger, theme switcher, and language switcher remain identical across all non-auth pages.
-- [ ] **Mobile Responsiveness:** Navigation smoothly collapses into an accessible mobile hamburger drawer on screens `< 768px`.
+- [ ] **Mobile Bottom Navigation:** On screens `< 768px`, navigation shifts to a fixed, thumb-accessible `BottomNav` with 5 items and safe-area padding.
+- [ ] **PWA Standalone & Safe-Area Insets:** In standalone PWA mode, headers, toolbars, bottom sheets, and bottom navigation render clear of device notches and home indicator bars in both portrait and landscape.
+- [ ] **Touch Target Standard:** All interactive controls (tabs, buttons, dropdown triggers) maintain a minimum hit area of 44×44px (48×48px for primary mobile actions).
 - [ ] **Zero Layout Shift:** Theme and language switches execute instantaneously with zero content jump or layout flicker.
 - [ ] **Accessibility:** Full keyboard traversal (`Tab`, `Shift+Tab`, `Cmd+K`, `Esc`) and visible focus indicators on all interactive header elements.
+- [ ] **Clean Archival Footer & Zero Stack Mentions:** Footer contains only family archive branding and copyright; tech-stack strings (Axum, React, Tailwind, PostgreSQL) and marketing buzzwords are strictly absent across the entire shell.

@@ -34,10 +34,12 @@ impl AppConfig {
 
         let app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
         let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info,genealogy=debug".to_string());
-        let app_origin = env::var("APP_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let app_origin =
+            env::var("APP_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".to_string());
         let rp_id = env::var("RP_ID").unwrap_or_else(|_| "localhost".to_string());
         let rp_name = env::var("RP_NAME").unwrap_or_else(|_| "Family Tree Archive".to_string());
-        let tree_title = env::var("TREE_TITLE").unwrap_or_else(|_| "Family Tree Archive".to_string());
+        let tree_title =
+            env::var("TREE_TITLE").unwrap_or_else(|_| "Family Tree Archive".to_string());
         let default_locale = env::var("DEFAULT_LOCALE").unwrap_or_else(|_| "en".to_string());
 
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
@@ -47,8 +49,10 @@ impl AppConfig {
             format!("postgresql://{user}:{pass}@postgres:5432/{db}?sslmode=disable")
         });
 
-        let media_storage_path = env::var("MEDIA_STORAGE_PATH").unwrap_or_else(|_| "/app/data/media".to_string());
-        let backup_path = env::var("BACKUP_PATH").unwrap_or_else(|_| "/app/data/backups".to_string());
+        let media_storage_path =
+            env::var("MEDIA_STORAGE_PATH").unwrap_or_else(|_| "/app/data/media".to_string());
+        let backup_path =
+            env::var("BACKUP_PATH").unwrap_or_else(|_| "/app/data/backups".to_string());
 
         let enable_public_access = env::var("ENABLE_PUBLIC_ACCESS")
             .map(|v| v.eq_ignore_ascii_case("true"))
@@ -68,7 +72,8 @@ impl AppConfig {
             .parse::<usize>()
             .unwrap_or(100);
 
-        let auth_password_enabled = env::var("AUTH_PASSWORD_ENABLED").unwrap_or_else(|_| "auto".to_string());
+        let auth_password_enabled =
+            env::var("AUTH_PASSWORD_ENABLED").unwrap_or_else(|_| "auto".to_string());
 
         let session_ttl_days = env::var("SESSION_TTL_DAYS")
             .unwrap_or_else(|_| "30".to_string())

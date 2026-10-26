@@ -1,9 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -41,7 +36,11 @@ pub async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     };
 
     let response = HealthResponse {
-        status: if is_healthy { "ok".to_string() } else { "degraded".to_string() },
+        status: if is_healthy {
+            "ok".to_string()
+        } else {
+            "degraded".to_string()
+        },
         version: env!("CARGO_PKG_VERSION").to_string(),
         database: db_status,
         environment: state.config.app_env.clone(),

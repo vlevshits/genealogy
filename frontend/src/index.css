@@ -26,6 +26,17 @@
   --color-fan-2: #2E7D6C;
   --color-fan-3: #C28432;
   --color-fan-4: #A85252;
+
+  /* Elevation Shadows */
+  --shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-elevation-2: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-elevation-3: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Safe-Area Insets (theme-and-tokens.md §4.5) */
+  --inset-safe-top: env(safe-area-inset-top, 0px);
+  --inset-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --inset-safe-left: env(safe-area-inset-left, 0px);
+  --inset-safe-right: env(safe-area-inset-right, 0px);
 }
 
 .dark {
@@ -54,6 +65,11 @@
   --color-fan-2: #4AA590;
   --color-fan-3: #DB9D4A;
   --color-fan-4: #C66C6C;
+
+  /* Elevation Shadows (Dark) */
+  --shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-elevation-2: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-elevation-3: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
 }
 
 @theme {
@@ -66,6 +82,7 @@
   --color-surface-muted: var(--color-bg-muted);
   --color-border: var(--color-border-subtle);
   --color-border-ring: var(--color-border-focus);
+  --color-focus: var(--color-border-focus);
 
   --color-primary: var(--color-text-primary);
   --color-secondary: var(--color-text-secondary);
@@ -81,10 +98,79 @@
   --color-male: var(--color-lineage-male);
   --color-female: var(--color-lineage-female);
   --color-neutral: var(--color-lineage-neutral);
+  --color-fan-1: var(--color-fan-1);
+  --color-fan-2: var(--color-fan-2);
+  --color-fan-3: var(--color-fan-3);
+  --color-fan-4: var(--color-fan-4);
+
+  /* Touch & Control Ergonomics (theme-and-tokens.md §4.6 & components.md §2) */
+  --size-touch-min: 44px;
+  --size-touch-lg: 48px;
+  --size-control-sm: 2rem;      /* 32px visual — desktop toolbars; 44px hit area on touch devices */
+  --size-control-md: 2.75rem;   /* 44px — default inputs & buttons (standard touch target) */
+  --size-control-lg: 3rem;      /* 48px — auth CTAs, primary mobile actions, bottom nav */
+
+  /* Safe Area Helpers (theme-and-tokens.md §4.5) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Focus ring */
+  --color-ring: var(--color-border-focus);
+  --ring-width: 2px;
+  --ring-offset: 2px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Layering */
+  --z-canvas-overlay: 20;
+  --z-header: 30;
+  --z-dropdown: 40;
+  --z-drawer: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+
+  /* Elevation shadows */
+  --shadow-level-1: var(--shadow-elevation-1);
+  --shadow-level-2: var(--shadow-elevation-2);
+  --shadow-level-3: var(--shadow-elevation-3);
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-canvas);
   color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (pointer: coarse) {
+  .touch-target-expand {
+    position: relative;
+  }
+  .touch-target-expand::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--size-touch-min));
+    height: max(100%, var(--size-touch-min));
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

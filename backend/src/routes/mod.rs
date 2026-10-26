@@ -14,6 +14,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     error::{ErrorDetail, ErrorResponse},
+    models::gendate::{CalendarType, GenDate, GenDateMod, PartialDate},
     routes::health::{health_check, HealthResponse},
     state::AppState,
 };
@@ -28,6 +29,10 @@ use crate::{
             HealthResponse,
             ErrorResponse,
             ErrorDetail,
+            GenDate,
+            GenDateMod,
+            CalendarType,
+            PartialDate,
         )
     ),
     tags(
@@ -43,7 +48,14 @@ pub struct ApiDoc;
 
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             header::CONTENT_TYPE,
             header::AUTHORIZATION,
@@ -52,8 +64,7 @@ pub fn create_router(state: AppState) -> Router {
         ])
         .allow_origin(Any);
 
-    let api_v1 = Router::new()
-        .route("/health", get(health_check));
+    let api_v1 = Router::new().route("/health", get(health_check));
 
     Router::new()
         .nest("/api/v1", api_v1)

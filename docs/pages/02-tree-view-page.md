@@ -71,16 +71,24 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
 - Dragging the rectangle translates the main canvas camera in real-time.
 - Can be collapsed into a small icon to maximize canvas real estate.
 
-### 3.5 Selected Person Slide-Over Drawer
-- Clicking any node opens a right slide-over panel (`w-96` or `w-[440px]`):
+### 3.5 Selected Person Inspection (Drawer vs. Mobile Bottom Sheet)
+- **Desktop (`> 1024px`):** Right slide-over panel (`w-[440px]`):
   - **Header:** Person's photo avatar, full name with patronymic, sex badge, life dates.
   - **Core Facts:** Birth, baptism, marriage, death dates and geocoded places.
   - **Immediate Family Links:** Clickable list of parents, spouses, and children to jump directly.
   - **Media Preview:** 3 recent tagged photos.
-  - **Actions:**
-    - *"View Full Profile"* (navigates to `/persons/:id`).
-    - *"Make Focal Person"* (re-roots active tree around this individual).
-    - *"Add Relative"* (opens fast in-canvas drawer: Parent, Spouse, Child).
+  - **Actions:** *"View Full Profile"* (`/persons/:id`), *"Make Focal Person"*, *"Add Relative"*.
+- **Mobile (`< 768px`) & Tablet:** Converts into a swipeable **Quick-View Bottom Sheet** (`BottomSheet`) per [18 §3.7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md#37-mobile-quick-view-bottom-sheet-bottomsheet):
+  - **Peek state (25% height):** Displays avatar, name, birth/death span, kinship badge, and *"View Profile"* CTA, keeping 75% of the tree canvas interactive in the background.
+  - **Expanded state (75% height):** Shows full facts, immediate relatives, and quick actions.
+  - **Swipe-to-dismiss:** Dragging down past threshold smoothly closes the sheet.
+
+### 3.6 Mobile & Tablet Touch Gesture Ergonomics
+- **Pinch-to-Zoom:** Natural two-finger pinch gesture scaling between `0.25x` and `3.0x` with logarithmic damping. Zoom focal point anchors dynamically to the geometric midpoint between the two touches.
+- **Canvas Panning:** Single-finger drag on canvas background or two-finger drag anywhere translates the SVG viewport with inertia dampening.
+- **Tap vs. Hover:** Hover states and tooltips are omitted on touch screens (`@media (pointer: coarse)`). A short tap (< 250ms, < 10px drift) selects the card and opens the bottom sheet.
+- **Long-Press Menu:** Holding a card for > 500ms triggers a haptic pulse (`navigator.vibrate(15)` where supported) and opens a quick context menu (*"Make Focal"*, *"Add Parent"*, *"Add Child"*).
+- **Control Compression:** On screens `< 768px`, floating zoom and view switchers condense into a unified top-right pill; the radar mini-map is collapsed by default into an icon button.
 
 ---
 
@@ -88,5 +96,7 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
 
 - [ ] **Full Viewport Canvas:** Canvas stretches to full screen height with no scrollbars on the parent container.
 - [ ] **Smooth Mode Switching:** Changing visualization mode transitions smoothly without page reload or lost selection.
-- [ ] **Quick Drawer Inspection:** Clicking any person node opens the slide-over drawer in <150ms while keeping the tree interactive in the background.
-- [ ] **Responsive Overlays:** On mobile devices, floating toolbars condense into a floating bottom sheet to avoid covering the canvas.
+- [ ] **Multi-Touch Gestures:** Native pinch-to-zoom and two-finger panning operate at 60fps on iOS and Android touch screens without viewport-zoom glitching.
+- [ ] **Mobile Quick-View Bottom Sheet:** On mobile screens `< 768px`, tapping a person card opens a swipeable bottom sheet with 25% peek and 75% expanded states rather than an intrusive desktop drawer.
+- [ ] **Touch Target Standards:** Floating canvas controls, zoom buttons, and interactive node elements have a minimum hit area of 44×44px.
+- [ ] **Responsive Overlays:** On mobile devices, floating toolbars condense to clear safe-area margins and prevent obstructing the canvas.

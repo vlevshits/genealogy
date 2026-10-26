@@ -1,7 +1,7 @@
 # Feature Specification: Internationalization (i18n) & Localization (l10n)
 
 ## 1. Overview & Objective (Day 0 Level Requirement)
-The platform must support complete internationalization and localization from **Day 0**. All user interfaces, transactional communications (magic links, invites), date parsers, relationship calculators, and printable PDF exports must provide full parity in **English (en)** and **Russian (ru)**.
+The application must support complete internationalization and localization from **Day 0**. All user interfaces, transactional communications (magic links, invites), date parsers, relationship calculators, and printable PDF exports must provide full parity in **English (en)** and **Russian (ru)**.
 
 In genealogy, localization is not merely translating labels—it fundamentally shapes how names (e.g. Slavic **Patronymics / Отчество**), historical dates (Julian vs. Gregorian calendars), and complex kinship terms are stored, computed, and displayed.
 
@@ -92,7 +92,51 @@ Transactional emails (invitations, magic links) are rendered bilingual based on 
 
 ---
 
-## 3. Directory Layout & Translation Bundles
+## 3. UI Copywriting, Tone of Voice & Anti-Fluff Standards
+
+### 3.1 Core Anti-Fluff Principle
+The user interface is a private, enduring family archive, intended to be used by multiple generations—from curious children to non-technical grandparents. It is **never** a developer portfolio, a SaaS marketing pitch, or a tech demo. All UI copy must be calm, functional, respectful, and strictly focused on family history, lineage, and archival preservation.
+
+### 3.2 Forbidden Marketing & Promotional Buzzwords
+User-facing strings, page headings, buttons, badges, empty states, and dialogs must **never** contain marketing hype or promotional SaaS jargon. Prohibited phrases include, but are not limited to:
+- *"Next-Gen"* / *"Next-Generation"* (e.g. forbidden: *"Next-Gen Family Archive Platform"*)
+- *"Cutting-edge"*, *"State-of-the-art"*, *"Revolutionary"*, *"World-class"*
+- *"Blazing-fast"*, *"High-speed"*, *"Ultra-fast"*
+- *"Enterprise-grade"*, *"Industry-leading"*
+- *"All-in-one platform"*, *"Unleash"*, *"Supercharge"*
+- Promotional feature badges (e.g. *"Zero-Cloud Dependency"* as a boast; if conveying privacy, state simply: *"Stored locally on your server"* or *"Private family archive"*).
+
+### 3.3 Strict Invisibility of the Tech Stack
+The underlying software architecture and technology stack are internal engineering details. Non-technical relatives must never see framework names or developer bragging on web pages:
+- **Strictly forbidden in UI:** Mentions of `Rust`, `Axum`, `React`, `React 19`, `PostgreSQL`, `Tailwind`, `Tailwind CSS v4`, `Docker`, `Nginx`, `SQLx`, `Tokio`, `Vite`, etc.
+- **No Stack Badges or Footers:** Footers must never display tech slogans like `"Axum + React 19 + Tailwind v4 + PostgreSQL 16"`.
+- **No Developer Tool Links in User UI:** Interactive OpenAPI explorer (`/swagger-ui`) or component workbench (`/dev/ui`) must never appear in end-user navigation, cards, or footers.
+
+### 3.4 Permitted Exceptions & Functional Terminology
+1. **Genealogical & Archival Formats:** Standard industry file format names necessary for user action and export are permitted (e.g., `GEDCOM 5.5.1`, `GEDCOM 7.0`, `GEDZIP`, `PDF`, `CSV`, `ZIP`).
+2. **User-Facing Biometrics & Authentication:** Standard operating-system authentication terms are permitted for clarity (e.g., `Passkey`, `Touch ID`, `Face ID`, `Windows Hello`, `Security Key`).
+3. **Admin Settings Operational Status:** In Settings (`/settings` or `/settings/system`), operational status must use plain, functional terminology:
+   - Use **"Database: Connected"** / **"База данных: Подключена"** instead of *"PostgreSQL 16 (pg_trgm, unaccent)"*.
+   - Use **"Server: Healthy"** / **"Сервер: В норме"** instead of *"Axum 0.8 (Rust)"*.
+   - Use **"Application Version: v0.1.0"** / **"Версия приложения: v0.1.0"** instead of framework versions.
+   - Use **"Archive Storage: 1.2 GB used"** / **"Хранилище: 1.2 ГБ занято"** instead of internal volume labels.
+
+### 3.5 Microcopy Transformation Reference (EN / RU)
+
+| Context | ❌ Forbidden (Marketing / Tech Bragging) | ✅ Required (Clean, Archival & Functional) |
+| :--- | :--- | :--- |
+| **Hero / Title Badge** | `Next-Gen Family Archive Platform` | `[Tree Title]` (e.g. *Levshits Family Archive*) / *Семейный архив Левшиц* |
+| **App Subtitle** | `Built with high-speed Rust Axum API backend, React 19 canvas visualizations, and single-instance Docker deployment.` | `A private home for your family history.` / *Частный архив истории вашей семьи.* |
+| **App Footer** | `Axum + React 19 + Tailwind v4 + PostgreSQL 16` | `[Tree Title] © 2026 • Private Family Archive` / *Семейный архив © 2026* |
+| **Status Card Title** | `Single-Instance Microservices Verification` | `System Status` / *Статус системы* |
+| **Backend Label** | `Axum 0.8 (Rust)` | `API Server: Online` / *Сервер API: Подключён* |
+| **Database Label** | `PostgreSQL: PostgreSQL 16 (pg_trgm, unaccent)` | `Database: Connected` / *База данных: Подключена* |
+| **Backup Download CTA**| `Download Postgres dump + media assets` | `Download Full Archive (Database & Media)` / *Скачать полный архив (База данных и медиа)* |
+| **Empty Onboarding** | `Experience the power of next-gen genealogy visualization` | `Let's start your family tree: start with yourself or import a file.` / *Начните составление семейного древа: добавьте себя или импортируйте файл.* |
+
+---
+
+## 4. Directory Layout & Translation Bundles
 
 ```
 frontend/
@@ -124,10 +168,11 @@ backend/
 
 ---
 
-## 4. Definition of Done (DoD)
+## 5. Definition of Done (DoD)
 
 - [ ] **Instant Language Switching:** Language toggle changes all visible UI text instantaneously without requiring a full page reload.
 - [ ] **100% Translation Parity:** Both `en` and `ru` translation files cover all keys; no fallback warnings in development console.
+- [ ] **Anti-Fluff & Tech-Agnostic UI Copy:** All user-facing web pages, cards, tooltips, dialogs, footers, and translation files (`en.json`, `ru.json`) are completely free of marketing buzzwords (*"next-gen"*, *"cutting-edge"*, SaaS promotional slogans) and tech stack mentions (*Rust*, *Axum*, *React*, *PostgreSQL*, *Tailwind*, etc.), using clean, functional, family-centered copy.
 - [ ] **Patronymic Support:** Individuals have an optional `patronymic` field that displays properly in person cards and profiles in both languages.
 - [ ] **Russian Date Parser:** Natural phrases like *"ок. 1895"*, *"до мая 1917"*, and *"между 1914 и 1918 гг."* parse into correct GEDCOM date records.
 - [ ] **Cyrillic PDF Rendering:** Printable PDF posters and tiled sheets render Russian names and text cleanly without garbled characters or missing glyphs.

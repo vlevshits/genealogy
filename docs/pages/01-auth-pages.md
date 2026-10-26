@@ -27,7 +27,7 @@ The authentication views (`/login`, `/register`, `/setup`, `/magic-link/verify`)
 |                           | 🔑 Use Emergency Recovery Code|                        |
 |                           +-------------------------------+                        |
 |                                                                                    |
-|                           © 2026 Family Tree Platform • Self-Hosted                |
+|                           © 2026 [Family Tree Title] • Private Family Archive      |
 +------------------------------------------------------------------------------------+
 ```
 
@@ -74,3 +74,4 @@ The authentication views (`/login`, `/register`, `/setup`, `/magic-link/verify`)
 - [ ] **One-Touch Passkey Login:** Clicking "Sign in with Passkey" initiates the biometric dialog immediately.
 - [ ] **Magic Link State:** Requesting a magic link displays an instant confirmation view: *"Check your inbox. We sent a sign-in link to user@example.com"*.
 - [ ] **Full Russian/English Parity:** All prompts, errors, and recovery instructions display in the chosen language.
+- [ ] **Anti-Marketing Copy:** All auth cards, onboarding prompts, and button labels use simple, reassuring genealogical and archival copy with zero marketing buzzwords or tech stack mentions.

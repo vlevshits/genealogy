@@ -56,8 +56,8 @@ Transform the family tree browsing experience from slow, static tables into a fa
 ## 4. Canvas Navigation & Controls
 
 ### 4.1 Fluid Navigation
-- **Pan & Zoom:** Smooth hardware-accelerated movement via pointer drag, mouse wheel, or mobile pinch-to-zoom with natural velocity dampening.
-- **Mini-Map (Radar View):** Collapsible bottom-right viewport thumbnail displaying tree density and the current camera viewport rectangle.
+- **Pan & Zoom:** Smooth hardware-accelerated movement via pointer drag, mouse wheel, or mobile multi-touch pinch-to-zoom with natural velocity dampening (see [18 §3.6](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md#36-interactive-tree-canvas-touch-gestures) for touch gesture specifications).
+- **Mini-Map (Radar View):** Collapsible bottom-right viewport thumbnail displaying tree density and the current camera viewport rectangle (collapsed by default on mobile `< 768px`).
 - **Camera Jump (Focal Lerp):** Selecting an individual smoothly glides the camera and centers them at optimal zoom level.
 
 ### 4.2 Toolbar Controls
@@ -89,5 +89,4 @@ Transform the family tree browsing experience from slow, static tables into a fa
 - [ ] **Dynamic Layout Calculation:** Tree nodes never overlap; multiple marriages and complex sibling lines are routed with clean orthogonal or bezier connector curves.
 - [ ] **Camera Transitions:** Changing focal individual smoothly animates camera position to the target node.
 - [ ] **Omnibox Search:** `Ctrl+K` search finds individuals within <100ms and smoothly centers the target on selection.
-- [ ] **Mini-Map Synchronization:** The mini-map accurately reflects the current canvas view position and allows dragging the viewport rectangle.
-- [ ] **Touch Gesture Support:** Pinch-to-zoom and two-finger panning work natively on iOS and Android devices.
+- [ ] **Touch Gesture Support:** Native pinch-to-zoom and two-finger panning work smoothly on iOS and Android devices; mobile card inspection opens a swipeable bottom sheet preserving tree context ([18](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md)).

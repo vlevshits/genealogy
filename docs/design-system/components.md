@@ -33,7 +33,7 @@ frontend/src/components/
 3. **Controlled & uncontrolled** support for all inputs (`value`/`onChange` and `defaultValue`).
 4. **No hardcoded text.** All labels, placeholders, empty states, and ARIA labels are props or come from `t()` keys in `common.json` (e.g. `common.actions.cancel`). See [00-internationalization](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md).
 5. **Theme-only colors:** components use semantic tokens (`bg-surface`, `text-secondary`, `border-border`, `ring-focus`) — never raw hex — so light/dark modes work automatically.
-6. **Accessibility baseline:** keyboard operable, visible focus ring, correct roles/labels, WCAG 2.2 AA contrast, touch target ≥ 40 px on mobile, respects `prefers-reduced-motion`.
+6. **Accessibility & Touch Baseline:** keyboard operable, visible focus ring, correct roles/labels, WCAG 2.2 AA contrast, touch target ≥ 44×44 px on touch devices (48×48 px on primary mobile actions per [theme-and-tokens §4.6](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/design-system/theme-and-tokens.md#46-touch-targets--coarse-pointer-ergonomics)), safe-area inset adaptation for PWA standalone mode, respects `prefers-reduced-motion`.
 7. **States** every interactive component must render: default, hover, focus-visible, active/pressed, disabled, loading (where async), invalid (inputs), read-only (inputs).
 
 ---
@@ -42,10 +42,10 @@ frontend/src/components/
 
 ```css
 @theme {
-  /* Control heights */
-  --size-control-sm: 2rem;      /* 32px — toolbars, table row actions, dense filters */
-  --size-control-md: 2.5rem;    /* 40px — default inputs & buttons */
-  --size-control-lg: 3rem;      /* 48px — auth CTAs, mobile primary actions */
+  /* Control heights & Touch Targets */
+  --size-control-sm: 2rem;      /* 32px visual — desktop toolbars; 44px hit area on touch devices */
+  --size-control-md: 2.75rem;   /* 44px — default inputs & buttons (standard touch target) */
+  --size-control-lg: 3rem;      /* 48px — auth CTAs, primary mobile actions, bottom nav */
 
   /* Focus */
   --color-ring: var(--color-border-focus);
@@ -201,13 +201,13 @@ Field that enables a dangerous action only after typing an exact phrase (e.g. tr
 #### `Dialog` (modal)
 Sizes from [00-universal-layout §3.4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/00-universal-layout.md#34-modal-dialog-standards): `sm` 400 px · `md` 560 px · `xl` 800 px · `full` 95vw.
 Slots: `DialogHeader` (title + description), `DialogBody` (scrollable), `DialogFooter` (actions right-aligned; primary last).
-Behavior: focus trap, `Esc` closes (unless `dismissible={false}` during a running action), returns focus to trigger, frosted backdrop, scroll lock. On mobile, `md`+ dialogs become full-screen.
+Behavior: focus trap, `Esc` closes (unless `dismissible={false}` during a running action), returns focus to trigger, frosted backdrop, scroll lock. On mobile screens (`< 768px`), `md`+ dialogs convert to full-screen viewports (`inset-0`) or slide up as bottom sheets with safe-area padding (`pb-[env(safe-area-inset-bottom)]`).
 
 #### `ConfirmDialog`
 Preset `sm` dialog: title, consequence text, optional **impact list** (*"Deletes 6 events, unlinks 2 families"*), optional `TypedConfirmInput`, buttons Cancel / Confirm (`danger` when destructive). Promise API: `await confirm({...})`.
 
 #### `Drawer` (slide-over / sheet)
-Side `right` (default, 480 px desktop / 100vw mobile) or `bottom` (mobile sheets). Header with title + close, scrollable body, optional sticky footer. Can be **non-modal** (tree stays interactive behind the person quick drawer).
+Side `right` (default, 480 px desktop / 100vw mobile) or `bottom` (`BottomSheet`). Bottom sheets feature swipe-down drag handles, multi-point snapping (`peek 25%`, `expanded 75%`), and safe-area inset padding. Can be **non-modal** (tree stays interactive behind the person quick drawer).
 *Used by:* person quick drawer, quick-add relative, record history, media details on mobile, filters on mobile.
 
 #### `Popover`
@@ -225,7 +225,7 @@ Role-aware: items the user cannot use are hidden, not disabled (except when expl
 `Cmd/Ctrl+K` dialog built on `cmdk`: search input, grouped results (People, Places, Media, Actions), recent items, keyboard navigation, `Enter` / `Shift+Enter` handlers. Results rendered with `PersonListItem`. See [13 §3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/13-search-people-directory.md#3-omnibox-cmdk--ctrlk).
 
 #### `Toast`
-Bottom-right (bottom-center on mobile). Types: success, error (with *Retry*), info, **undo** (action button + 6 s countdown, see [14 §3.3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md#33-restore--undo)). Max 3 visible; `aria-live="polite"`.
+Bottom-right (bottom-center on mobile with bottom-nav clearance). Types: success, error (with *Retry*), info, **undo** (action button + 6 s countdown, see [14 §3.3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md#33-restore--undo)). Max 3 visible; `aria-live="polite"`.
 
 ---
 
@@ -233,7 +233,10 @@ Bottom-right (bottom-center on mobile). Types: success, error (with *Retry*), in
 
 | Component | Description | Used by |
 | :--- | :--- | :--- |
-| `AppShell` | Header + context bar + content viewport + toast region; mobile hamburger drawer | All non-auth pages |
+| `AppShell` | Header + context bar + content viewport + toast region; responsive mobile bottom nav | All non-auth pages |
+| `BottomNav` | Fixed bottom navigation bar (`h-16` + `safe-area-inset-bottom`) with 5 thumb-friendly tabs: Home, Tree, People, Media, More | Mobile (`< 768px`) shell |
+| `NavRail` | Vertical icon rail (`w-16`) with active indicator and tooltips | Tablet (`768px – 1024px`) shell |
+| `PwaInstallBanner` | Discreet, non-intrusive banner or menu item with 2-step guide ([18 §3.3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md#33-quiet-non-intrusive-install-flow)) | Shell, Settings menu |
 | `AuthLayout` | Centered card layout with language/theme switches | Auth pages |
 | `NavLink` | Top-nav link with active state | Header |
 | `Breadcrumbs` | Hierarchy path; middle items collapse into `⋯` menu when long; last item not a link | Profile, places, media, settings |
@@ -373,9 +376,7 @@ Two (or three) columns comparing records field by field; differing values highli
 - [ ] **Workbench Complete:** `/dev/ui` shows every component in all variants, sizes, and states in light/dark and EN/RU.
 - [ ] **Keyboard & Screen Reader:** All components pass axe checks and are fully keyboard operable (Tab, arrows, Enter, Esc, Home/End where applicable).
 - [ ] **Theme Tokens Only:** No raw hex colors in component code; switching theme updates all components without reload.
-- [ ] **No Hardcoded Strings:** All component text comes from props or translation keys.
-- [ ] **Mobile Behavior:** `Select` opens as bottom sheet, `Dialog` becomes full-screen, `DataTable` renders cards, touch targets ≥ 40 px.
-- [ ] **GenDateInput:** Parses all documented EN/RU formats, supports partial dates, ranges, Julian toggle, and fast decade navigation; unparseable input is kept as a phrase.
+- [ ] **Mobile & Tablet Ergonomics:** `Select` and `Drawer` open as bottom sheets with safe-area padding; `Dialog` becomes full-screen or bottom sheet on mobile; `DataTable` renders responsive cards; interactive touch targets measure ≥ 44×44 px (48×48 px on primary actions); `BottomNav` provides fixed thumb navigation on mobile screens.
 - [ ] **Async Pickers:** `Combobox`/`PersonPicker`/`PlacePicker` debounce, cancel stale requests, and show loading/empty/error states.
 - [ ] **DataTable Scale:** Sorting, selection, and smooth scrolling with 50k virtualized rows.
 - [ ] **Form Integration:** Every input works with `react-hook-form`, displays zod and server `field_errors`, and supports soft warnings.

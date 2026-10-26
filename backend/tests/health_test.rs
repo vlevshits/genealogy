@@ -2,11 +2,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use genealogy_backend::{
-    config::AppConfig,
-    routes::create_router,
-    state::AppState,
-};
+use genealogy_backend::{config::AppConfig, routes::create_router, state::AppState};
 use tower::ServiceExt;
 
 #[tokio::test]

@@ -10,6 +10,7 @@ instead of doing it inline.
 
 | Work type | Subagent |
 | :--- | :--- |
+| New/changed requirements, requirement analysis, writing/updating feature & page specs, roadmap / implementation plan updates | `spec-writer` |
 | Rust/Axum/SQLx code, migrations, API endpoints, backend tests, backend Docker | `backend-developer` |
 | React/TypeScript UI, design-system components, Tailwind styles, i18n, API client, Nginx/frontend Docker | `frontend-developer` |
 | Feature design/planning, architecture decisions, code review, spec conformance, security review | `architect-reviewer` |
@@ -17,8 +18,13 @@ instead of doing it inline.
 
 ## Standard Feature Workflow
 
+0. **Specify** — for any new or changed requirement, `spec-writer` analyses
+   impact, creates/updates `docs/features/*.md` / `docs/pages/*.md`, and
+   places the work in `docs/roadmap.md`. Resolve its *Open Questions* with
+   the user before moving on. Skip when the specs already cover the work.
 1. **Design** — `architect-reviewer` (Mode 1) produces the technical plan from
-   the relevant `docs/features/*.md` / `docs/pages/*.md` specs.
+   the relevant `docs/features/*.md` / `docs/pages/*.md` specs. If it finds
+   spec gaps or contradictions, route them back to `spec-writer`.
 2. **Implement** — `backend-developer` first (API contract + OpenAPI), then
    `frontend-developer`. Independent backend/frontend work may run in parallel.
 3. **Review** — `architect-reviewer` (Mode 2) reviews the change set. Send

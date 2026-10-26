@@ -39,7 +39,7 @@ The Settings page manages instance configuration, user invitations, security pas
 
 ### 3.1 Settings Sub-Navigation (Left Column, `w-64`)
 - **My Profile (`/settings/profile`, all users):** display name, email, language, theme, start page (Home / Tree), home person, linked person, monthly digest opt-in.
-- **General & Archive (`/settings`):** Tree metadata, default language, public access toggle, living person threshold, **default home person** for visitors, and a read-only **System** card (version, DB/media size, free disk, last backup — [17 §6.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md#61-health--info)). Fields managed by env show *"Managed by server configuration"* when `SETTINGS_LOCKED_FROM_ENV=true`.
+- **General & Archive (`/settings`):** Tree metadata, default language, public access toggle, living person threshold, **default home person** for visitors, and a read-only **System** card (version, DB/media size, free disk, last backup — [17 §6.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md#61-health--info)). The System card uses functional, plain labels ("Database: Connected", "Server: Healthy", "Storage: X GB used", "Version: vX.Y.Z"), strictly omitting framework and database branding per [00 §3.4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#34-permitted-exceptions--functional-terminology). Fields managed by env show *"Managed by server configuration"* when `SETTINGS_LOCKED_FROM_ENV=true`.
 - **Family Members & RBAC (`/settings/users`):** Member table, invite links, role management (Admin, Editor, Viewer).
 - **Security & Passkeys (`/settings/security`):** Passkey device manager, enrollment of new authenticators, emergency recovery code regeneration.
 - **GEDCOM Data Portability (`/settings/gedcom`):** Standard export (5.5.1 / 7.0), GEDZIP export, Clean Slate import.
@@ -65,7 +65,7 @@ The Settings page manages instance configuration, user invitations, security pas
 - Section: **Active Sessions** (device / browser, last seen, *Sign out* per session, *Sign out everywhere else*).
 
 #### Panel 3: Backups & Snapshots
-- Primary CTA: `📥 Download Full Archive` (creates `.tar.gz` with Postgres dump + media assets).
+- Primary CTA: `📥 Download Full Archive` (creates `.tar.gz` containing archive database and media assets; user button label: `Download Full Archive (Database & Media)` / `Скачать полный архив (База данных и медиа)`).
 - Merge History Log: Shows recent tree merges with `[Undo Merge]` button available for 14 days.
 - **Snapshots** list (merge / clean-slate import / manual) with *Rollback* (typed confirmation) — [14](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md).
 - Nightly backup status (last run, size, success/failure) and list of available backup archives with *Download*.
@@ -78,3 +78,4 @@ The Settings page manages instance configuration, user invitations, security pas
 - [ ] **Instant Public Toggle:** Toggling "Enable Public Site" updates instance permissions immediately with validation feedback.
 - [ ] **Role Protection:** Prevents an administrator from demoting or deleting their own account if they are the sole admin.
 - [ ] **One-Click Backup Generation:** Generates and downloads a valid full archive containing database and media files.
+- [ ] **Operational Plain Language:** System status indicators, backup actions, and settings descriptions display in clean, functional terminology with zero tech-stack bragging or promotional jargon.

@@ -15,7 +15,6 @@ tools:
   - replace_file_content
   - multi_replace_file_content
   - run_command
-  - browser_subagent
 subagent: true
 mainAgent: false
 model: inherit

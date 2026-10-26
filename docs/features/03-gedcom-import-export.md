@@ -12,8 +12,7 @@ Enable seamless data portability and migration with industry-standard genealogy 
 2. **GEDCOM 7.0:** Modern standard with native UTF-8 enforcement, standardized event structures, and official media handling.
 3. **GEDZIP / Bundled Archive (.gdz / .zip):** A single ZIP archive containing:
    - `tree.ged`: The primary GEDCOM text file.
-   - `media/`: Directory containing photos, documents, and certificates referenced by relative paths in the GEDCOM `FILE` tags.
-4. **Rust Parser & Writer Engine:** Powered by the `ged_io` crate for high-speed streaming tokenization and serialization with minimal memory footprint.
+4. **Streaming Parser & Writer:** Uses the `ged_io` crate for streaming tokenization and serialization with minimal memory footprint.
 
 ---
 

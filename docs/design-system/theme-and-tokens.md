@@ -98,6 +98,26 @@ These tokens are applied to card accent borders, avatar badges, and connector pa
 - **Level 2 (Hovered Cards & Dropdowns):** `0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04)`
 - **Level 3 (Modals & Slide-overs):** `0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)`
 
+### 4.4 Responsive Breakpoints & Device Targets
+Tailwind v4 standard breakpoints configured for family archive viewports:
+- **Mobile (`< 768px`, base & `sm: 640px`):** Single-column content, fixed bottom navigation bar (`BottomNav`), modal sheets slide up from bottom (`BottomSheet`), horizontal scrolling tab ribbons, 100vw slide-over panels.
+- **Tablet (`768px – 1024px`, `md: 768px`, `lg: 1024px`):** Dual-pane stacked or 60/40 layouts, top navigation with condensed icons, full canvas tree with condensed overlay pills, modal dialogs centered with max-w-lg.
+- **Desktop (`> 1024px`, `xl: 1280px`, `2xl: 1536px`):** Full multi-pane desktop layouts, persistent right slide-over drawers (480px), full hover tooltips and hotkeys.
+
+### 4.5 Safe-Area Insets (Notches & Home Indicators)
+For standalone PWA mode and mobile Safari/Chrome, layout containers reference CSS environment variables with fallback:
+- `--inset-safe-top: env(safe-area-inset-top, 0px)`
+- `--inset-safe-bottom: env(safe-area-inset-bottom, 0px)`
+- `--inset-safe-left: env(safe-area-inset-left, 0px)`
+- `--inset-safe-right: env(safe-area-inset-right, 0px)`
+
+Applied to sticky topbars, mobile bottom navigation, canvas floating action buttons, and bottom sheet drawers.
+
+### 4.6 Touch Targets & Coarse Pointer Ergonomics
+- **Minimum Interactive Hit Area:** `44px × 44px` on all touch targets (Apple Human Interface Guidelines baseline).
+- **Primary Mobile Actions:** `48px × 48px` (WCAG 2.2 AAA / Android Material target) for primary form CTAs and bottom bar navigation items.
+- **Coarse Pointer Adaptation:** On touch devices (`@media (pointer: coarse)`), compact desktop actions (e.g., 32px table row menus or canvas zoom buttons) expand their invisible tap area to 44px via padding or pseudo-elements (`::after`).
+
 ---
 
 ## 5. Tailwind CSS v4 Theme Configuration
@@ -123,6 +143,16 @@ These tokens are applied to card accent borders, avatar badges, and connector pa
   --color-male: var(--color-lineage-male);
   --color-female: var(--color-lineage-female);
   --color-neutral: var(--color-lineage-neutral);
+
+  /* Touch & Control Ergonomics */
+  --size-touch-min: 44px;
+  --size-touch-lg: 48px;
+
+  /* Safe Area Helpers */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 
   /* Component tokens (control sizes, focus ring, motion, z-index): see components.md §2 */
 }

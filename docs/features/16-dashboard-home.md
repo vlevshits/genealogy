@@ -35,6 +35,7 @@ When `individuals` is empty, `/` and `/tree` show a centered welcome card:
 - **Start with yourself:** short form (given name, patronymic, surname, sex, birth date, birth place). Creates the person, links it to the admin user (`person_id` and `home_person_id`), and opens the tree with pulsing `+` hints for *Add father / Add mother*.
 - **Import:** opens the GEDCOM import wizard ([03](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/03-gedcom-import-export.md)); after import the user is asked *"Which person are you?"* (search picker, skippable).
 - Viewers/anonymous users on an empty tree see: *"This family tree is still being prepared."*
+- **Zero Marketing & Jargon Policy:** Onboarding cards and welcome prompts must remain quiet, welcoming, and strictly focused on family history. Promotional SaaS slogans (e.g. *"Next-gen platform"*, *"Unlock the power of your lineage"*), tech stack brags, or developer status widgets are strictly forbidden on user-facing onboarding and dashboard screens per [00 §3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#3-ui-copywriting-tone-of-voice--anti-fluff-standards).
 
 ---
 
@@ -97,3 +98,4 @@ Default landing page for authenticated users once the tree has data (`/tree` rem
 - [ ] **Anniversaries:** Upcoming birthdays/anniversaries list respects living-person privacy and only uses exact day/month dates.
 - [ ] **Single Request:** Dashboard loads in one API call in <200 ms on a 10k-person tree.
 - [ ] **Role-Aware Widgets:** Viewers never see edit history details or private records.
+- [ ] **Anti-Marketing Copy:** All onboarding cards, welcome prompts, and dashboard widgets adhere to clean, functional, family-centered copy without promotional buzzwords or tech stack mentions.

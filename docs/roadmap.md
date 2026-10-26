@@ -1,7 +1,7 @@
 # Roadmap & Implementation Phases
 
 ## 1. Product Principles
-- **Simple and clear:** every screen must be understandable by a non-technical relative without a manual.
+- **Simple, quiet, and clear (zero marketing fluff, zero tech bragging):** every screen must be understandable by an elderly or non-technical relative without a manual. The application is an archive for family memory, never a SaaS marketing showcase or developer portfolio. User-facing web pages strictly forbid promotional buzzwords ("next-gen", "cutting-edge", SaaS marketing slogans) and developer tech stack names (Rust, Axum, React, PostgreSQL, Tailwind, etc.). All copy is calm, respectful, functional, and family-history focused ([00 §3](features/00-internationalization-localization.md#3-ui-copywriting-tone-of-voice--anti-fluff-standards)).
 - **Lightweight self-hosting:** one `docker compose up -d`, 3 containers (frontend, backend, PostgreSQL), small RAM footprint.
 - **1 instance = 1 family tree.**
 - **Private by default:** living people protected, invite-only membership, no data leaves the server unless explicitly configured.
@@ -13,6 +13,8 @@
 ### Phase 0 — Design system & component library
 1. Theme tokens, light/dark mode, fonts ([theme-and-tokens](design-system/theme-and-tokens.md)).
 2. Reusable `ui/`, `form/` and `domain/` components with the `/dev/ui` workbench, in the order from [components §6](design-system/components.md#6-implementation-order-before-pages).
+3. **UI copy & anti-fluff cleanup:** purge promotional buzzwords ("Next-Gen", marketing badges, SaaS copy) and developer tech-stack branding ("Axum + React 19 + Tailwind v4 + PostgreSQL 16", "Axum 0.8 (Rust)", "PostgreSQL 16", Swagger explorer link) from existing web pages (`frontend/src/App.tsx`, `frontend/src/components/SystemStatusCard.tsx`) and translation bundles (`frontend/src/i18n/en.json`, `frontend/src/i18n/ru.json`), replacing them with functional, domain-oriented family history copy in EN and RU per [00 §3](features/00-internationalization-localization.md#3-ui-copywriting-tone-of-voice--anti-fluff-standards).
+4. **Mobile & tablet component ergonomics:** safe-area CSS variables, 44×44px / 48×48px touch targets, `BottomNav`, swipeable `BottomSheet`, and full-screen mobile dialogs ([theme-and-tokens §4.4–4.6](design-system/theme-and-tokens.md#44-responsive-breakpoints--device-targets), [components §3.4](design-system/components.md#34-navigation--structure)).
 
 ### Phase 1 — MVP ("a family can build and browse their tree")
 1. Deployment: single `docker compose up` ([08](features/08-deployment-single-instance.md)), health check, automatic migrations, nightly backup + CLI restore.
@@ -26,7 +28,8 @@
 9. Media upload, gallery, avatars ([06](features/06-media-face-tagging.md)).
 10. GEDCOM 5.5.1 + 7.0 import (Clean Slate mode) and export ([03](features/03-gedcom-import-export.md)).
 11. Change log, undo toast, restore deleted, conflict handling ([14](features/14-change-history-concurrency.md)).
-12. EN + RU localization from day 0 ([00](features/00-internationalization-localization.md)).
+12. EN + RU localization and anti-fluff copywriting from day 0 ([00](features/00-internationalization-localization.md)).
+13. **Progressive Web App (PWA) & Mobile/Tablet UX:** Web App Manifest, maskable and Apple touch icons, standalone launch, service worker static asset caching, mobile `BottomNav`, swipeable quick-view bottom sheets, and multi-touch tree gestures (pinch-to-zoom, pan) ([18](features/18-progressive-web-app-mobile.md)).
 
 ### Phase 2 — "Delight"
 - Face tagging ([06](features/06-media-face-tagging.md)), fan chart, kinship finder ([04](features/04-tree-visualizations.md)).
@@ -51,3 +54,4 @@
 | Background jobs | Postgres `jobs` table + in-process workers ([17 §5](features/17-api-security-operations.md#5-background-jobs)) |
 | Media storage | Local Docker volume ([17 §4.2](features/17-api-security-operations.md#42-storage-layout)) |
 | Maps | MapLibre / Leaflet with configurable tile URL ([12 §4](features/12-places.md#4-geocoding--self-hosting-privacy)) |
+| PWA & Mobile | Web App Manifest, Service Worker (static asset caching only), standalone display mode, safe-area insets ([18](features/18-progressive-web-app-mobile.md)) |

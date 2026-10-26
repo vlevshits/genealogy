@@ -1,11 +1,12 @@
 mod config;
 mod error;
+pub mod models;
 mod routes;
 mod state;
 
+use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
 use std::time::Duration;
-use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

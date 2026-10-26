@@ -1,8 +1,8 @@
-# Family Tree Platform (Next-Gen Genealogy Web App)
+# Family Tree Application
 ## Feature Specifications & Architecture Overview
 
 ### 1. Project Vision
-A modern, lightweight, self-hosted web application for building, browsing, and sharing a family tree. Families keep **complete ownership and privacy** of their data while enjoying a **sleek, fluid, and simple** user experience.
+A modern, lightweight, self-hosted web application for building, browsing, and sharing a family tree. Families keep **complete ownership and privacy** of their data while enjoying a **clean, quiet, and simple** user experience focused entirely on family history.
 
 See [roadmap.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/roadmap.md) for product principles and implementation phases.
 
@@ -12,16 +12,20 @@ See [roadmap.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/roadm
 
 | Area | What the app provides |
 | :--- | :--- |
-| **User Experience & UI** | Modern React + Tailwind v4, GPU-accelerated SVG pan-zoom canvas, rich card avatars, glassmorphism accents. |
+| **User Experience & UI** | Clean, responsive interface, GPU-accelerated SVG pan-zoom canvas, rich card avatars, glassmorphism accents. |
 | **Visualization Modes** | Pedigree, Hourglass, Descendants, Fan Chart, and Kinship Finder with fast live switching. |
 | **Media & Photos** | Media library with rectangular face tagging, thumbnail pipeline, and document viewer. |
 | **Print & PDF Export** | High-res vector PDFs: single poster (A0–A3) or multi-page tiled sheets with cut guides and overlap margins. |
 | **Authentication & Security** | WebAuthn / Passkeys (Touch ID, Face ID, Windows Hello, YubiKey), magic link, recovery codes, password fallback for LAN installs. |
+| **Mobile, Tablet & PWA** | Progressive Web App installability (standalone mode), touch-first navigation (`BottomNav`, swipeable bottom sheets), safe-area insets, multi-touch pinch-to-zoom. |
 | **Deployment** | 1 instance = 1 family tree; Docker Compose with 3 containers (frontend, backend, PostgreSQL). |
 
 ---
 
 ### 3. Architecture & Tech Stack
+
+> [!IMPORTANT] Tech Stack Invisible in UI:
+> The technologies listed below represent internal implementation details. Per [00 §3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md#3-ui-copywriting-tone-of-voice--anti-fluff-standards), no tech stack names (Rust, React, PostgreSQL, Tailwind, Axum, etc.) or marketing buzzwords may ever be displayed on user-facing web pages, headers, footers, tooltips, or dialogs.
 
 - **Frontend:** **React 19 + Tailwind CSS v4**
   - **Visualization Canvas:** **SVG + React (`d3-hierarchy` / `dagre` / `d3-zoom`)** for crisp vector typography, rich Tailwind card styling, accessible DOM elements, and 60fps pan/zoom.
@@ -39,7 +43,7 @@ See [roadmap.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/roadm
 
 The detailed specifications and Definitions of Done (DoD) are organized in the following feature files:
 
-0. [00-internationalization-localization.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md): Day 0 Level Requirement: Full English & Russian localization, Slavic patronymics (отчество), bilingual kinship calculations, Russian date expressions, and Cyrillic printable PDF support.
+0. [00-internationalization-localization.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/00-internationalization-localization.md): Day 0 Level Requirement: Full English & Russian localization, Slavic patronymics (отчество), bilingual kinship calculations, Russian date expressions, Cyrillic printable PDF support, and strict UI copywriting standards (zero marketing buzzwords, zero tech-stack exposure).
 1. [01-authentication-passkeys.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/01-authentication-passkeys.md): WebAuthn Passkeys, registration, login, device management, and recovery fallback.
 2. [02-rbac-access-control.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/02-rbac-access-control.md): Multi-user roles (Admin, Editor, Viewer), permission boundaries, and living person privacy filtering.
 3. [03-gedcom-import-export.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/03-gedcom-import-export.md): GEDCOM 5.5.1 and 7.0 import/export, GEDZIP media packaging, validation, and diff previews.
@@ -56,5 +60,6 @@ The detailed specifications and Definitions of Done (DoD) are organized in the f
 15. [15-data-quality-duplicates.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md): Soft validation warnings, duplicate detection, merging two people in the tree.
 16. [16-dashboard-home.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md): Home person, empty-tree onboarding, minimal dashboard, anniversaries.
 17. [17-api-security-operations.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md): API conventions, sessions/CSRF, rate limits, LAN login fallback, upload safety, authorized media delivery, Postgres job queue, health & upgrades.
+18. [18-progressive-web-app-mobile.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md): Progressive Web App installability, Web App Manifest, maskable/Apple touch icons, standalone launch, service worker static asset caching, mobile/tablet ergonomics, touch targets, and tree gesture navigation.
 
 **Design system:** [theme-and-tokens.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/design-system/theme-and-tokens.md) (colors, typography, spacing) and [components.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/design-system/components.md) (reusable UI controls, built before pages).

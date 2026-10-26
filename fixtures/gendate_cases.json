@@ -1,0 +1,197 @@
+[
+  {
+    "input": "14 Jul 1923",
+    "locale": "en",
+    "expected": {
+      "mod": "exact",
+      "start": { "y": 1923, "m": 7, "d": 14 },
+      "end": null,
+      "cal": "gregorian",
+      "text": "14 Jul 1923"
+    },
+    "sortKey": 19230714,
+    "isValid": true
+  },
+  {
+    "input": "14.07.1923",
+    "locale": "ru",
+    "expected": {
+      "mod": "exact",
+      "start": { "y": 1923, "m": 7, "d": 14 },
+      "end": null,
+      "cal": "gregorian",
+      "text": "14.07.1923"
+    },
+    "sortKey": 19230714,
+    "isValid": true
+  },
+  {
+    "input": "14 июля 1923 г.",
+    "locale": "ru",
+    "expected": {
+      "mod": "exact",
+      "start": { "y": 1923, "m": 7, "d": 14 },
+      "end": null,
+      "cal": "gregorian",
+      "text": "14 июля 1923 г."
+    },
+    "sortKey": 19230714,
+    "isValid": true
+  },
+  {
+    "input": "about 1890",
+    "locale": "en",
+    "expected": {
+      "mod": "about",
+      "start": { "y": 1890, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "about 1890"
+    },
+    "sortKey": 18900000,
+    "isValid": true
+  },
+  {
+    "input": "ок. 1890",
+    "locale": "ru",
+    "expected": {
+      "mod": "about",
+      "start": { "y": 1890, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "ок. 1890"
+    },
+    "sortKey": 18900000,
+    "isValid": true
+  },
+  {
+    "input": "before 1917",
+    "locale": "en",
+    "expected": {
+      "mod": "before",
+      "start": { "y": 1917, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "before 1917"
+    },
+    "sortKey": 19169999,
+    "isValid": true
+  },
+  {
+    "input": "до мая 1860",
+    "locale": "ru",
+    "expected": {
+      "mod": "before",
+      "start": { "y": 1860, "m": 5, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "до мая 1860"
+    },
+    "sortKey": 18600499,
+    "isValid": true
+  },
+  {
+    "input": "after 1945",
+    "locale": "en",
+    "expected": {
+      "mod": "after",
+      "start": { "y": 1945, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "after 1945"
+    },
+    "sortKey": 19450001,
+    "isValid": true
+  },
+  {
+    "input": "после 1945 г.",
+    "locale": "ru",
+    "expected": {
+      "mod": "after",
+      "start": { "y": 1945, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "после 1945 г."
+    },
+    "sortKey": 19450001,
+    "isValid": true
+  },
+  {
+    "input": "between 1914 and 1918",
+    "locale": "en",
+    "expected": {
+      "mod": "between",
+      "start": { "y": 1914, "m": null, "d": null },
+      "end": { "y": 1918, "m": null, "d": null },
+      "cal": "gregorian",
+      "text": "between 1914 and 1918"
+    },
+    "sortKey": 19140000,
+    "isValid": true
+  },
+  {
+    "input": "между 1914 и 1918 гг.",
+    "locale": "ru",
+    "expected": {
+      "mod": "between",
+      "start": { "y": 1914, "m": null, "d": null },
+      "end": { "y": 1918, "m": null, "d": null },
+      "cal": "gregorian",
+      "text": "между 1914 и 1918 гг."
+    },
+    "sortKey": 19140000,
+    "isValid": true
+  },
+  {
+    "input": "calculated 1905",
+    "locale": "en",
+    "expected": {
+      "mod": "calculated",
+      "start": { "y": 1905, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "calculated 1905"
+    },
+    "sortKey": 19050000,
+    "isValid": true
+  },
+  {
+    "input": "вычислено 1905 г.",
+    "locale": "ru",
+    "expected": {
+      "mod": "calculated",
+      "start": { "y": 1905, "m": null, "d": null },
+      "end": null,
+      "cal": "gregorian",
+      "text": "вычислено 1905 г."
+    },
+    "sortKey": 19050000,
+    "isValid": true
+  },
+  {
+    "input": "14.07.1905 (ст. ст.)",
+    "locale": "ru",
+    "expected": {
+      "mod": "exact",
+      "start": { "y": 1905, "m": 7, "d": 14 },
+      "end": null,
+      "cal": "julian",
+      "text": "14.07.1905 (ст. ст.)"
+    },
+    "sortKey": 19050727,
+    "isValid": true
+  },
+  {
+    "input": "в детстве во время войны",
+    "locale": "ru",
+    "expected": {
+      "mod": "phrase",
+      "start": null,
+      "end": null,
+      "cal": "gregorian",
+      "text": "в детстве во время войны"
+    },
+    "sortKey": null,
+    "isValid": true
+  }
+]
