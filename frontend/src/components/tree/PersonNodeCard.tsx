@@ -2,11 +2,9 @@ import React, { useRef } from 'react';
 import {
   Calendar,
   Crosshair,
-  Eye,
   Home,
   Lock,
   MapPin,
-  PenTool,
   UserPlus,
 } from 'lucide-react';
 import { Avatar, Badge, Button } from '../ui';
@@ -81,7 +79,6 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
   onSelect,
   onFocusNode,
   onQuickAdd,
-  onEdit,
   className,
 }) => {
   const { t } = useI18n();
@@ -202,10 +199,14 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
                 {t('domain.privateBadge')}
               </Badge>
             )}
-            {node.is_living && (
-              <Badge variant="brand" size="sm">
-                {t('tree.privacyPreview.livingBadge')}
-              </Badge>
+            {!node.is_living && (
+              <span
+                aria-label={t('person.quickAdd.livingNo')}
+                title={t('person.quickAdd.livingNo')}
+                className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface-muted font-serif text-xs font-semibold text-secondary"
+              >
+                †
+              </span>
             )}
           </div>
         </div>
@@ -241,25 +242,15 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
           </div>
         )}
 
-        {/* Quick Action Toolbar */}
+        {/* Compact Tree Quick Actions (Focus & Quick-Add) */}
         <div
-          className="flex items-center justify-between gap-1 border-t border-border/70 pt-1.5"
+          className="flex items-center justify-end gap-1.5 border-t border-border/60 pt-1 opacity-85 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 px-1.5 text-[11px]"
-            leftIcon={<Eye className="h-3 w-3" />}
-            onClick={() => onSelect?.(node)}
-          >
-            {t('tree.card.profileBtn')}
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-1.5 text-[11px]"
+            className="h-6 px-2 text-[11px] text-secondary hover:text-primary"
             leftIcon={<Crosshair className="h-3 w-3" />}
             onClick={() => onFocusNode?.(node)}
           >
@@ -267,26 +258,15 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
           </Button>
 
           {canEdit && !isMaskedLiving && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-1.5 text-[11px]"
-                leftIcon={<UserPlus className="h-3 w-3" />}
-                onClick={() => onQuickAdd?.(node, 'child')}
-              >
-                {t('tree.card.addBtn')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-1.5 text-[11px]"
-                leftIcon={<PenTool className="h-3 w-3" />}
-                onClick={() => onEdit?.(node)}
-              >
-                {t('tree.card.editBtn')}
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[11px] text-brand hover:text-brand"
+              leftIcon={<UserPlus className="h-3 w-3" />}
+              onClick={() => onQuickAdd?.(node, 'child')}
+            >
+              {t('tree.card.addBtn')}
+            </Button>
           )}
         </div>
       </div>

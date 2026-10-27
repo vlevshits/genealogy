@@ -138,6 +138,10 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
     expect(htmlEn).toContain('Elena Alexandrovna Levshits');
     expect(htmlEn).toContain('Add Father');
     expect(htmlEn).toContain('Add Mother');
+    expect(htmlEn).toContain('†');
+    expect(htmlEn).not.toContain('>Living<');
+    expect(htmlEn).not.toContain('>Profile<');
+    expect(htmlEn).not.toContain('>Edit<');
 
     const htmlRu = renderWithProviders(
       <TreeCanvas
