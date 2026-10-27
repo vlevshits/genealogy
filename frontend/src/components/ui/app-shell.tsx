@@ -330,13 +330,15 @@ export const AppShell: React.FC<AppShellProps> = ({
       {/* Main Content Viewport */}
       <main className="flex-1 w-full">{children}</main>
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-border bg-surface py-5 text-xs text-secondary">
-        <div className="mx-auto flex max-w-7xl flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
-          <span>{t('app.footerCopyright')}</span>
-          <span>{t('app.footerRight')}</span>
-        </div>
-      </footer>
+      {/* Footer (hidden on full-bleed /tree canvas) */}
+      {!currentPath.startsWith('/tree') && (
+        <footer className="mt-auto border-t border-border bg-surface py-5 text-xs text-secondary">
+          <div className="mx-auto flex max-w-7xl flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
+            <span>{t('app.footerCopyright')}</span>
+            <span>{t('app.footerRight')}</span>
+          </div>
+        </footer>
+      )}
 
       {/* Mobile Bottom Navigation (< 768px) */}
       <BottomNav

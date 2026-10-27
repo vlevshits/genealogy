@@ -391,6 +391,7 @@ export interface TreeDataResponse {
   enable_public_access: boolean;
   resolved_home_person_id?: string | null;
   nodes: TreePersonNodeDto[];
+  families?: FamilyDto[];
 }
 
 export type TreeResponse = TreeDataResponse;
@@ -807,6 +808,8 @@ import {
   QuickAddRelativeInput,
   QuickAddRelativeResponse,
   StartWithSelfInput,
+  TreeViewQuery,
+  TreeViewResponse,
   UpdateFamilyInput,
   UpdateLifeEventInput,
   UpdatePersonInput,
@@ -1032,6 +1035,24 @@ export async function updateProfile(
     body: JSON.stringify(data),
   });
 }
+
+// =============================================================================
+// Phase 1.6 — Interactive Tree Canvas Endpoints
+// =============================================================================
+
+export async function fetchTreeView(
+  params?: TreeViewQuery
+): Promise<TreeViewResponse> {
+  const search = new URLSearchParams();
+  if (params?.focal_id) search.set('focal_id', params.focal_id);
+  if (params?.mode) search.set('mode', params.mode);
+  if (params?.generations !== undefined) {
+    search.set('generations', String(params.generations));
+  }
+  const qs = search.toString();
+  return apiFetch<TreeViewResponse>(`/tree/view${qs ? `?${qs}` : ''}`);
+}
+
 
 
 

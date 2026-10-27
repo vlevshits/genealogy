@@ -91,6 +91,13 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
   useEffect(() => {
     if (!anchorPerson) return;
     const nextSex = defaultSexForRelation(relation);
+    setMode(initialMode);
+    setSelectedExistingId('');
+    setGivenName('');
+    setBirthDate('');
+    setParsedBirthDate(null);
+    setBirthPlace('');
+    setLivingStatus('auto');
     setSex(nextSex);
     setSurname(anchorPerson.primary_name.surname || '');
     setPatronymicTouched(false);
@@ -102,7 +109,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
       setPatronymic('');
     }
     setErrorMsg(null);
-  }, [anchorPerson, relation, open]);
+  }, [anchorPerson, relation, open, initialMode]);
 
   if (!anchorPerson) return null;
 

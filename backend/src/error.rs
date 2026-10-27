@@ -71,6 +71,9 @@ pub enum AppError {
     #[error("Not found")]
     NotFound,
 
+    #[error("Person not found")]
+    PersonNotFound,
+
     #[error("First-time instance setup has already been completed")]
     SetupAlreadyCompleted,
 
@@ -123,6 +126,7 @@ impl AppError {
             Self::Forbidden(_) => "forbidden",
             Self::SettingsLockedFromEnv => "settings_locked_from_env",
             Self::NotFound => "not_found",
+            Self::PersonNotFound => "person_not_found",
             Self::SetupAlreadyCompleted => "setup_already_completed",
             Self::AlreadyOnboarded => "already_onboarded",
             Self::VersionConflict(_) => "version_conflict",
@@ -155,7 +159,9 @@ impl AppError {
             | Self::SettingsLockedFromEnv
             | Self::PasswordAuthDisabled
             | Self::CsrfValidationFailed => StatusCode::FORBIDDEN,
-            Self::NotFound | Self::InvalidOrExpiredInvite => StatusCode::NOT_FOUND,
+            Self::NotFound | Self::PersonNotFound | Self::InvalidOrExpiredInvite => {
+                StatusCode::NOT_FOUND
+            }
             Self::VersionConflict(_)
             | Self::SetupAlreadyCompleted
             | Self::AlreadyOnboarded

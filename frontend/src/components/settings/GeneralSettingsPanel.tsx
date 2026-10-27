@@ -181,7 +181,8 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
                   </span>
                   {defaultHomePersonId ? (
                     <Badge variant="brand" size="sm">
-                      {people.find((p) => p.id === defaultHomePersonId)?.name ?? defaultHomePersonId}
+                      {people.find((p) => p.id === defaultHomePersonId)
+                        ?.primary_name.given_name ?? defaultHomePersonId}
                     </Badge>
                   ) : (
                     <Badge variant="neutral" size="sm">

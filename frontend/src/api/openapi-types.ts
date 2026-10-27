@@ -85,16 +85,18 @@ export type RelationshipType =
   | 'married'
   | 'civil_union'
   | 'partners'
-  | 'unknown';
+  | 'unknown'
+  | string;
 
 export type ParentChildRelation = 'birth' | 'adopted' | 'foster' | 'step';
 
 export interface FamilyChildDto {
   child_id: string;
+  individual_id?: string;
   child_name?: string;
   sort_order: number;
-  rel_to_partner1: ParentChildRelation | string;
-  rel_to_partner2: ParentChildRelation | string;
+  rel_to_partner1?: ParentChildRelation | string;
+  rel_to_partner2?: ParentChildRelation | string;
 }
 
 export interface FamilyDto {
@@ -321,4 +323,55 @@ export interface StartWithSelfInput {
   birth_date?: string | null;
   birth_place?: string | null;
 }
+
+// =============================================================================
+// Phase 1.6 — Interactive Tree Canvas (Hourglass, Pedigree, Descendants) DTOs
+// =============================================================================
+
+export type TreeProjectionMode = 'hourglass' | 'pedigree' | 'descendant';
+
+export interface TreePersonNodeDto {
+  id: string;
+  gid: string;
+  sex: SexCode;
+  is_living: boolean;
+  is_private: boolean;
+  primary_name: {
+    given_name: string;
+    patronymic: string | null;
+    surname: string;
+  };
+  birth: { date: string; place: string | null } | null;
+  death: { date: string; place: string | null } | null;
+  avatar_url: string | null;
+  notes: string | null;
+}
+
+export interface TreeEdgeDto {
+  id: string;
+  source: string;
+  target: string;
+  kind: 'spouse' | 'parent_child' | string;
+  family_id: string;
+}
+
+export interface TreeViewQuery {
+  focal_id?: string;
+  mode?: TreeProjectionMode | string;
+  generations?: number;
+}
+
+export interface TreeViewResponse {
+  access_tier: 'public_anonymous' | 'viewer' | 'editor' | 'admin' | string;
+  tree_title: string;
+  focal_id: string | null;
+  mode: TreeProjectionMode | string;
+  generations: number;
+  nodes: TreePersonNodeDto[];
+  families: FamilyDto[];
+  edges: TreeEdgeDto[];
+  resolved_home_person_id: string | null;
+  total_visible: number;
+}
+
 

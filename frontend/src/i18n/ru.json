@@ -530,8 +530,54 @@
   },
   "tree": {
     "homePersonBadge": "Ключевая персона",
+    "homePersonShort": "Ключевая",
     "setAsHomePerson": "Сделать моей ключевой персоной",
     "homePersonUpdatedToast": "Ключевая персона обновлена",
+    "canvas": {
+      "ariaLabel": "Интерактивное полотно родословного древа"
+    },
+    "modes": {
+      "hourglass": "Песочные часы",
+      "pedigree": "Предки",
+      "descendants": "Потомки"
+    },
+    "toolbar": {
+      "modeSwitcherAria": "Выбрать режим отображения древа",
+      "generationsAria": "Выбрать глубину поколений",
+      "generationsCount": "Поколений: {count}",
+      "generationsAll": "Все поколения",
+      "centerHomeAria": "Центрировать на ключевой персоне",
+      "fitScreenAria": "Вписать древо в экран",
+      "zoomInAria": "Приблизить",
+      "zoomOutAria": "Отдалить",
+      "zoomResetAria": "Сбросить масштаб до 100%"
+    },
+    "card": {
+      "profileBtn": "Профиль",
+      "focusBtn": "В центр",
+      "addBtn": "Добавить",
+      "editBtn": "Изменить"
+    },
+    "miniMap": {
+      "title": "Мини-карта древа",
+      "openBtn": "Мини-карта",
+      "collapseAria": "Свернуть мини-карту"
+    },
+    "drawer": {
+      "vitalFactsTitle": "Основные даты и места",
+      "privateDetailsHidden": "Личные сведения скрыты",
+      "noBirthRecorded": "Дата рождения не указана",
+      "immediateFamilyTitle": "Ближайшие родственники",
+      "parentsLabel": "Родители",
+      "spousesLabel": "Супруги и партнёры",
+      "childrenLabel": "Дети",
+      "noRelativesListed": "Не указаны",
+      "quickActionsTitle": "Быстрые действия",
+      "makeFocalBtn": "Сделать центральной персоной",
+      "viewFullProfileBtn": "Открыть полный профиль",
+      "expandSheet": "Подробнее",
+      "collapseSheet": "Свернуть"
+    },
     "publicBanner": {
       "badge": "Публичный гостевой просмотр",
       "title": "Данные живущих родственников защищены",

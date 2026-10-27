@@ -482,6 +482,59 @@ pub fn redact_person_for_caller(
     Some(person.clone())
 }
 
+/// Applies the Tree Canvas Projection Living-Person Redaction Contract (`04-tree-visualizations.md §3.1`, `02-rbac-access-control.md §3.2, §4.2`).
+/// - Returns `None` if `person.is_private` and caller does not have `Editor` or `Admin` access.
+/// - For `AnonymousPublic`: masks living individuals to a single given-name initial character with a dot
+///   (e.g. `"И."` / `"J."`), strips surnames, patronymics, dates, places, biographies, notes, and avatars.
+/// - For `Viewer`, `Editor`, and `Admin`: returns living individuals unredacted.
+pub fn redact_person_for_tree_view(
+    person: &TreePersonNodeDto,
+    access: &CallerAccess,
+) -> Option<TreePersonNodeDto> {
+    if person.is_private && !access.can_view_private() {
+        return None;
+    }
+
+    if *access == CallerAccess::AnonymousPublic && person.is_living {
+        let initial = person
+            .primary_name
+            .given_name
+            .trim()
+            .chars()
+            .next()
+            .unwrap_or('?');
+        return Some(TreePersonNodeDto {
+            id: person.id.clone(),
+            gid: person.gid.clone(),
+            sex: person.sex.clone(),
+            is_living: true,
+            living_override: None,
+            is_private: false,
+            primary_name: PersonNameDto {
+                given_name: format!("{initial}."),
+                patronymic: None,
+                surname: String::new(),
+            },
+            birth_surname: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            biography: None,
+            birth: None,
+            death: None,
+            avatar_url: None,
+            notes: None,
+            birth_sort: None,
+            death_sort: None,
+            has_death_event: false,
+            alt_names: vec![],
+            version: person.version,
+        });
+    }
+
+    Some(person.clone())
+}
+
 /// Redacts a media asset for the given caller (`02-rbac-access-control.md §3.2, §7 DoD #3`).
 pub fn redact_media_for_caller(
     media: &MediaAssetSummaryDto,

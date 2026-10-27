@@ -530,8 +530,54 @@
   },
   "tree": {
     "homePersonBadge": "Home Person",
+    "homePersonShort": "Home",
     "setAsHomePerson": "Set as my home person",
     "homePersonUpdatedToast": "Home person updated",
+    "canvas": {
+      "ariaLabel": "Interactive family tree canvas"
+    },
+    "modes": {
+      "hourglass": "Hourglass",
+      "pedigree": "Pedigree",
+      "descendants": "Descendants"
+    },
+    "toolbar": {
+      "modeSwitcherAria": "Select tree projection mode",
+      "generationsAria": "Select number of generations",
+      "generationsCount": "{count} generations",
+      "generationsAll": "All generations",
+      "centerHomeAria": "Center on focal or home person",
+      "fitScreenAria": "Fit tree to screen",
+      "zoomInAria": "Zoom in",
+      "zoomOutAria": "Zoom out",
+      "zoomResetAria": "Reset zoom to 100%"
+    },
+    "card": {
+      "profileBtn": "Profile",
+      "focusBtn": "Focus",
+      "addBtn": "Add",
+      "editBtn": "Edit"
+    },
+    "miniMap": {
+      "title": "Radar Mini-Map",
+      "openBtn": "Mini-Map",
+      "collapseAria": "Collapse mini-map"
+    },
+    "drawer": {
+      "vitalFactsTitle": "Vital Dates & Locations",
+      "privateDetailsHidden": "Private details hidden",
+      "noBirthRecorded": "No birth date recorded",
+      "immediateFamilyTitle": "Immediate Family",
+      "parentsLabel": "Parents",
+      "spousesLabel": "Spouses & Partners",
+      "childrenLabel": "Children",
+      "noRelativesListed": "None recorded",
+      "quickActionsTitle": "Quick Authoring Actions",
+      "makeFocalBtn": "Make Focal Person",
+      "viewFullProfileBtn": "View Full Profile",
+      "expandSheet": "More details",
+      "collapseSheet": "Less details"
+    },
     "publicBanner": {
       "badge": "Public Guest View",
       "title": "Living Family Members Are Protected",

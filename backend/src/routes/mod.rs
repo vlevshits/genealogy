@@ -38,7 +38,7 @@ use crate::{
             delete_family, delete_note, delete_person, delete_place, export_gedcom,
             export_printable_pdf, get_audit_history, get_data_quality_warnings, get_family,
             get_media_file, get_onboarding_status, get_patronymic_suggestion, get_person,
-            get_person_delete_impact, get_place_detail, get_tree, import_gedcom,
+            get_person_delete_impact, get_place_detail, get_tree, get_tree_view, import_gedcom,
             list_event_sources, list_events, list_families, list_media_archive, list_notes,
             list_people_directory, list_places_directory, merge_duplicate_people, merge_place,
             quick_add_relative, restore_deleted_person, start_with_self, update_event,
@@ -50,8 +50,9 @@ use crate::{
             PatronymicSuggestionResponse, PeopleDirectoryResponse, PersonMergeRequest,
             PlaceDetailDto, PlacesDirectoryResponse, PlacesFilterQuery, QuickAddRelativeRequest,
             QuickAddRelativeResponse, SourceAutocompleteResponse, SourceSearchQuery,
-            StartWithSelfRequest, StartWithSelfResponse, TreeResponse, UpdateEventRequest,
-            UpdateFamilyRequest, UpdateNoteRequest, UpdatePersonRequest, UpdatePlaceRequest,
+            StartWithSelfRequest, StartWithSelfResponse, TreeEdgeDto, TreeResponse, TreeViewQuery,
+            TreeViewResponse, UpdateEventRequest, UpdateFamilyRequest, UpdateNoteRequest,
+            UpdatePersonRequest, UpdatePlaceRequest,
         },
         system::{
             download_admin_backup, get_admin_settings, get_admin_system, get_system_info,
@@ -133,6 +134,7 @@ use crate::{
         rbac::get_onboarding_status,
         rbac::start_with_self,
         rbac::get_tree,
+        rbac::get_tree_view,
         rbac::get_patronymic_suggestion,
         rbac::get_person,
         rbac::create_person,
@@ -248,6 +250,9 @@ use crate::{
             StartWithSelfRequest,
             StartWithSelfResponse,
             TreeResponse,
+            TreeViewQuery,
+            TreeEdgeDto,
+            TreeViewResponse,
             CreatePersonRequest,
             UpdatePersonRequest,
             PatronymicSuggestionQuery,
@@ -360,6 +365,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/onboarding/start-with-self", post(start_with_self))
         // Core Genealogy Data Model, Person/Family/Event Editing, Places & RBAC Endpoints
         .route("/tree", get(get_tree))
+        .route("/tree/view", get(get_tree_view))
         .route(
             "/persons/suggest-patronymic",
             get(get_patronymic_suggestion),

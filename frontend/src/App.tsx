@@ -8,7 +8,7 @@ import {
   Badge,
   Spinner,
 } from './components/ui';
-import { TreePrivacyPreviewCard } from './components/tree';
+import { TreeCanvas, TreePrivacyPreviewCard } from './components/tree';
 import { EmptyTreeOnboardingCard } from './components/onboarding';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlacesPage } from './pages/PlacesPage';
@@ -248,24 +248,18 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     }
   }
 
-  // 5. Tree route (/tree) — renders server-enforced Living-Person Privacy & Access Tier view
+  // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
     return (
       <AppShell
         currentPath={path}
         onNavigate={navigate}
         instanceTitle={instanceTitle}
-        breadcrumbs={[
-          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
-          { id: 'tree', label: t('nav.tree') },
-        ]}
       >
-        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <TreePrivacyPreviewCard
-            onSignIn={() => navigate('/login')}
-            onNavigate={navigate}
-          />
-        </div>
+        <TreeCanvas
+          onSignIn={() => navigate('/login')}
+          onNavigate={navigate}
+        />
       </AppShell>
     );
   }
@@ -347,7 +341,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
             onImportGedcom={() => navigate('/settings/gedcom')}
           />
         ) : openTreeDirectly ? (
-          <TreePrivacyPreviewCard
+          <TreeCanvas
             onSignIn={() => navigate('/login')}
             onNavigate={navigate}
           />

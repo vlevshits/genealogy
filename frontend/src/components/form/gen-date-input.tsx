@@ -96,6 +96,10 @@ export const GenDateInput: React.FC<GenDateInputProps> = ({
       });
       if (value.start?.y) setCalYear(value.start.y);
       if (value.start?.m) setCalMonth(value.start.m);
+    } else if (value === null && textInput !== '') {
+      setTextInput('');
+      setSecondDateText('');
+      setParsedResult(parseGenDate('', locale));
     }
   }, [value]);
 

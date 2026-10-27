@@ -7,7 +7,7 @@ use axum::{
 };
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -23,10 +23,11 @@ use crate::{
         },
         privacy::{
             evaluate_is_living, normalize_search_tokens, redact_media_for_caller,
-            redact_person_for_caller, suggest_slavic_patronymic, ChangeLogEntryDto, FamilyChildDto,
-            FamilyDto, IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, NoteDto,
-            PersonLivingEvaluationInput, PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto,
-            PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
+            redact_person_for_caller, redact_person_for_tree_view, suggest_slavic_patronymic,
+            ChangeLogEntryDto, FamilyChildDto, FamilyDto, IndividualAltNameDto, LifeEventDto,
+            MediaAssetSummaryDto, NoteDto, PersonLivingEvaluationInput, PersonNameDto,
+            PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
+            VitalEventSummaryDto,
         },
         rbac::{PublicOrAuth, RequireAdmin, RequireAuth, RequireEditor},
     },
@@ -38,8 +39,43 @@ pub struct TreeResponse {
     pub access_tier: String,
     pub tree_title: String,
     pub nodes: Vec<TreePersonNodeDto>,
+    #[serde(default)]
+    pub families: Vec<FamilyDto>,
     pub total_visible: usize,
     pub resolved_home_person_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, IntoParams, ToSchema)]
+pub struct TreeViewQuery {
+    /// Focal person UUID or GEDCOM-style GID (e.g. `I0100`); defaults to resolved home person or first root person
+    pub focal_id: Option<String>,
+    /// Projection mode: `"hourglass"`, `"pedigree"`, `"descendant"`, or `"fan"` (default `"hourglass"`)
+    pub mode: Option<String>,
+    /// Generation depth limit (`1..=10`, default `4`)
+    pub generations: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TreeEdgeDto {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub kind: String,
+    pub family_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TreeViewResponse {
+    pub access_tier: String,
+    pub tree_title: String,
+    pub focal_id: Option<String>,
+    pub mode: String,
+    pub generations: u32,
+    pub nodes: Vec<TreePersonNodeDto>,
+    pub families: Vec<FamilyDto>,
+    pub edges: Vec<TreeEdgeDto>,
+    pub resolved_home_person_id: Option<String>,
+    pub total_visible: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -837,11 +873,52 @@ pub async fn start_with_self(
     ))
 }
 
+fn filter_family_for_visible_persons(
+    fam: &FamilyDto,
+    can_view_private: bool,
+    visible_person_ids: &HashSet<String>,
+) -> Option<FamilyDto> {
+    if fam.is_private && !can_view_private {
+        return None;
+    }
+    let partner1_id = fam
+        .partner1_id
+        .as_ref()
+        .filter(|id| visible_person_ids.contains(*id))
+        .cloned();
+    let partner2_id = fam
+        .partner2_id
+        .as_ref()
+        .filter(|id| visible_person_ids.contains(*id))
+        .cloned();
+    let children: Vec<FamilyChildDto> = fam
+        .children
+        .iter()
+        .filter(|c| visible_person_ids.contains(&c.child_id))
+        .cloned()
+        .collect();
+
+    if partner1_id.is_none() && partner2_id.is_none() && children.is_empty() {
+        return None;
+    }
+
+    Some(FamilyDto {
+        id: fam.id.clone(),
+        gid: fam.gid.clone(),
+        partner1_id,
+        partner2_id,
+        relationship_type: fam.relationship_type.clone(),
+        is_private: fam.is_private,
+        children,
+        version: fam.version,
+    })
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/tree",
     responses(
-        (status = 200, description = "Interactive tree nodes filtered and redacted per caller RBAC tier", body = TreeResponse),
+        (status = 200, description = "Interactive tree nodes and families filtered and redacted per caller RBAC tier", body = TreeResponse),
         (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
     ),
     tag = "Tree & Privacy"
@@ -859,6 +936,14 @@ pub async fn get_tree(
         .iter()
         .filter_map(|p| redact_person_for_caller(p, &access, &settings.default_locale))
         .collect();
+    let visible_person_ids: HashSet<String> = nodes.iter().map(|n| n.id.clone()).collect();
+    let families: Vec<FamilyDto> = store
+        .families
+        .iter()
+        .filter_map(|f| {
+            filter_family_for_visible_persons(f, access.can_view_private(), &visible_person_ids)
+        })
+        .collect();
     let total_visible = nodes.len();
 
     let (resolved_home_person_id, _, _, _) = resolve_home_person_for_caller(
@@ -874,8 +959,288 @@ pub async fn get_tree(
         access_tier: access.as_tier_str().to_string(),
         tree_title: settings.tree_title,
         nodes,
+        families,
         total_visible,
         resolved_home_person_id,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/tree/view",
+    params(TreeViewQuery),
+    responses(
+        (status = 200, description = "Projected tree canvas nodes, families, and edges for the requested view mode and generation depth", body = TreeViewResponse),
+        (status = 400, description = "Invalid projection mode", body = ErrorResponse),
+        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse),
+        (status = 404, description = "Specified focal person not found or hidden by privacy", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_tree_view(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Query(query): Query<TreeViewQuery>,
+) -> Result<Json<TreeViewResponse>, AppError> {
+    let mode = match query
+        .mode
+        .as_deref()
+        .unwrap_or("hourglass")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "hourglass" | "" => "hourglass".to_string(),
+        "pedigree" => "pedigree".to_string(),
+        "descendant" | "descendants" => "descendant".to_string(),
+        "fan" => "fan".to_string(),
+        _ => {
+            let mut fields = HashMap::new();
+            fields.insert("mode".to_string(), "invalid_mode".to_string());
+            return Err(AppError::ValidationFailed(
+                "Mode must be hourglass, pedigree, descendant, or fan".to_string(),
+                Some(fields),
+            ));
+        }
+    };
+    let generations = query.generations.unwrap_or(4).clamp(1, 10);
+
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+
+    let visible_person_ids: HashSet<String> = store
+        .persons
+        .iter()
+        .filter(|p| !p.is_private || access.can_view_private())
+        .map(|p| p.id.clone())
+        .collect();
+
+    let visible_families: Vec<FamilyDto> = store
+        .families
+        .iter()
+        .filter_map(|f| {
+            filter_family_for_visible_persons(f, access.can_view_private(), &visible_person_ids)
+        })
+        .collect();
+
+    let (resolved_home_person_id, _, _, _) = resolve_home_person_for_caller(
+        &state,
+        &caller,
+        &store.persons,
+        &settings.default_locale,
+        settings.default_home_person_id.as_deref(),
+    )
+    .await;
+
+    let focal_id = if let Some(raw_focal) = query
+        .focal_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let person = store
+            .persons
+            .iter()
+            .find(|p| p.id == raw_focal || p.gid.eq_ignore_ascii_case(raw_focal))
+            .ok_or(AppError::PersonNotFound)?;
+        if !visible_person_ids.contains(&person.id) {
+            return Err(AppError::PersonNotFound);
+        }
+        Some(person.id.clone())
+    } else {
+        resolved_home_person_id.clone().or_else(|| {
+            store
+                .persons
+                .iter()
+                .find(|p| visible_person_ids.contains(&p.id))
+                .map(|p| p.id.clone())
+        })
+    };
+
+    let mut included_person_ids: HashSet<String> = HashSet::new();
+    let mut included_family_ids: HashSet<String> = HashSet::new();
+    let mut included_child_links: HashSet<(String, String)> = HashSet::new();
+
+    if let Some(ref root_id) = focal_id {
+        included_person_ids.insert(root_id.clone());
+
+        let mut anc_queue: VecDeque<(String, u32)> = VecDeque::new();
+        let mut visited_anc: HashSet<String> = HashSet::new();
+
+        let mut desc_queue: VecDeque<(String, u32)> = VecDeque::new();
+        let mut visited_desc: HashSet<String> = HashSet::new();
+
+        match mode.as_str() {
+            "pedigree" | "fan" => {
+                visited_anc.insert(root_id.clone());
+                anc_queue.push_back((root_id.clone(), 0));
+            }
+            "descendant" => {
+                visited_desc.insert(root_id.clone());
+                desc_queue.push_back((root_id.clone(), 0));
+            }
+            _ => {
+                // "hourglass": traverse upwards from focal person and their spouse(s), and downwards from focal person
+                let mut focal_and_spouses = vec![root_id.clone()];
+                for fam in &visible_families {
+                    let is_p1 = fam.partner1_id.as_deref() == Some(root_id.as_str());
+                    let is_p2 = fam.partner2_id.as_deref() == Some(root_id.as_str());
+                    if is_p1 || is_p2 {
+                        included_family_ids.insert(fam.id.clone());
+                        if let Some(ref p1) = fam.partner1_id {
+                            if !focal_and_spouses.contains(p1) {
+                                focal_and_spouses.push(p1.clone());
+                            }
+                        }
+                        if let Some(ref p2) = fam.partner2_id {
+                            if !focal_and_spouses.contains(p2) {
+                                focal_and_spouses.push(p2.clone());
+                            }
+                        }
+                    }
+                }
+                for id in focal_and_spouses {
+                    included_person_ids.insert(id.clone());
+                    visited_anc.insert(id.clone());
+                    anc_queue.push_back((id, 0));
+                }
+                visited_desc.insert(root_id.clone());
+                desc_queue.push_back((root_id.clone(), 0));
+            }
+        }
+
+        // Upward ancestor traversal
+        while let Some((curr_id, depth)) = anc_queue.pop_front() {
+            if depth >= generations {
+                continue;
+            }
+            for fam in &visible_families {
+                if fam.children.iter().any(|c| c.child_id == curr_id) {
+                    included_family_ids.insert(fam.id.clone());
+                    included_child_links.insert((fam.id.clone(), curr_id.clone()));
+                    for parent_id in [fam.partner1_id.as_ref(), fam.partner2_id.as_ref()]
+                        .into_iter()
+                        .flatten()
+                    {
+                        included_person_ids.insert(parent_id.clone());
+                        if visited_anc.insert(parent_id.clone()) {
+                            anc_queue.push_back((parent_id.clone(), depth + 1));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Downward descendant traversal
+        while let Some((curr_id, depth)) = desc_queue.pop_front() {
+            for fam in &visible_families {
+                let is_partner = fam.partner1_id.as_deref() == Some(curr_id.as_str())
+                    || fam.partner2_id.as_deref() == Some(curr_id.as_str());
+                if !is_partner {
+                    continue;
+                }
+                if depth < generations || curr_id == *root_id {
+                    included_family_ids.insert(fam.id.clone());
+                    for partner_id in [fam.partner1_id.as_ref(), fam.partner2_id.as_ref()]
+                        .into_iter()
+                        .flatten()
+                    {
+                        included_person_ids.insert(partner_id.clone());
+                    }
+                }
+                if depth < generations {
+                    for ch in &fam.children {
+                        included_person_ids.insert(ch.child_id.clone());
+                        included_child_links.insert((fam.id.clone(), ch.child_id.clone()));
+                        if visited_desc.insert(ch.child_id.clone()) {
+                            desc_queue.push_back((ch.child_id.clone(), depth + 1));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let nodes: Vec<TreePersonNodeDto> = store
+        .persons
+        .iter()
+        .filter(|p| included_person_ids.contains(&p.id))
+        .filter_map(|p| redact_person_for_tree_view(p, &access))
+        .collect();
+
+    let mut families: Vec<FamilyDto> = Vec::new();
+    let mut edges: Vec<TreeEdgeDto> = Vec::new();
+
+    for fam in &visible_families {
+        if !included_family_ids.contains(&fam.id) {
+            continue;
+        }
+        let partner1_id = fam
+            .partner1_id
+            .as_ref()
+            .filter(|id| included_person_ids.contains(*id))
+            .cloned();
+        let partner2_id = fam
+            .partner2_id
+            .as_ref()
+            .filter(|id| included_person_ids.contains(*id))
+            .cloned();
+        let children: Vec<FamilyChildDto> = fam
+            .children
+            .iter()
+            .filter(|c| {
+                included_child_links.contains(&(fam.id.clone(), c.child_id.clone()))
+                    && included_person_ids.contains(&c.child_id)
+            })
+            .cloned()
+            .collect();
+
+        if let (Some(ref p1), Some(ref p2)) = (&partner1_id, &partner2_id) {
+            edges.push(TreeEdgeDto {
+                id: format!("edge-spouse-{}", fam.id),
+                source: p1.clone(),
+                target: p2.clone(),
+                kind: "spouse".to_string(),
+                family_id: fam.id.clone(),
+            });
+        }
+
+        for ch in &children {
+            edges.push(TreeEdgeDto {
+                id: format!("edge-child-{}-{}", fam.id, ch.child_id),
+                source: fam.id.clone(),
+                target: ch.child_id.clone(),
+                kind: "parent_child".to_string(),
+                family_id: fam.id.clone(),
+            });
+        }
+
+        families.push(FamilyDto {
+            id: fam.id.clone(),
+            gid: fam.gid.clone(),
+            partner1_id,
+            partner2_id,
+            relationship_type: fam.relationship_type.clone(),
+            is_private: fam.is_private,
+            children,
+            version: fam.version,
+        });
+    }
+
+    let total_visible = nodes.len();
+
+    Ok(Json(TreeViewResponse {
+        access_tier: access.as_tier_str().to_string(),
+        tree_title: settings.tree_title,
+        focal_id,
+        mode,
+        generations,
+        nodes,
+        families,
+        edges,
+        resolved_home_person_id,
+        total_visible,
     }))
 }
 
