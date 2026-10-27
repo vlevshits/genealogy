@@ -938,6 +938,8 @@
       "viewInTree": "View in Tree",
       "editProfile": "Edit Profile",
       "fullIdentityDialog": "Full Profile & Alternate Names Dialog",
+      "addMenuTrigger": "Add...",
+      "addMenuAria": "Add event or relative",
       "addEvent": "Add Event",
       "addRelative": "Add Relative",
       "moreAria": "More profile actions",
@@ -978,6 +980,8 @@
       "title": "Geographic Life Migration Map",
       "stopsCount": "{count} stop(s)",
       "svgAriaLabel": "Geographic migration path of life events",
+      "osmAttribution": "© OpenStreetMap contributors",
+      "openInOsm": "Open on OpenStreetMap",
       "emptyTitle": "No geocoded locations yet",
       "emptyDesc": "Events linked to places with latitude and longitude coordinates will plot numbered pins and migration lines here."
     },

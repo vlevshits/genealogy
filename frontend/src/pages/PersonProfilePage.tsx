@@ -53,6 +53,7 @@ export interface PersonProfilePageProps {
   accessTier?: 'public_anonymous' | 'viewer' | 'editor' | 'admin' | string;
   onNavigate?: (path: string) => void;
   onSignIn?: () => void;
+  onPersonLoaded?: (name: string) => void;
 }
 
 export function buildDefaultPersonProfile(
@@ -367,6 +368,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
   accessTier: propAccessTier,
   onNavigate,
   onSignIn,
+  onPersonLoaded,
 }) => {
   const { t } = useI18n();
   const { user, isAuthenticated, updateUser } = useAuth();
@@ -470,10 +472,18 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     }
   };
 
-  const { isMaskedLiving } = formatTreeCardName(
+  const { displayName, isMaskedLiving } = formatTreeCardName(
     profile.person,
     resolvedAccessTier
   );
+
+  useEffect(() => {
+    if (loading) {
+      onPersonLoaded?.('');
+      return;
+    }
+    onPersonLoaded?.(displayName || '');
+  }, [displayName, loading, onPersonLoaded]);
 
   const handleSaveInlineIdentity = async (input: UpdatePersonInput) => {
     const updated = await updatePerson(profile.person.id, input);

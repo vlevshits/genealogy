@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   Calendar,
+  ChevronDown,
   Copy,
   GitBranch,
   GitMerge,
@@ -259,7 +260,7 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
 
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
         {/* Left: Portrait Avatar + Biographical Identity */}
-        <div className="flex flex-col sm:flex-row items-start gap-5 min-w-0 flex-1">
+        <div className="flex flex-col sm:flex-row items-start gap-5 min-w-[280px] flex-1">
           <div className="relative shrink-0">
             <Avatar
               name={isMaskedLiving ? '?' : displayName}
@@ -277,7 +278,7 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
             )}
           </div>
 
-          <div className="space-y-2.5 min-w-0 flex-1">
+          <div className="space-y-2.5 min-w-[280px] flex-1">
             {/* Badges row: Home Person, Kinship Pill, Private Badge (NO Living pill!) */}
             <div className="flex flex-wrap items-center gap-2">
               {capabilities.is_home_person && (
@@ -313,7 +314,7 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
 
             {/* Primary Heading */}
             <div className="space-y-1">
-              <h1 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-primary break-words">
+              <h1 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-primary break-normal hyphens-none">
                 {displayName}
                 {!isMaskedLiving &&
                   person.birth_surname &&
@@ -424,23 +425,34 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
                 {t('profile.actions.editProfile')}
               </Button>
 
-              <Button
-                size="md"
-                variant="primary"
-                leftIcon={<Plus className="h-4 w-4" />}
-                onClick={onAddEvent}
-              >
-                {t('profile.actions.addEvent')}
-              </Button>
-
-              <Button
-                size="md"
-                variant="secondary"
-                leftIcon={<UserPlus className="h-4 w-4" />}
-                onClick={() => onQuickAdd('child')}
-              >
-                {t('profile.actions.addRelative')}
-              </Button>
+              <DropdownMenu
+                align="end"
+                ariaLabel={t('profile.actions.addMenuAria')}
+                trigger={
+                  <Button
+                    size="md"
+                    variant="primary"
+                    leftIcon={<Plus className="h-4 w-4" />}
+                    rightIcon={<ChevronDown className="h-3.5 w-3.5" />}
+                  >
+                    {t('profile.actions.addMenuTrigger')}
+                  </Button>
+                }
+                items={[
+                  {
+                    id: 'add-event',
+                    label: t('profile.actions.addEvent'),
+                    icon: <Calendar className="h-3.5 w-3.5" />,
+                    onSelect: onAddEvent,
+                  },
+                  {
+                    id: 'add-relative',
+                    label: t('profile.actions.addRelative'),
+                    icon: <UserPlus className="h-3.5 w-3.5" />,
+                    onSelect: () => onQuickAdd('child'),
+                  },
+                ]}
+              />
             </>
           )}
 

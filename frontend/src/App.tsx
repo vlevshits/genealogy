@@ -44,6 +44,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   const [instanceTitle, setInstanceTitle] = useState<string | undefined>(
     undefined
   );
+  const [activePersonName, setActivePersonName] = useState<string>('');
   const [onboardingStatus, setOnboardingStatus] =
     useState<OnboardingStatusResponse | null>(initialOnboardingStatus);
 
@@ -283,13 +284,17 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         breadcrumbs={[
           { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
           { id: 'tree', label: t('nav.tree'), onClick: () => navigate('/tree') },
-          { id: 'person', label: rawPersonId || t('profile.breadcrumbLabel') },
+          {
+            id: 'person',
+            label: activePersonName || t('profile.breadcrumbLabel'),
+          },
         ]}
       >
         <PersonProfilePage
           personId={rawPersonId}
           onNavigate={navigate}
           onSignIn={() => navigate('/login')}
+          onPersonLoaded={setActivePersonName}
         />
       </AppShell>
     );

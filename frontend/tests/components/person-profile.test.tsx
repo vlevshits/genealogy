@@ -79,13 +79,28 @@ describe('Phase 1.7 Person Profile Page: Hero Header, Timeline & Map, Family, Me
     expect(htmlEn).not.toContain('>Living<');
     expect(htmlEn).toContain('View in Tree');
     expect(htmlEn).toContain('Edit Profile');
+    expect(htmlEn).toContain('Add...');
+    expect(htmlEn).toContain('break-normal hyphens-none');
     expect(htmlEn).toContain('Add Event');
     expect(htmlEn).toContain('Chronological Life Events');
     expect(htmlEn).toContain('Age 26');
     expect(htmlEn).toContain('Vitebsk Synagogue Metrical Book, 1912, entry #48');
     expect(htmlEn).toContain('Geographic Life Migration Map');
+    expect(htmlEn).toContain('https://tile.openstreetmap.org/');
+    expect(htmlEn).toContain('© OpenStreetMap contributors');
     expect(htmlEn).toContain('Biographical Narrative');
     expect(htmlEn).toContain('Early Life &amp; Engineering Career');
+
+    const appSource = fs.readFileSync(
+      path.resolve(__dirname, '../../src/App.tsx'),
+      'utf-8'
+    );
+    expect(appSource).toContain(
+      "label: activePersonName || t('profile.breadcrumbLabel')"
+    );
+    expect(appSource).not.toContain(
+      "label: rawPersonId || t('profile.breadcrumbLabel')"
+    );
 
     const htmlRu = renderWithProviders(
       <PersonProfilePage
