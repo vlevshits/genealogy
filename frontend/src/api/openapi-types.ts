@@ -142,8 +142,8 @@ export interface PersonDetailDto {
   nickname?: string | null;
   name_prefix?: string | null;
   name_suffix?: string | null;
-  birth: { date: string; place: string | null } | null;
-  death: { date: string; place: string | null } | null;
+  birth: { date: string | null; place: string | null } | null;
+  death: { date: string | null; place: string | null } | null;
   avatar_url: string | null;
   biography?: string | null;
   notes: string | null;
@@ -335,16 +335,27 @@ export interface TreePersonNodeDto {
   gid: string;
   sex: SexCode;
   is_living: boolean;
+  living_override?: boolean | null;
   is_private: boolean;
   primary_name: {
     given_name: string;
     patronymic: string | null;
     surname: string;
   };
-  birth: { date: string; place: string | null } | null;
-  death: { date: string; place: string | null } | null;
+  birth_surname?: string | null;
+  nickname?: string | null;
+  name_prefix?: string | null;
+  name_suffix?: string | null;
+  biography?: string | null;
+  birth: { date: string | null; place: string | null } | null;
+  death: { date: string | null; place: string | null } | null;
   avatar_url: string | null;
   notes: string | null;
+  birth_sort?: number | null;
+  death_sort?: number | null;
+  has_death_event?: boolean;
+  alt_names?: IndividualAltNameDto[];
+  version?: number;
 }
 
 export interface TreeEdgeDto {
@@ -373,5 +384,173 @@ export interface TreeViewResponse {
   resolved_home_person_id: string | null;
   total_visible: number;
 }
+
+// =============================================================================
+// Phase 1.7 — Person Profile Page: Timeline, Family, Media & Notes DTOs
+// =============================================================================
+
+export interface FaceTagDto {
+  id: string;
+  person_id: string;
+  person_name: string;
+  is_living: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface MediaAssetSummaryDto {
+  id: string;
+  gid: string;
+  title: string;
+  mime_type: string;
+  file_url: string;
+  is_private: boolean;
+  only_living_persons: boolean;
+  linked_person_ids: string[];
+  face_tags: FaceTagDto[];
+}
+
+export interface NoteDto {
+  id: string;
+  entity_type: 'individual' | 'family' | 'event' | 'place' | 'media' | string;
+  entity_id: string;
+  body: string;
+  is_private: boolean;
+  sort_order: number;
+  version: number;
+}
+
+export interface CreateNoteInput {
+  entity_type: 'individual' | 'family' | 'event' | 'place' | 'media' | string;
+  entity_id: string;
+  body: string;
+  is_private?: boolean;
+  sort_order?: number;
+}
+
+export interface UpdateNoteInput {
+  body?: string;
+  is_private?: boolean;
+  sort_order?: number;
+  version?: number;
+}
+
+export interface ProfileKinshipDto {
+  home_person_id: string;
+  target_person_id?: string;
+  relation_key?: string;
+  code?: string;
+  label_en?: string;
+  label_ru?: string;
+  steps?: number;
+  degree?: number;
+  path_person_ids?: string[];
+  home_person_name?: string;
+}
+
+export interface ProfileLifeEventDto {
+  id: string;
+  gid: string;
+  individual_id?: string | null;
+  family_id?: string | null;
+  event_type: string;
+  custom_type?: string | null;
+  date?: GenDate | null;
+  date_sort?: number | null;
+  gedcom_date?: string | null;
+  place_id?: string | null;
+  place_full_name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  description?: string | null;
+  source_text?: string | null;
+  media_ids: string[];
+  is_private: boolean;
+  age_at_event?: number | null;
+  scans_count?: number;
+  spouse_id?: string | null;
+  spouse_name?: string | null;
+  version: number;
+}
+
+export interface ProfileRelativeSummaryDto {
+  id: string;
+  gid: string;
+  given_name?: string;
+  patronymic?: string | null;
+  surname?: string;
+  display_name?: string;
+  sex: string;
+  is_living: boolean;
+  birth_year?: number | null;
+  death_year?: number | null;
+  avatar_url?: string | null;
+}
+
+export interface ProfileChildSummaryDto {
+  person?: ProfileRelativeSummaryDto;
+  relative?: ProfileRelativeSummaryDto;
+  sort_order: number;
+  rel_to_partner1?: string;
+  rel_to_partner2?: string;
+  rel_to_target?: string;
+}
+
+export interface ProfileParentFamilyDto {
+  family_id: string;
+  gid: string;
+  relationship_type?: string;
+  father?: ProfileRelativeSummaryDto | null;
+  mother?: ProfileRelativeSummaryDto | null;
+  parents?: ProfileRelativeSummaryDto[];
+  child_relation?: string;
+  siblings: ProfileRelativeSummaryDto[];
+  version?: number;
+}
+
+export interface ProfileSpouseFamilyDto {
+  family_id: string;
+  gid: string;
+  relationship_type: string;
+  spouse: ProfileRelativeSummaryDto | null;
+  marriage_date?: string | null;
+  marriage_place?: string | null;
+  marriage_event?: { date?: string | null; place?: string | null } | null;
+  children: ProfileChildSummaryDto[];
+  version?: number;
+}
+
+export interface ProfileFamiliesDto {
+  parent_families: ProfileParentFamilyDto[];
+  spouse_families: ProfileSpouseFamilyDto[];
+}
+
+export interface ProfileSourceSummaryDto {
+  source_text: string;
+  event_ids: string[];
+  events_count?: number;
+  count?: number;
+}
+
+export interface ProfileCapabilitiesDto {
+  can_edit: boolean;
+  can_delete: boolean;
+  can_merge: boolean;
+  is_home_person: boolean;
+}
+
+export interface PersonProfileResponseDto {
+  person: TreePersonNodeDto;
+  kinship: ProfileKinshipDto | null;
+  events: ProfileLifeEventDto[];
+  families: ProfileFamiliesDto;
+  media: MediaAssetSummaryDto[];
+  notes: NoteDto[];
+  sources_summary: ProfileSourceSummaryDto[];
+  capabilities: ProfileCapabilitiesDto;
+}
+
 
 

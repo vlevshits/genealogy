@@ -266,6 +266,19 @@
       "privateLabel": "Mark event as private",
       "privateDescription": "Hidden from Viewers and public guests",
       "softWarningChronology": "Soft warning: Event date appears earlier than person's birth year (1912). You can still save."
+    },
+    "pedigree": {
+      "birth": "Biological",
+      "adopted": "Adopted",
+      "foster": "Foster",
+      "step": "Step",
+      "unknown": "Unknown"
+    },
+    "relationships": {
+      "married": "Married",
+      "civil_union": "Civil Union",
+      "partners": "Partners",
+      "unknown": "Union"
     }
   },
   "workbench": {
@@ -864,6 +877,164 @@
       "birthDateHint": "Supports exact dates, approximate years, or Julian (Old Style) dates.",
       "submitBtn": "Create My Record & Open Tree",
       "createdToast": "Your profile has been created and set as your home person"
+    }
+  },
+  "profile": {
+    "breadcrumbLabel": "Person Profile",
+    "notFoundTitle": "Person record not found",
+    "notFoundDesc": "The requested person record does not exist or is restricted by privacy settings.",
+    "hero": {
+      "ariaLabel": "Person identity header",
+      "photoCountIndicator": "{current} of {total} photos",
+      "kinshipBadge": "Kinship: {relation}",
+      "neeLabel": "née",
+      "alsoKnownAs": "Also known as",
+      "bornPrefix": "b.",
+      "deceasedLabel": "Deceased",
+      "dateUnknown": "date unknown",
+      "birthNotRecorded": "Birth date not recorded",
+      "ageAtDeath": "Age {age}",
+      "publicLivingNotice": "Living family member — personal dates, locations, and biography are protected in Public Guest View.",
+      "gidLabel": "Record ID",
+      "qualityMissingBirthHint": "Data quality notice: birth date is missing"
+    },
+    "kinship": {
+      "self": "Self",
+      "spouse": "Spouse",
+      "parent": "Parent",
+      "child": "Child",
+      "grandparent": "Grandparent",
+      "grandchild": "Grandchild",
+      "great_grandparent": "Great-Grandparent",
+      "great_grandchild": "Great-Grandchild",
+      "sibling": "Sibling",
+      "pibling": "Uncle / Aunt",
+      "nibling": "Nephew / Niece",
+      "first_cousin": "First Cousin",
+      "relative": "Relative"
+    },
+    "actions": {
+      "viewInTree": "View in Tree",
+      "editProfile": "Edit Profile",
+      "fullIdentityDialog": "Full Profile & Alternate Names Dialog",
+      "addEvent": "Add Event",
+      "addRelative": "Add Relative",
+      "moreAria": "More profile actions",
+      "setHomePerson": "Set as my home person",
+      "markPrivate": "Mark record private",
+      "unmarkPrivate": "Remove private restriction",
+      "viewHistory": "Change History",
+      "mergeWith": "Merge with duplicate...",
+      "copyLink": "Copy profile link",
+      "linkCopiedToast": "Profile link copied to clipboard",
+      "deletePerson": "Delete person record"
+    },
+    "inlineEdit": {
+      "title": "Inline Identity Edit"
+    },
+    "tabs": {
+      "ariaLabel": "Person profile sections",
+      "chronology": "Chronology & Map",
+      "family": "Family & Relations",
+      "media": "Media & Documents",
+      "notes": "Notes & Sources"
+    },
+    "chronology": {
+      "timelineTitle": "Chronological Life Events",
+      "ageAtEvent": "Age {age}",
+      "scansAttached": "{count} scan(s)",
+      "withSpouse": "Spouse",
+      "sourceLabel": "Source",
+      "editEventAria": "Edit life event",
+      "deleteEventAria": "Delete life event",
+      "eventDeletedToast": "Life event deleted",
+      "emptyEventsTitle": "No life events recorded yet",
+      "emptyEventsDesc": "Add birth, marriage, residence, military service, or other archival milestones.",
+      "maskedTitle": "Timeline hidden for living person",
+      "maskedDesc": "Sign in as a family member to view the chronology and life map for living relatives."
+    },
+    "map": {
+      "title": "Geographic Life Migration Map",
+      "stopsCount": "{count} stop(s)",
+      "svgAriaLabel": "Geographic migration path of life events",
+      "emptyTitle": "No geocoded locations yet",
+      "emptyDesc": "Events linked to places with latitude and longitude coordinates will plot numbered pins and migration lines here."
+    },
+    "biography": {
+      "title": "Biographical Narrative",
+      "markdownHint": "Supports Markdown headings, bold/italic text, and bullet lists",
+      "previewBtn": "Preview",
+      "editModeBtn": "Back to Editor",
+      "placeholder": "Write a biographical summary, historical context, or family memories...",
+      "emptyText": "No biographical narrative has been written yet.",
+      "savedToast": "Biography updated"
+    },
+    "family": {
+      "parentsAndSiblingsTitle": "Parents & Siblings",
+      "spousesAndChildrenTitle": "Spouses & Children",
+      "parentsSubheading": "Parents",
+      "siblingsSubheading": "Siblings",
+      "childrenSubheading": "Children",
+      "fatherRole": "Father",
+      "motherRole": "Mother",
+      "parentRole": "Parent",
+      "brotherRole": "Brother",
+      "sisterRole": "Sister",
+      "siblingRole": "Sibling",
+      "spouseRole": "Spouse / Partner",
+      "sonRole": "Son",
+      "daughterRole": "Daughter",
+      "childRole": "Child",
+      "singleParentUnion": "Single-parent family unit",
+      "noParentsTitle": "No parents or siblings linked",
+      "noParentsDesc": "Link or create parents and siblings to connect this person to earlier generations.",
+      "noSpousesTitle": "No spouses or children linked",
+      "noSpousesDesc": "Add a spouse/partner or children to build descendant branches."
+    },
+    "media": {
+      "photosTitle": "Portraits & Family Photographs",
+      "documentsTitle": "Documents & Archival Scans",
+      "addPhotoBtn": "Add Photo",
+      "tagExistingBtn": "Tag in Existing Photo",
+      "uploadScanBtn": "Upload Archival Scan",
+      "taggedCount": "{count} tagged",
+      "taggedRelativesHeading": "Tagged Family Members",
+      "emptyPhotosTitle": "No photographs linked yet",
+      "emptyPhotosDesc": "Upload family portraits or tag this person in existing archive photos.",
+      "emptyDocumentsTitle": "No archival documents attached",
+      "emptyDocumentsDesc": "Attach metrical book extracts, civil certificates, or census scans.",
+      "uploadModalTitle": "Upload Media or Archival Scan",
+      "uploadModalDesc": "Select image files or PDF scans to attach to this person's profile.",
+      "maskedTitle": "Media hidden for living person",
+      "maskedDesc": "Sign in as a family member to view photographs and documents for living relatives."
+    },
+    "notes": {
+      "title": "Research Notes & Transcriptions",
+      "addNoteBtn": "Add Note",
+      "researchNoteBadge": "Research Note",
+      "editNoteAria": "Edit note",
+      "deleteNoteAria": "Delete note",
+      "addDialogTitle": "Add Research Note",
+      "editDialogTitle": "Edit Research Note",
+      "dialogSubtitle": "Record archival transcriptions, oral history remarks, or research hypotheses in Markdown.",
+      "bodyLabel": "Note Content (Markdown)",
+      "bodyPlaceholder": "Enter transcription, source commentary, or family story...",
+      "privateToggleLabel": "Mark note as private (visible only to Editors and Administrators)",
+      "emptyPreview": "Nothing to preview yet.",
+      "emptyNotesTitle": "No research notes recorded",
+      "emptyNotesDesc": "Add archival transcriptions, research questions, or family stories.",
+      "savedToast": "Research note saved",
+      "deletedToast": "Research note deleted",
+      "maskedTitle": "Notes hidden for living person",
+      "maskedDesc": "Sign in as a family member to view research notes for living relatives."
+    },
+    "sources": {
+      "title": "Sources Used Summary",
+      "subtitle": "Distinct archival citations referenced across this person's life events.",
+      "eventsReferenced": "Referenced in {count} event(s)",
+      "jumpToEventBtn": "Show in Timeline",
+      "emptyTitle": "No event sources cited yet",
+      "emptyDesc": "Add a source citation on any life event to build the bibliography for this person."
     }
   }
 }

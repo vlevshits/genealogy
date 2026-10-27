@@ -374,16 +374,27 @@ export interface TreePersonNodeDto {
   gid: string;
   sex: 'M' | 'F' | 'U';
   is_living: boolean;
+  living_override?: boolean | null;
   is_private: boolean;
   primary_name: {
     given_name: string;
     patronymic: string | null;
     surname: string;
   };
-  birth: { date: string; place: string | null } | null;
-  death: { date: string; place: string | null } | null;
+  birth_surname?: string | null;
+  nickname?: string | null;
+  name_prefix?: string | null;
+  name_suffix?: string | null;
+  biography?: string | null;
+  birth: { date: string | null; place: string | null } | null;
+  death: { date: string | null; place: string | null } | null;
   avatar_url: string | null;
   notes: string | null;
+  birth_sort?: number | null;
+  death_sort?: number | null;
+  has_death_event?: boolean;
+  alt_names?: import('./openapi-types').IndividualAltNameDto[];
+  version?: number;
 }
 
 export interface TreeDataResponse {
@@ -792,6 +803,7 @@ export * from './openapi-types';
 import {
   CreateFamilyInput,
   CreateLifeEventInput,
+  CreateNoteInput,
   CreatePersonInput,
   CreatePlaceInput,
   DeleteImpactDto,
@@ -799,9 +811,11 @@ import {
   IndividualDto,
   LifeEventDto,
   MergePlaceResponse,
+  NoteDto,
   OnboardingStatusResponse,
   PatronymicSuggestionDto,
   PersonDetailDto,
+  PersonProfileResponseDto,
   PlaceDetailDto,
   PlaceDto,
   PlacesListResponse,
@@ -812,6 +826,7 @@ import {
   TreeViewResponse,
   UpdateFamilyInput,
   UpdateLifeEventInput,
+  UpdateNoteInput,
   UpdatePersonInput,
   UpdatePlaceInput,
 } from './openapi-types';
@@ -1052,6 +1067,57 @@ export async function fetchTreeView(
   const qs = search.toString();
   return apiFetch<TreeViewResponse>(`/tree/view${qs ? `?${qs}` : ''}`);
 }
+
+// =============================================================================
+// Phase 1.7 — Person Profile Page & Notes Endpoints
+// =============================================================================
+
+export async function fetchPersonProfile(
+  id: string,
+  include?: string
+): Promise<PersonProfileResponseDto> {
+  const qs = include ? `?include=${encodeURIComponent(include)}` : '';
+  return apiFetch<PersonProfileResponseDto>(
+    `/persons/${encodeURIComponent(id)}/profile${qs}`
+  );
+}
+
+export async function fetchNotes(params?: {
+  entity_type?: string;
+  entity_id?: string;
+}): Promise<{ items: NoteDto[]; total: number }> {
+  const search = new URLSearchParams();
+  if (params?.entity_type) search.set('entity_type', params.entity_type);
+  if (params?.entity_id) search.set('entity_id', params.entity_id);
+  const qs = search.toString();
+  return apiFetch<{ items: NoteDto[]; total: number }>(
+    `/notes${qs ? `?${qs}` : ''}`
+  );
+}
+
+export async function createNote(data: CreateNoteInput): Promise<NoteDto> {
+  return apiFetch<NoteDto>('/notes', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateNote(
+  id: string,
+  data: UpdateNoteInput
+): Promise<NoteDto> {
+  return apiFetch<NoteDto>(`/notes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  return apiFetch<void>(`/notes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 
 
 

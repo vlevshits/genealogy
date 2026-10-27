@@ -12,6 +12,7 @@ import { TreeCanvas, TreePrivacyPreviewCard } from './components/tree';
 import { EmptyTreeOnboardingCard } from './components/onboarding';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlacesPage } from './pages/PlacesPage';
+import { PersonProfilePage } from './pages/PersonProfilePage';
 import { AuthPages } from './pages/AuthPages';
 import {
   fetchOnboardingStatus,
@@ -250,6 +251,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
 
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
+    const focusParam = new URLSearchParams(search).get('focus');
     return (
       <AppShell
         currentPath={path}
@@ -257,8 +259,34 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         instanceTitle={instanceTitle}
       >
         <TreeCanvas
+          focusPersonId={focusParam}
           onSignIn={() => navigate('/login')}
           onNavigate={navigate}
+        />
+      </AppShell>
+    );
+  }
+
+  // 5a. Person Profile route (/persons/:id) — (03-person-profile-page.md)
+  if (path.startsWith('/persons/')) {
+    const rawPersonId = decodeURIComponent(
+      path.slice('/persons/'.length).split('/')[0] || ''
+    );
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'tree', label: t('nav.tree'), onClick: () => navigate('/tree') },
+          { id: 'person', label: rawPersonId || t('profile.breadcrumbLabel') },
+        ]}
+      >
+        <PersonProfilePage
+          personId={rawPersonId}
+          onNavigate={navigate}
+          onSignIn={() => navigate('/login')}
         />
       </AppShell>
     );

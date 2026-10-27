@@ -41,6 +41,7 @@ import { PersonBottomSheet } from './PersonBottomSheet';
 export interface TreeCanvasProps {
   initialTreeView?: TreeViewResponse;
   initialSelectedPersonId?: string | null;
+  focusPersonId?: string | null;
   isMobileViewport?: boolean;
   onSignIn?: () => void;
   onNavigate?: (path: string) => void;
@@ -52,6 +53,7 @@ const MAX_ZOOM = 3.0;
 export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   initialTreeView,
   initialSelectedPersonId = null,
+  focusPersonId = null,
   isMobileViewport,
   onSignIn,
   onNavigate,
@@ -70,7 +72,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     initialTreeView?.generations ?? 4
   );
   const [focalId, setFocalId] = useState<string | null>(
-    initialTreeView?.focal_id ?? null
+    focusPersonId ?? initialTreeView?.focal_id ?? null
   );
 
   // Camera state
@@ -159,6 +161,12 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     },
     [initialTreeView, focalId, mode, generations]
   );
+
+  useEffect(() => {
+    if (focusPersonId) {
+      setFocalId(focusPersonId);
+    }
+  }, [focusPersonId]);
 
   useEffect(() => {
     if (initialTreeView) {
