@@ -15,6 +15,7 @@ import { PlacesPage } from './pages/PlacesPage';
 import { PersonProfilePage } from './pages/PersonProfilePage';
 import { PeoplePage } from './pages/PeoplePage';
 import { SurnamesPage } from './pages/SurnamesPage';
+import { MediaPage } from './pages/MediaPage';
 import { AuthPages } from './pages/AuthPages';
 import {
   fetchOnboardingStatus,
@@ -329,6 +330,23 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         ]}
       >
         <PeoplePage initialSearch={search} onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
+  // 5c-2. Media Archive & Face Tagging Studio route (/media) — (04-media-gallery-page.md, 06-media-face-tagging.md)
+  if (path.startsWith('/media')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'media', label: t('nav.media') },
+        ]}
+      >
+        <MediaPage initialSearch={search} onNavigate={navigate} />
       </AppShell>
     );
   }

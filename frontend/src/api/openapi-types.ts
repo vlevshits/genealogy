@@ -398,6 +398,22 @@ export interface FaceTagDto {
   y: number;
   width: number;
   height: number;
+  is_primary_avatar?: boolean;
+}
+
+export interface MediaLinkDto {
+  id: string;
+  media_id: string;
+  entity_type: 'individual' | 'family' | 'event' | 'place' | string;
+  entity_id: string;
+  role?: string | null;
+}
+
+export interface AvatarCropDto {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface MediaAssetSummaryDto {
@@ -406,10 +422,90 @@ export interface MediaAssetSummaryDto {
   title: string;
   mime_type: string;
   file_url: string;
+  file_name?: string | null;
+  original_file_name?: string | null;
+  file_size_bytes?: number | null;
+  sha256?: string | null;
+  width?: number | null;
+  height?: number | null;
+  description?: string | null;
+  date_taken?: string | null;
+  date_sort?: number | null;
+  place_id?: string | null;
+  place_full_name?: string | null;
   is_private: boolean;
   only_living_persons: boolean;
   linked_person_ids: string[];
   face_tags: FaceTagDto[];
+  links?: MediaLinkDto[];
+  version?: number;
+}
+
+export interface MediaArchiveResponse {
+  items: MediaAssetSummaryDto[];
+  next_cursor: string | null;
+  total: number;
+  total_unfiltered: number;
+}
+
+export interface MediaFilterQuery {
+  q?: string;
+  person_id?: string;
+  decade?: string;
+  type?: string;
+  untagged?: boolean;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface CreateMediaInput {
+  file_name: string;
+  mime_type: string;
+  data?: string;
+  title?: string | null;
+  description?: string | null;
+  date_taken?: string | null;
+  place_id?: string | null;
+  place_path?: string | null;
+  is_private?: boolean;
+  width?: number | null;
+  height?: number | null;
+  linked_person_ids?: string[];
+  gid?: string | null;
+}
+
+export interface UpdateMediaInput {
+  title?: string | null;
+  description?: string | null;
+  date_taken?: string | null;
+  place_id?: string | null;
+  place_path?: string | null;
+  is_private?: boolean;
+  version?: number;
+}
+
+export interface CreateFaceTagInput {
+  person_id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  is_primary_avatar?: boolean;
+}
+
+export interface UpdateFaceTagInput {
+  person_id?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  is_primary_avatar?: boolean;
+}
+
+export interface CreateMediaLinkInput {
+  entity_type: 'individual' | 'family' | 'event' | string;
+  entity_id: string;
+  role?: string | null;
 }
 
 export interface NoteDto {

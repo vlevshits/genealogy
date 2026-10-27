@@ -436,6 +436,31 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     loadProfile();
   }, [initialProfile, loadProfile]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleAvatarUpdated = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ personId: string; avatarUrl: string }>
+      ).detail;
+      if (detail && detail.personId === profile.person.id) {
+        setProfile((prev) => ({
+          ...prev,
+          person: {
+            ...prev.person,
+            avatar_url: detail.avatarUrl,
+          },
+        }));
+      }
+    };
+    window.addEventListener('genealogy:avatar-updated', handleAvatarUpdated);
+    return () => {
+      window.removeEventListener(
+        'genealogy:avatar-updated',
+        handleAvatarUpdated
+      );
+    };
+  }, [profile.person.id]);
+
   const navigateTo = (nextPath: string) => {
     if (onNavigate) {
       onNavigate(nextPath);
@@ -654,7 +679,33 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
           media={profile.media}
           canEdit={profile.capabilities.can_edit}
           isMaskedLiving={isMaskedLiving}
+          personId={profile.person.id}
           onSelectPersonId={(pid) => navigateTo(`/persons/${pid}`)}
+          onMediaUpdated={(updatedAsset) => {
+            setProfile((prev) => ({
+              ...prev,
+              media: prev.media.map((m) =>
+                m.id === updatedAsset.id ? updatedAsset : m
+              ),
+            }));
+          }}
+          onMediaUploaded={(createdAssets) => {
+            setProfile((prev) => ({
+              ...prev,
+              media: [...createdAssets, ...prev.media],
+            }));
+          }}
+          onAvatarSynchronized={(targetPersonId, nextAvatarUrl) => {
+            if (targetPersonId === profile.person.id) {
+              setProfile((prev) => ({
+                ...prev,
+                person: {
+                  ...prev.person,
+                  avatar_url: nextAvatarUrl,
+                },
+              }));
+            }
+          }}
         />
       ),
     },

@@ -34,20 +34,23 @@ use crate::{
         },
         health::{health_check, HealthResponse},
         rbac::{
-            create_event, create_family, create_note, create_person, create_place, delete_event,
-            delete_family, delete_note, delete_person, delete_place, export_gedcom,
-            export_printable_pdf, get_audit_history, get_data_quality_warnings, get_family,
-            get_media_file, get_onboarding_status, get_patronymic_suggestion, get_person,
-            get_person_delete_impact, get_person_profile, get_place_detail, get_tree,
-            get_tree_view, global_search, import_gedcom, list_event_sources, list_events,
-            list_families, list_media_archive, list_notes, list_people_directory,
-            list_people_surnames, list_places_directory, merge_duplicate_people, merge_place,
-            quick_add_relative, restore_deleted_person, start_with_self, update_event,
-            update_family, update_note, update_person, update_place, AdminToolOperationResponse,
-            CreateEventRequest, CreateFamilyRequest, CreateNoteRequest, CreatePersonRequest,
-            CreatePlaceRequest, DeleteImpactDto, EventFilterQuery, EventListResponse,
-            FamilyListResponse, MediaArchiveResponse, MergePlaceRequest, NoteFilterQuery,
-            NoteListResponse, OnboardingStatusResponse, PatronymicSuggestionQuery,
+            create_event, create_face_tag, create_family, create_media, create_media_link,
+            create_note, create_person, create_place, delete_event, delete_face_tag, delete_family,
+            delete_media, delete_media_link, delete_note, delete_person, delete_place,
+            export_gedcom, export_printable_pdf, get_audit_history, get_data_quality_warnings,
+            get_family, get_media_crop, get_media_detail, get_media_file, get_onboarding_status,
+            get_patronymic_suggestion, get_person, get_person_delete_impact, get_person_profile,
+            get_place_detail, get_tree, get_tree_view, global_search, import_gedcom,
+            list_event_sources, list_events, list_families, list_media_archive, list_notes,
+            list_people_directory, list_people_surnames, list_places_directory,
+            merge_duplicate_people, merge_place, quick_add_relative, restore_deleted_person,
+            start_with_self, update_event, update_face_tag, update_family, update_media,
+            update_note, update_person, update_place, AdminToolOperationResponse,
+            CreateEventRequest, CreateFaceTagRequest, CreateFamilyRequest, CreateMediaLinkRequest,
+            CreateMediaRequest, CreateNoteRequest, CreatePersonRequest, CreatePlaceRequest,
+            DeleteImpactDto, EventFilterQuery, EventListResponse, FamilyListResponse,
+            MediaArchiveResponse, MediaCropQuery, MediaFilterQuery, MergePlaceRequest,
+            NoteFilterQuery, NoteListResponse, OnboardingStatusResponse, PatronymicSuggestionQuery,
             PatronymicSuggestionResponse, PeopleDirectoryItemDto, PeopleDirectoryQuery,
             PeopleDirectoryResponse, PersonMergeRequest, PersonProfileQuery,
             PersonProfileResponseDto, PlaceDetailDto, PlacesDirectoryResponse, PlacesFilterQuery,
@@ -58,8 +61,9 @@ use crate::{
             SearchPlaceResultDto, SearchQuery, SearchResultResponseDto, SourceAutocompleteResponse,
             SourceSearchQuery, StartWithSelfRequest, StartWithSelfResponse, SurnameIndexEntryDto,
             SurnameLetterGroupDto, SurnamesIndexQuery, SurnamesIndexResponse, TreeEdgeDto,
-            TreeResponse, TreeViewQuery, TreeViewResponse, UpdateEventRequest, UpdateFamilyRequest,
-            UpdateNoteRequest, UpdatePersonRequest, UpdatePlaceRequest,
+            TreeResponse, TreeViewQuery, TreeViewResponse, UpdateEventRequest,
+            UpdateFaceTagRequest, UpdateFamilyRequest, UpdateMediaRequest, UpdateNoteRequest,
+            UpdatePersonRequest, UpdatePlaceRequest,
         },
         system::{
             download_admin_backup, get_admin_settings, get_admin_system, get_system_info,
@@ -85,9 +89,10 @@ use crate::{
         backup::{BackupArchiveInfo, BackupFileEntry, BackupManifest, BackupStats},
         genealogy::ProfileKinshipDto,
         privacy::{
-            ChangeLogEntryDto, FaceTagDto, FamilyChildDto, FamilyDto, IndividualAltNameDto,
-            LifeEventDto, MediaAssetSummaryDto, NoteDto, PersonNameDto, PlaceAltNameDto,
-            PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
+            AvatarCropDto, ChangeLogEntryDto, FaceTagDto, FamilyChildDto, FamilyDto,
+            IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, MediaLinkDto, NoteDto,
+            PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
+            VitalEventSummaryDto,
         },
         security::csrf_protection_middleware,
     },
@@ -167,6 +172,7 @@ use crate::{
         rbac::update_note,
         rbac::delete_note,
         rbac::get_media_file,
+        rbac::get_media_crop,
         rbac::global_search,
         rbac::list_people_directory,
         rbac::list_people_surnames,
@@ -177,6 +183,15 @@ use crate::{
         rbac::delete_place,
         rbac::merge_place,
         rbac::list_media_archive,
+        rbac::create_media,
+        rbac::get_media_detail,
+        rbac::update_media,
+        rbac::delete_media,
+        rbac::create_face_tag,
+        rbac::update_face_tag,
+        rbac::delete_face_tag,
+        rbac::create_media_link,
+        rbac::delete_media_link,
         rbac::export_gedcom,
         rbac::import_gedcom,
         rbac::export_printable_pdf,
@@ -246,12 +261,14 @@ use crate::{
             PersonNameDto,
             IndividualAltNameDto,
             VitalEventSummaryDto,
+            AvatarCropDto,
             TreePersonNodeDto,
             FamilyChildDto,
             FamilyDto,
             LifeEventDto,
             NoteDto,
             FaceTagDto,
+            MediaLinkDto,
             MediaAssetSummaryDto,
             PlaceAltNameDto,
             PlaceBreadcrumbDto,
@@ -314,6 +331,13 @@ use crate::{
             SurnameLetterGroupDto,
             SurnamesIndexResponse,
             PlacesDirectoryResponse,
+            MediaFilterQuery,
+            CreateMediaRequest,
+            UpdateMediaRequest,
+            MediaCropQuery,
+            CreateFaceTagRequest,
+            UpdateFaceTagRequest,
+            CreateMediaLinkRequest,
             MediaArchiveResponse,
             AdminToolOperationResponse,
             PersonMergeRequest,
@@ -323,7 +347,8 @@ use crate::{
         (name = "System", description = "System operations and health monitoring"),
         (name = "Auth", description = "Authentication, Passkeys (WebAuthn), sessions, and recovery"),
         (name = "Admin", description = "Instance administration, settings, family members, and backups"),
-        (name = "Tree & Privacy", description = "RBAC-enforced tree nodes, living-person privacy masking, and media shield")
+        (name = "Tree & Privacy", description = "RBAC-enforced tree nodes, living-person privacy masking, and media shield"),
+        (name = "Media & Avatars", description = "Media gallery, file/crop streaming, face tagging, primary avatars, and entity linking")
     ),
     info(
         title = "Genealogy Family Tree API",
@@ -423,7 +448,22 @@ pub fn create_router(state: AppState) -> Router {
         .route("/events/{id}", patch(update_event).delete(delete_event))
         .route("/notes", get(list_notes).post(create_note))
         .route("/notes/{id}", patch(update_note).delete(delete_note))
+        .route("/media", get(list_media_archive).post(create_media))
+        .route(
+            "/media/{id}",
+            get(get_media_detail)
+                .patch(update_media)
+                .delete(delete_media),
+        )
         .route("/media/{id}/file", get(get_media_file))
+        .route("/media/{id}/crop", get(get_media_crop))
+        .route("/media/{id}/tags", post(create_face_tag))
+        .route(
+            "/media/{id}/tags/{tag_id}",
+            patch(update_face_tag).delete(delete_face_tag),
+        )
+        .route("/media/{id}/links", post(create_media_link))
+        .route("/media/{id}/links/{link_id}", delete(delete_media_link))
         .route("/search", get(global_search))
         .route("/people", get(list_people_directory))
         .route("/people/surnames", get(list_people_surnames))
@@ -435,7 +475,6 @@ pub fn create_router(state: AppState) -> Router {
                 .delete(delete_place),
         )
         .route("/places/{id}/merge", post(merge_place))
-        .route("/media", get(list_media_archive))
         .route("/gedcom/export", get(export_gedcom))
         .route("/gedcom/import", post(import_gedcom))
         .route("/export/pdf", post(export_printable_pdf))

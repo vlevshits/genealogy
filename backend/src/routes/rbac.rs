@@ -5,9 +5,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -25,10 +28,11 @@ use crate::{
             canonicalize_surname_display, evaluate_is_living, fold_slavic_surname_stem,
             normalize_russian_orthography_word, normalize_search_tokens, parse_search_query,
             redact_media_for_caller, redact_person_for_caller, redact_person_for_tree_view,
-            suggest_slavic_patronymic, transliterate_to_latin, ChangeLogEntryDto, FamilyChildDto,
-            FamilyDto, IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, NoteDto,
-            PersonLivingEvaluationInput, PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto,
-            PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
+            suggest_slavic_patronymic, transliterate_to_latin, AvatarCropDto, ChangeLogEntryDto,
+            FaceTagDto, FamilyChildDto, FamilyDto, GenealogyPrivacyStore, IndividualAltNameDto,
+            LifeEventDto, MediaAssetSummaryDto, MediaLinkDto, NoteDto, PersonLivingEvaluationInput,
+            PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
+            VitalEventSummaryDto,
         },
         rbac::{CallerAccess, PublicOrAuth, RequireAdmin, RequireAuth, RequireEditor},
     },
@@ -629,11 +633,99 @@ pub struct PlacesDirectoryResponse {
     pub total: usize,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, IntoParams, ToSchema)]
+pub struct MediaFilterQuery {
+    pub q: Option<String>,
+    pub person_id: Option<String>,
+    /// e.g. `"1940s"` or `"1940"`
+    pub decade: Option<String>,
+    /// `"all"`, `"photos"`/`"photo"`, `"documents"`/`"document"`, `"audio"`
+    #[serde(rename = "type")]
+    pub media_type: Option<String>,
+    pub untagged: Option<bool>,
+    pub cursor: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct CreateMediaRequest {
+    pub gid: Option<String>,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    /// Base64-encoded binary payload (optional; supports data URL prefix `data:image/...;base64,...`)
+    pub data: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub caption: Option<String>,
+    pub date_taken: Option<String>,
+    pub place_id: Option<String>,
+    pub place_path: Option<String>,
+    pub is_private: Option<bool>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub linked_person_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct UpdateMediaRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub caption: Option<String>,
+    pub date_taken: Option<String>,
+    pub place_id: Option<String>,
+    pub place_path: Option<String>,
+    pub is_private: Option<bool>,
+    pub version: Option<i32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, IntoParams, ToSchema)]
+pub struct MediaCropQuery {
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub w: Option<f32>,
+    pub h: Option<f32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateFaceTagRequest {
+    pub person_id: String,
+    pub x: f32,
+    pub y: f32,
+    pub w: Option<f32>,
+    pub h: Option<f32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub is_primary_avatar: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct UpdateFaceTagRequest {
+    pub person_id: Option<String>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub w: Option<f32>,
+    pub h: Option<f32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub is_primary_avatar: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateMediaLinkRequest {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub role: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MediaArchiveResponse {
     pub items: Vec<MediaAssetSummaryDto>,
     pub next_cursor: Option<String>,
     pub total: usize,
+    #[serde(default)]
+    pub total_unfiltered: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -909,6 +1001,8 @@ pub async fn start_with_self(
             birth: birth_summary,
             death: None,
             avatar_url: None,
+            avatar_media_id: None,
+            avatar_crop: None,
             notes: None,
             birth_sort,
             death_sort: None,
@@ -2139,6 +2233,8 @@ pub async fn create_person(
         birth,
         death,
         avatar_url: None,
+        avatar_media_id: None,
+        avatar_crop: None,
         notes: req.notes,
         birth_sort,
         death_sort,
@@ -2492,6 +2588,8 @@ pub async fn quick_add_relative(
                 None
             },
             avatar_url: None,
+            avatar_media_id: None,
+            avatar_crop: None,
             notes: None,
             birth_sort,
             death_sort,
@@ -4260,6 +4358,40 @@ pub async fn delete_note(
     Ok(StatusCode::NO_CONTENT)
 }
 
+const DEFAULT_WEBP_BYTES: &[u8] =
+    b"RIFF\x1a\x00\x00\x00WEBPVP8L\x0d\x00\x00\x00/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07\x00";
+
+fn save_media_bytes_to_disk(media_storage_path: &str, file_name: &str, bytes: &[u8]) {
+    let primary_dir = PathBuf::from(media_storage_path).join("originals");
+    if std::fs::create_dir_all(&primary_dir).is_ok() {
+        let _ = std::fs::write(primary_dir.join(file_name), bytes);
+    }
+    let fallback_dir = PathBuf::from("/tmp/genealogy-media/originals");
+    if std::fs::create_dir_all(&fallback_dir).is_ok() {
+        let _ = std::fs::write(fallback_dir.join(file_name), bytes);
+    }
+}
+
+fn read_media_bytes_from_disk(media_storage_path: &str, file_name: &str) -> Vec<u8> {
+    if !file_name.is_empty() {
+        let primary_path = PathBuf::from(media_storage_path)
+            .join("originals")
+            .join(file_name);
+        if let Ok(bytes) = std::fs::read(&primary_path) {
+            if !bytes.is_empty() {
+                return bytes;
+            }
+        }
+        let fallback_path = PathBuf::from("/tmp/genealogy-media/originals").join(file_name);
+        if let Ok(bytes) = std::fs::read(&fallback_path) {
+            if !bytes.is_empty() {
+                return bytes;
+            }
+        }
+    }
+    DEFAULT_WEBP_BYTES.to_vec()
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/media/{id}/file",
@@ -4270,7 +4402,7 @@ pub async fn delete_note(
         (status = 200, description = "Media file binary stream", content_type = "image/webp"),
         (status = 404, description = "Media asset not found or shielded by living/private privacy", body = ErrorResponse)
     ),
-    tag = "Tree & Privacy"
+    tag = "Media & Avatars"
 )]
 pub async fn get_media_file(
     caller: PublicOrAuth,
@@ -4291,14 +4423,85 @@ pub async fn get_media_file(
     // Living-person photos and private assets return 404 Not Found (indistinguishable from missing)
     let _permitted = redact_media_for_caller(media, &access).ok_or(AppError::NotFound)?;
 
-    // Minimal valid WebP RIFF container header payload
-    let webp_bytes: &'static [u8] = b"RIFF\x1a\x00\x00\x00WEBPVP8L\x0d\x00\x00\x00/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07\x00";
+    let body_bytes = read_media_bytes_from_disk(
+        &state.config.media_storage_path,
+        media.file_name.as_deref().unwrap_or(""),
+    );
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, media.mime_type.as_str())
         .header(header::CACHE_CONTROL, "private, max-age=3600")
-        .body(Body::from(webp_bytes))
+        .body(Body::from(body_bytes))
         .map_err(|e| AppError::Internal(format!("Failed to build media response: {e}")))?;
+
+    Ok(response.into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/media/{id}/crop",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID (e.g. M0001)"),
+        ("x" = Option<f32>, Query, description = "Relative X coordinate (0.0..=1.0)"),
+        ("y" = Option<f32>, Query, description = "Relative Y coordinate (0.0..=1.0)"),
+        ("w" = Option<f32>, Query, description = "Relative width (0.0..=1.0)"),
+        ("h" = Option<f32>, Query, description = "Relative height (0.0..=1.0)")
+    ),
+    responses(
+        (status = 200, description = "Cropped avatar binary stream", content_type = "image/webp"),
+        (status = 404, description = "Media asset not found or shielded by living/private privacy", body = ErrorResponse),
+        (status = 422, description = "Invalid crop coordinates", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn get_media_crop(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(crop): Query<MediaCropQuery>,
+) -> Result<Response, AppError> {
+    let x = crop.x.unwrap_or(0.0);
+    let y = crop.y.unwrap_or(0.0);
+    let w = crop.w.or(crop.width).unwrap_or(1.0);
+    let h = crop.h.or(crop.height).unwrap_or(1.0);
+    if !(0.0..=1.0).contains(&x)
+        || !(0.0..=1.0).contains(&y)
+        || w <= 0.0
+        || w > 1.0
+        || h <= 0.0
+        || h > 1.0
+    {
+        return Err(AppError::ValidationFailed(
+            "Crop coordinates must be normalized within 0.0..=1.0".to_string(),
+            Some(HashMap::from([(
+                "crop".to_string(),
+                "out_of_bounds".to_string(),
+            )])),
+        ));
+    }
+
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+    let target = id.trim();
+
+    let media = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .ok_or(AppError::NotFound)?;
+
+    let _permitted = redact_media_for_caller(media, &access).ok_or(AppError::NotFound)?;
+
+    let body_bytes = read_media_bytes_from_disk(
+        &state.config.media_storage_path,
+        media.file_name.as_deref().unwrap_or(""),
+    );
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, media.mime_type.as_str())
+        .header(header::CACHE_CONTROL, "private, max-age=3600")
+        .body(Body::from(body_bytes))
+        .map_err(|e| AppError::Internal(format!("Failed to build media crop response: {e}")))?;
 
     Ok(response.into_response())
 }
@@ -5696,34 +5899,1234 @@ pub async fn merge_place(
     Ok(Json(merged))
 }
 
+fn extract_year_from_media(m: &MediaAssetSummaryDto) -> Option<i32> {
+    if let Some(ds) = m.date_sort {
+        let yr = ds / 10_000;
+        if (1000..=2999).contains(&yr) {
+            return Some(yr);
+        }
+    }
+    for text in [m.date_taken.as_deref().unwrap_or(""), m.title.as_str()] {
+        for token in text.split(|c: char| !c.is_ascii_digit()) {
+            if token.len() == 4 {
+                if let Ok(yr) = token.parse::<i32>() {
+                    if (1500..=2100).contains(&yr) {
+                        return Some(yr);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn sync_media_links_and_living(store: &mut GenealogyPrivacyStore, media_id: &str) {
+    let person_map: HashMap<String, (String, bool)> = store
+        .persons
+        .iter()
+        .map(|p| (p.id.clone(), (format_person_display_name(p), p.is_living)))
+        .collect();
+
+    if let Some(media) = store.media.iter_mut().find(|m| m.id == media_id) {
+        for tag in &mut media.face_tags {
+            if let Some((pname, living)) = person_map.get(&tag.person_id) {
+                tag.person_name = pname.clone();
+                tag.is_living = *living;
+            }
+            if !media.linked_person_ids.contains(&tag.person_id) {
+                media.linked_person_ids.push(tag.person_id.clone());
+            }
+            if !media
+                .links
+                .iter()
+                .any(|l| l.entity_type == "individual" && l.entity_id == tag.person_id)
+            {
+                media.links.push(MediaLinkDto {
+                    id: Uuid::new_v4().to_string(),
+                    media_id: media.id.clone(),
+                    entity_type: "individual".to_string(),
+                    entity_id: tag.person_id.clone(),
+                    role: Some("depicted".to_string()),
+                });
+            }
+        }
+
+        for link in &media.links {
+            if link.entity_type == "individual"
+                && !media.linked_person_ids.contains(&link.entity_id)
+            {
+                media.linked_person_ids.push(link.entity_id.clone());
+            }
+        }
+
+        if media.linked_person_ids.is_empty() {
+            media.only_living_persons = false;
+        } else {
+            media.only_living_persons = media
+                .linked_person_ids
+                .iter()
+                .all(|pid| person_map.get(pid).is_some_and(|(_, living)| *living));
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_primary_avatar_for_person(
+    store: &mut GenealogyPrivacyStore,
+    person_id: &str,
+    media_id: &str,
+    tag_id: &str,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+) {
+    for m in &mut store.media {
+        for t in &mut m.face_tags {
+            if t.person_id == person_id {
+                t.is_primary_avatar = m.id == media_id && t.id == tag_id;
+            }
+        }
+    }
+    if let Some(person) = store.persons.iter_mut().find(|p| p.id == person_id) {
+        person.avatar_media_id = Some(media_id.to_string());
+        person.avatar_crop = Some(AvatarCropDto {
+            x,
+            y,
+            width: w,
+            height: h,
+        });
+        person.avatar_url = Some(format!(
+            "/api/v1/media/{media_id}/crop?x={x:.4}&y={y:.4}&w={w:.4}&h={h:.4}"
+        ));
+    }
+}
+
+fn clear_primary_avatar_for_person(store: &mut GenealogyPrivacyStore, person_id: &str) {
+    for m in &mut store.media {
+        for t in &mut m.face_tags {
+            if t.person_id == person_id {
+                t.is_primary_avatar = false;
+            }
+        }
+    }
+    if let Some(person) = store.persons.iter_mut().find(|p| p.id == person_id) {
+        person.avatar_media_id = None;
+        person.avatar_crop = None;
+        person.avatar_url = None;
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/media",
+    params(
+        ("q" = Option<String>, Query, description = "Search query across title, description, place, or tagged person"),
+        ("person_id" = Option<String>, Query, description = "Filter by tagged/linked person UUID or GID"),
+        ("decade" = Option<String>, Query, description = "Filter by decade (e.g. '1940s' or '1940')"),
+        ("type" = Option<String>, Query, description = "Filter by media category ('photos', 'documents', 'audio')"),
+        ("untagged" = Option<bool>, Query, description = "Filter untagged media (true = untagged only, false = tagged only)"),
+        ("cursor" = Option<String>, Query, description = "Pagination cursor"),
+        ("limit" = Option<usize>, Query, description = "Max items per page (default 50, max 100)")
+    ),
     responses(
         (status = 200, description = "Media archive & gallery (authenticated users only)", body = MediaArchiveResponse),
         (status = 401, description = "Authentication required", body = ErrorResponse)
     ),
-    tag = "Tree & Privacy"
+    tag = "Media & Avatars"
 )]
 pub async fn list_media_archive(
     RequireAuth(auth): RequireAuth,
     State(state): State<AppState>,
+    Query(query): Query<MediaFilterQuery>,
 ) -> Result<Json<MediaArchiveResponse>, AppError> {
     let access = auth.access();
     let store = state.privacy_store.read().await;
 
-    let items: Vec<MediaAssetSummaryDto> = store
+    let unfiltered_items: Vec<MediaAssetSummaryDto> = store
         .media
         .iter()
         .filter_map(|m| redact_media_for_caller(m, &access))
         .collect();
-    let total = items.len();
+    let total_unfiltered = unfiltered_items.len();
+
+    let resolved_person_filter = if let Some(ref pid_raw) = query.person_id {
+        let trimmed = pid_raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(
+                resolve_person_id_in_store(&store.persons, trimmed)
+                    .unwrap_or_else(|| "__nonexistent__".to_string()),
+            )
+        }
+    } else {
+        None
+    };
+
+    let decade_start_year: Option<i32> = query.decade.as_deref().and_then(|d| {
+        let digits: String = d
+            .trim()
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        if digits.len() == 4 {
+            digits.parse::<i32>().ok().map(|yr| (yr / 10) * 10)
+        } else {
+            None
+        }
+    });
+
+    let q_tokens: Vec<String> = query
+        .q
+        .as_deref()
+        .map(|q| q.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
+
+    let filtered: Vec<MediaAssetSummaryDto> = unfiltered_items
+        .into_iter()
+        .filter(|m| {
+            if let Some(ref target_pid) = resolved_person_filter {
+                let matches_person = m.linked_person_ids.iter().any(|id| id == target_pid)
+                    || m.face_tags.iter().any(|t| &t.person_id == target_pid)
+                    || m.links
+                        .iter()
+                        .any(|l| l.entity_type == "individual" && &l.entity_id == target_pid);
+                if !matches_person {
+                    return false;
+                }
+            }
+
+            if let Some(dec_yr) = decade_start_year {
+                let Some(media_yr) = extract_year_from_media(m) else {
+                    return false;
+                };
+                if media_yr < dec_yr || media_yr > dec_yr + 9 {
+                    return false;
+                }
+            }
+
+            if let Some(ref mtype) = query.media_type {
+                let mt = mtype.trim().to_lowercase();
+                if !mt.is_empty() && mt != "all" {
+                    let mime_matches = match mt.as_str() {
+                        "photos" | "photo" | "image" | "images" => {
+                            m.mime_type.starts_with("image/")
+                        }
+                        "documents" | "document" | "pdf" | "doc" => {
+                            m.mime_type == "application/pdf" || m.mime_type.starts_with("text/")
+                        }
+                        "audio" => m.mime_type.starts_with("audio/"),
+                        "video" => m.mime_type.starts_with("video/"),
+                        other => m.mime_type.eq_ignore_ascii_case(other),
+                    };
+                    if !mime_matches {
+                        return false;
+                    }
+                }
+            }
+
+            if let Some(untagged_filter) = query.untagged {
+                let is_untagged = m.face_tags.is_empty() && m.linked_person_ids.is_empty();
+                if untagged_filter != is_untagged {
+                    return false;
+                }
+            }
+
+            if !q_tokens.is_empty() {
+                let mut searchable_fields = vec![
+                    m.title.clone(),
+                    m.gid.clone(),
+                    m.original_file_name.clone().unwrap_or_default(),
+                    m.description.clone().unwrap_or_default(),
+                    m.place_full_name.clone().unwrap_or_default(),
+                ];
+                for tag in &m.face_tags {
+                    searchable_fields.push(tag.person_name.clone());
+                }
+                let combined_raw = searchable_fields.join(" ").to_lowercase();
+                let combined_ortho = searchable_fields
+                    .iter()
+                    .flat_map(|s| s.split_whitespace())
+                    .map(normalize_russian_orthography_word)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let combined_lat = transliterate_to_latin(&combined_ortho);
+
+                for tok in &q_tokens {
+                    let tok_lower = tok.to_lowercase();
+                    let tok_ortho = normalize_russian_orthography_word(tok);
+                    let tok_lat = transliterate_to_latin(&tok_ortho);
+                    let matched = combined_raw.contains(&tok_lower)
+                        || combined_ortho.contains(&tok_ortho)
+                        || (!tok_lat.is_empty() && combined_lat.contains(&tok_lat));
+                    if !matched {
+                        return false;
+                    }
+                }
+            }
+
+            true
+        })
+        .collect();
+
+    let total = filtered.len();
+    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let start_idx = if let Some(ref cur) = query.cursor {
+        let cur_trimmed = cur.trim();
+        if let Ok(offset) = cur_trimmed.parse::<usize>() {
+            offset.min(total)
+        } else {
+            filtered
+                .iter()
+                .position(|m| m.id == cur_trimmed || m.gid.eq_ignore_ascii_case(cur_trimmed))
+                .map(|idx| idx + 1)
+                .unwrap_or(0)
+        }
+    } else {
+        0
+    };
+
+    let items: Vec<MediaAssetSummaryDto> =
+        filtered.into_iter().skip(start_idx).take(limit).collect();
+    let next_cursor = if start_idx + items.len() < total {
+        items.last().map(|m| m.id.clone())
+    } else {
+        None
+    };
 
     Ok(Json(MediaArchiveResponse {
         items,
-        next_cursor: None,
+        next_cursor,
         total,
+        total_unfiltered,
     }))
+}
+
+const ALLOWED_MEDIA_MIME_TYPES: &[&str] = &[
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/tiff",
+    "application/pdf",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/mp4",
+    "video/mp4",
+];
+
+fn extension_for_media(file_name: &str, mime_type: &str) -> &'static str {
+    let lower_name = file_name.to_lowercase();
+    if lower_name.ends_with(".jpg") || lower_name.ends_with(".jpeg") {
+        return "jpg";
+    }
+    if lower_name.ends_with(".png") {
+        return "png";
+    }
+    if lower_name.ends_with(".webp") {
+        return "webp";
+    }
+    if lower_name.ends_with(".gif") {
+        return "gif";
+    }
+    if lower_name.ends_with(".tif") || lower_name.ends_with(".tiff") {
+        return "tiff";
+    }
+    if lower_name.ends_with(".pdf") {
+        return "pdf";
+    }
+    if lower_name.ends_with(".mp3") {
+        return "mp3";
+    }
+    if lower_name.ends_with(".ogg") {
+        return "ogg";
+    }
+    if lower_name.ends_with(".wav") {
+        return "wav";
+    }
+    match mime_type {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/tiff" => "tiff",
+        "application/pdf" => "pdf",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" => "wav",
+        "audio/mp4" | "video/mp4" => "mp4",
+        _ => "webp",
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/media",
+    request_body = CreateMediaRequest,
+    responses(
+        (status = 201, description = "Media asset uploaded and indexed", body = MediaAssetSummaryDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 422, description = "Validation error (unsupported MIME type or invalid payload)", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn create_media(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Json(req): Json<CreateMediaRequest>,
+) -> Result<(StatusCode, Json<MediaAssetSummaryDto>), AppError> {
+    let orig_name = req.file_name.as_deref().unwrap_or("").trim();
+    if orig_name.is_empty() {
+        return Err(AppError::ValidationFailed(
+            "file_name is required".to_string(),
+            Some(HashMap::from([(
+                "file_name".to_string(),
+                "required".to_string(),
+            )])),
+        ));
+    }
+
+    let mime_trimmed = req.mime_type.as_deref().unwrap_or("").trim().to_lowercase();
+    let mime_type = if mime_trimmed.is_empty() {
+        "image/webp".to_string()
+    } else {
+        mime_trimmed
+    };
+
+    if !ALLOWED_MEDIA_MIME_TYPES.contains(&mime_type.as_str()) {
+        return Err(AppError::ValidationFailed(
+            format!("Unsupported media MIME type: {mime_type}"),
+            Some(HashMap::from([(
+                "mime_type".to_string(),
+                "unsupported_mime_type".to_string(),
+            )])),
+        ));
+    }
+
+    let raw_bytes: Vec<u8> = if let Some(ref b64_raw) = req.data {
+        let stripped = b64_raw
+            .trim()
+            .split_once(";base64,")
+            .map(|(_, payload)| payload)
+            .unwrap_or_else(|| b64_raw.trim());
+        if stripped.is_empty() {
+            DEFAULT_WEBP_BYTES.to_vec()
+        } else {
+            BASE64_STANDARD.decode(stripped).map_err(|_| {
+                AppError::ValidationFailed(
+                    "Invalid base64 media payload".to_string(),
+                    Some(HashMap::from([(
+                        "data".to_string(),
+                        "invalid_base64".to_string(),
+                    )])),
+                )
+            })?
+        }
+    } else {
+        DEFAULT_WEBP_BYTES.to_vec()
+    };
+
+    let sha_digest = Sha256::digest(&raw_bytes);
+    let sha256_hex: String = sha_digest.iter().map(|b| format!("{b:02x}")).collect();
+    let file_size_bytes = raw_bytes.len() as u64;
+
+    let id = Uuid::new_v4().to_string();
+    let ext = extension_for_media(orig_name, &mime_type);
+    let stored_file_name = format!("{id}.{ext}");
+
+    save_media_bytes_to_disk(
+        &state.config.media_storage_path,
+        &stored_file_name,
+        &raw_bytes,
+    );
+
+    let (date_taken, date_sort) = if let Some(ref dt_raw) = req.date_taken {
+        let dt_trimmed = dt_raw.trim();
+        if dt_trimmed.is_empty() {
+            (None, None)
+        } else {
+            let parsed = GenDate::parse(dt_trimmed);
+            let sort = parsed.sort_key();
+            (Some(dt_trimmed.to_string()), sort)
+        }
+    } else {
+        (None, None)
+    };
+
+    let mut store = state.privacy_store.write().await;
+
+    let (place_id, place_full_name) = if let Some(ref pid_raw) = req.place_id {
+        if !pid_raw.trim().is_empty() {
+            let pid =
+                resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
+            let fname = store
+                .places
+                .iter()
+                .find(|p| p.id == pid)
+                .map(|p| p.full_name.clone());
+            (Some(pid), fname)
+        } else {
+            (None, None)
+        }
+    } else if let Some(ref ppath) = req.place_path {
+        if !ppath.trim().is_empty() {
+            let place = resolve_or_create_place_chain(&mut store, ppath, None, None, None, None)?;
+            (Some(place.id), Some(place.full_name))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    let existing_gids: HashSet<String> = store.media.iter().map(|m| m.gid.clone()).collect();
+    let gid = allocate_gid(
+        'M',
+        &mut store.next_media_gid_seq,
+        req.gid.as_deref(),
+        &existing_gids,
+    );
+
+    let title = req
+        .title
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| orig_name.to_string());
+
+    let description = req
+        .description
+        .or(req.caption)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let mut resolved_linked_persons = Vec::new();
+    let mut links = Vec::new();
+    if let Some(ref person_ids) = req.linked_person_ids {
+        for raw_pid in person_ids {
+            let pid = resolve_person_id_in_store(&store.persons, raw_pid.trim())
+                .ok_or(AppError::NotFound)?;
+            if !resolved_linked_persons.contains(&pid) {
+                resolved_linked_persons.push(pid.clone());
+                links.push(MediaLinkDto {
+                    id: Uuid::new_v4().to_string(),
+                    media_id: id.clone(),
+                    entity_type: "individual".to_string(),
+                    entity_id: pid,
+                    role: Some("gallery".to_string()),
+                });
+            }
+        }
+    }
+
+    let is_image = mime_type.starts_with("image/");
+    let width = req.width.or(if is_image { Some(1200) } else { None });
+    let height = req.height.or(if is_image { Some(900) } else { None });
+
+    let media = MediaAssetSummaryDto {
+        id: id.clone(),
+        gid,
+        title,
+        mime_type,
+        file_url: format!("/api/v1/media/{id}/file"),
+        file_name: Some(stored_file_name),
+        original_file_name: Some(orig_name.to_string()),
+        file_size_bytes: Some(file_size_bytes),
+        sha256: Some(sha256_hex),
+        width,
+        height,
+        description,
+        date_taken,
+        date_sort,
+        place_id,
+        place_full_name,
+        is_private: req.is_private.unwrap_or(false),
+        only_living_persons: false,
+        linked_person_ids: resolved_linked_persons,
+        face_tags: vec![],
+        links,
+        version: 1,
+    };
+
+    store.media.push(media);
+    sync_media_links_and_living(&mut store, &id);
+
+    let created = store
+        .media
+        .iter()
+        .find(|m| m.id == id)
+        .cloned()
+        .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::CREATED, Json(created)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/media/{id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID (e.g. M0001)")
+    ),
+    responses(
+        (status = 200, description = "Media asset metadata, face tags, and entity links", body = MediaAssetSummaryDto),
+        (status = 404, description = "Media asset not found or shielded by privacy", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn get_media_detail(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<MediaAssetSummaryDto>, AppError> {
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+    let target = id.trim();
+
+    let media = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .ok_or(AppError::NotFound)?;
+
+    let redacted = redact_media_for_caller(media, &access).ok_or(AppError::NotFound)?;
+    Ok(Json(redacted))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/media/{id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID")
+    ),
+    request_body = UpdateMediaRequest,
+    responses(
+        (status = 200, description = "Media asset metadata updated", body = MediaAssetSummaryDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset not found", body = ErrorResponse),
+        (status = 409, description = "Optimistic concurrency version conflict", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn update_media(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateMediaRequest>,
+) -> Result<Json<MediaAssetSummaryDto>, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let resolved_place = if let Some(ref pid_raw) = req.place_id {
+        if pid_raw.trim().is_empty() {
+            Some((None, None))
+        } else {
+            let pid =
+                resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
+            let fname = store
+                .places
+                .iter()
+                .find(|p| p.id == pid)
+                .map(|p| p.full_name.clone());
+            Some((Some(pid), fname))
+        }
+    } else if let Some(ref ppath) = req.place_path {
+        if ppath.trim().is_empty() {
+            Some((None, None))
+        } else {
+            let place = resolve_or_create_place_chain(&mut store, ppath, None, None, None, None)?;
+            Some((Some(place.id), Some(place.full_name)))
+        }
+    } else {
+        None
+    };
+
+    let media = store
+        .media
+        .iter_mut()
+        .find(|m| m.id == media_id)
+        .ok_or(AppError::NotFound)?;
+
+    if let Some(expected_version) = req.version {
+        if media.version != expected_version {
+            return Err(AppError::VersionConflict(format!(
+                "Optimistic lock conflict on media {}: expected version {}, current version {}",
+                media.gid, expected_version, media.version
+            )));
+        }
+    }
+
+    if let Some(ref title) = req.title {
+        let trimmed = title.trim();
+        if !trimmed.is_empty() {
+            media.title = trimmed.to_string();
+        }
+    }
+
+    if let Some(desc) = req.description.or(req.caption) {
+        let trimmed = desc.trim();
+        media.description = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+
+    if let Some(ref dt_raw) = req.date_taken {
+        let trimmed = dt_raw.trim();
+        if trimmed.is_empty() {
+            media.date_taken = None;
+            media.date_sort = None;
+        } else {
+            let parsed = GenDate::parse(trimmed);
+            media.date_sort = parsed.sort_key();
+            media.date_taken = Some(trimmed.to_string());
+        }
+    }
+
+    if let Some((pid, fname)) = resolved_place {
+        media.place_id = pid;
+        media.place_full_name = fname;
+    }
+
+    if let Some(is_priv) = req.is_private {
+        media.is_private = is_priv;
+    }
+
+    media.version += 1;
+    let updated = media.clone();
+
+    Ok(Json(updated))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/media/{id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID")
+    ),
+    responses(
+        (status = 204, description = "Media asset deleted"),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset not found", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn delete_media(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+
+    let media_idx = store
+        .media
+        .iter()
+        .position(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .ok_or(AppError::NotFound)?;
+
+    let removed = store.media.remove(media_idx);
+
+    for ev in &mut store.events {
+        ev.media_ids.retain(|mid| mid != &removed.id);
+    }
+
+    for person in &mut store.persons {
+        if person.avatar_media_id.as_deref() == Some(removed.id.as_str()) {
+            person.avatar_media_id = None;
+            person.avatar_crop = None;
+            person.avatar_url = None;
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/media/{id}/tags",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID")
+    ),
+    request_body = CreateFaceTagRequest,
+    responses(
+        (status = 201, description = "Face tag created on media asset", body = FaceTagDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset or person not found", body = ErrorResponse),
+        (status = 422, description = "Invalid normalized bounding box coordinates", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn create_face_tag(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<CreateFaceTagRequest>,
+) -> Result<(StatusCode, Json<FaceTagDto>), AppError> {
+    let w = req.w.or(req.width).unwrap_or(0.0);
+    let h = req.h.or(req.height).unwrap_or(0.0);
+    if !(0.0..=1.0).contains(&req.x)
+        || !(0.0..=1.0).contains(&req.y)
+        || w <= 0.0
+        || w > 1.0
+        || h <= 0.0
+        || h > 1.0
+    {
+        return Err(AppError::ValidationFailed(
+            "Face tag coordinates (x, y, w, h) must be normalized within 0.0..=1.0".to_string(),
+            Some(HashMap::from([(
+                "coordinates".to_string(),
+                "out_of_bounds".to_string(),
+            )])),
+        ));
+    }
+
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let person_id = resolve_person_id_in_store(&store.persons, req.person_id.trim())
+        .ok_or(AppError::NotFound)?;
+    let (person_name, is_living) = store
+        .persons
+        .iter()
+        .find(|p| p.id == person_id)
+        .map(|p| (format_person_display_name(p), p.is_living))
+        .ok_or(AppError::NotFound)?;
+
+    let tag_id = Uuid::new_v4().to_string();
+    let is_primary = req.is_primary_avatar.unwrap_or(false);
+
+    let new_tag = FaceTagDto {
+        id: tag_id.clone(),
+        person_id: person_id.clone(),
+        person_name,
+        is_living,
+        x: req.x,
+        y: req.y,
+        width: w,
+        height: h,
+        is_primary_avatar: is_primary,
+    };
+
+    if let Some(media) = store.media.iter_mut().find(|m| m.id == media_id) {
+        media.face_tags.push(new_tag);
+        media.version += 1;
+    }
+
+    if is_primary {
+        apply_primary_avatar_for_person(
+            &mut store, &person_id, &media_id, &tag_id, req.x, req.y, w, h,
+        );
+    }
+
+    sync_media_links_and_living(&mut store, &media_id);
+
+    let created_tag = store
+        .media
+        .iter()
+        .find(|m| m.id == media_id)
+        .and_then(|m| m.face_tags.iter().find(|t| t.id == tag_id).cloned())
+        .ok_or(AppError::NotFound)?;
+
+    Ok((StatusCode::CREATED, Json(created_tag)))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v1/media/{id}/tags/{tag_id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID"),
+        ("tag_id" = String, Path, description = "Face tag ID")
+    ),
+    request_body = UpdateFaceTagRequest,
+    responses(
+        (status = 200, description = "Face tag updated", body = FaceTagDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset, face tag, or person not found", body = ErrorResponse),
+        (status = 422, description = "Invalid normalized bounding box coordinates", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn update_face_tag(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path((id, tag_id)): Path<(String, String)>,
+    Json(req): Json<UpdateFaceTagRequest>,
+) -> Result<Json<FaceTagDto>, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+    let target_tag = tag_id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let new_person_info = if let Some(ref raw_pid) = req.person_id {
+        let pid =
+            resolve_person_id_in_store(&store.persons, raw_pid.trim()).ok_or(AppError::NotFound)?;
+        let (pname, living) = store
+            .persons
+            .iter()
+            .find(|p| p.id == pid)
+            .map(|p| (format_person_display_name(p), p.is_living))
+            .ok_or(AppError::NotFound)?;
+        Some((pid, pname, living))
+    } else {
+        None
+    };
+
+    let (person_id, x, y, w, h, was_primary, now_primary) = {
+        let media = store
+            .media
+            .iter_mut()
+            .find(|m| m.id == media_id)
+            .ok_or(AppError::NotFound)?;
+        let tag = media
+            .face_tags
+            .iter_mut()
+            .find(|t| t.id == target_tag)
+            .ok_or(AppError::NotFound)?;
+
+        let next_x = req.x.unwrap_or(tag.x);
+        let next_y = req.y.unwrap_or(tag.y);
+        let next_w = req.w.or(req.width).unwrap_or(tag.width);
+        let next_h = req.h.or(req.height).unwrap_or(tag.height);
+        if !(0.0..=1.0).contains(&next_x)
+            || !(0.0..=1.0).contains(&next_y)
+            || next_w <= 0.0
+            || next_w > 1.0
+            || next_h <= 0.0
+            || next_h > 1.0
+        {
+            return Err(AppError::ValidationFailed(
+                "Face tag coordinates (x, y, w, h) must be normalized within 0.0..=1.0".to_string(),
+                Some(HashMap::from([(
+                    "coordinates".to_string(),
+                    "out_of_bounds".to_string(),
+                )])),
+            ));
+        }
+
+        if let Some((pid, pname, living)) = new_person_info {
+            tag.person_id = pid;
+            tag.person_name = pname;
+            tag.is_living = living;
+        }
+        tag.x = next_x;
+        tag.y = next_y;
+        tag.width = next_w;
+        tag.height = next_h;
+
+        let was_primary = tag.is_primary_avatar;
+        let now_primary = req.is_primary_avatar.unwrap_or(was_primary);
+        tag.is_primary_avatar = now_primary;
+        media.version += 1;
+
+        (
+            tag.person_id.clone(),
+            tag.x,
+            tag.y,
+            tag.width,
+            tag.height,
+            was_primary,
+            now_primary,
+        )
+    };
+
+    if now_primary {
+        apply_primary_avatar_for_person(&mut store, &person_id, &media_id, target_tag, x, y, w, h);
+    } else if was_primary && !now_primary {
+        clear_primary_avatar_for_person(&mut store, &person_id);
+    }
+
+    sync_media_links_and_living(&mut store, &media_id);
+
+    let updated = store
+        .media
+        .iter()
+        .find(|m| m.id == media_id)
+        .and_then(|m| m.face_tags.iter().find(|t| t.id == target_tag).cloned())
+        .ok_or(AppError::NotFound)?;
+
+    Ok(Json(updated))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/media/{id}/tags/{tag_id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID"),
+        ("tag_id" = String, Path, description = "Face tag ID")
+    ),
+    responses(
+        (status = 204, description = "Face tag deleted"),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset or face tag not found", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn delete_face_tag(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path((id, tag_id)): Path<(String, String)>,
+) -> Result<StatusCode, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+    let target_tag = tag_id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let removed_tag = {
+        let media = store
+            .media
+            .iter_mut()
+            .find(|m| m.id == media_id)
+            .ok_or(AppError::NotFound)?;
+        let idx = media
+            .face_tags
+            .iter()
+            .position(|t| t.id == target_tag)
+            .ok_or(AppError::NotFound)?;
+        let removed = media.face_tags.remove(idx);
+
+        let still_tagged = media
+            .face_tags
+            .iter()
+            .any(|t| t.person_id == removed.person_id);
+        let has_explicit_gallery_link = media.links.iter().any(|l| {
+            l.entity_type == "individual"
+                && l.entity_id == removed.person_id
+                && l.role.as_deref() != Some("depicted")
+        });
+        if !still_tagged && !has_explicit_gallery_link {
+            media
+                .links
+                .retain(|l| !(l.entity_type == "individual" && l.entity_id == removed.person_id));
+            media
+                .linked_person_ids
+                .retain(|pid| pid != &removed.person_id);
+        }
+        media.version += 1;
+        removed
+    };
+
+    if removed_tag.is_primary_avatar {
+        clear_primary_avatar_for_person(&mut store, &removed_tag.person_id);
+    }
+
+    sync_media_links_and_living(&mut store, &media_id);
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/media/{id}/links",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID")
+    ),
+    request_body = CreateMediaLinkRequest,
+    responses(
+        (status = 201, description = "Entity linked to media asset", body = MediaLinkDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset or target entity not found", body = ErrorResponse),
+        (status = 422, description = "Invalid entity_type", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn create_media_link(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<CreateMediaLinkRequest>,
+) -> Result<(StatusCode, Json<MediaLinkDto>), AppError> {
+    let entity_type = req.entity_type.trim().to_lowercase();
+    if !matches!(entity_type.as_str(), "individual" | "family" | "event") {
+        return Err(AppError::ValidationFailed(
+            "entity_type must be one of: individual, family, event".to_string(),
+            Some(HashMap::from([(
+                "entity_type".to_string(),
+                "invalid_entity_type".to_string(),
+            )])),
+        ));
+    }
+
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let raw_eid = req.entity_id.trim();
+    let resolved_entity_id = match entity_type.as_str() {
+        "individual" => {
+            resolve_person_id_in_store(&store.persons, raw_eid).ok_or(AppError::NotFound)?
+        }
+        "family" => store
+            .families
+            .iter()
+            .find(|f| f.id == raw_eid || f.gid.eq_ignore_ascii_case(raw_eid))
+            .map(|f| f.id.clone())
+            .ok_or(AppError::NotFound)?,
+        "event" => store
+            .events
+            .iter()
+            .find(|e| e.id == raw_eid || e.gid.eq_ignore_ascii_case(raw_eid))
+            .map(|e| e.id.clone())
+            .ok_or(AppError::NotFound)?,
+        _ => unreachable!(),
+    };
+
+    let role = req
+        .role
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("gallery")
+        .to_string();
+
+    let link = {
+        let media = store
+            .media
+            .iter_mut()
+            .find(|m| m.id == media_id)
+            .ok_or(AppError::NotFound)?;
+
+        if let Some(existing) = media
+            .links
+            .iter()
+            .find(|l| l.entity_type == entity_type && l.entity_id == resolved_entity_id)
+        {
+            existing.clone()
+        } else {
+            let new_link = MediaLinkDto {
+                id: Uuid::new_v4().to_string(),
+                media_id: media_id.clone(),
+                entity_type: entity_type.clone(),
+                entity_id: resolved_entity_id.clone(),
+                role: Some(role),
+            };
+            media.links.push(new_link.clone());
+            media.version += 1;
+            new_link
+        }
+    };
+
+    if entity_type == "event" {
+        if let Some(ev) = store.events.iter_mut().find(|e| e.id == resolved_entity_id) {
+            if !ev.media_ids.contains(&media_id) {
+                ev.media_ids.push(media_id.clone());
+            }
+        }
+    }
+
+    sync_media_links_and_living(&mut store, &media_id);
+
+    Ok((StatusCode::CREATED, Json(link)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/media/{id}/links/{link_id}",
+    params(
+        ("id" = String, Path, description = "Media asset UUID or GID"),
+        ("link_id" = String, Path, description = "Media link ID or linked entity ID")
+    ),
+    responses(
+        (status = 204, description = "Media link removed"),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Media asset or link not found", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn delete_media_link(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path((id, link_id)): Path<(String, String)>,
+) -> Result<StatusCode, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let target = id.trim();
+    let target_link = link_id.trim();
+
+    let media_id = store
+        .media
+        .iter()
+        .find(|m| m.id == target || m.gid.eq_ignore_ascii_case(target))
+        .map(|m| m.id.clone())
+        .ok_or(AppError::NotFound)?;
+
+    let removed_link = {
+        let media = store
+            .media
+            .iter_mut()
+            .find(|m| m.id == media_id)
+            .ok_or(AppError::NotFound)?;
+        let idx = media
+            .links
+            .iter()
+            .position(|l| l.id == target_link || l.entity_id == target_link)
+            .ok_or(AppError::NotFound)?;
+        let removed = media.links.remove(idx);
+        if removed.entity_type == "individual" {
+            let still_tagged = media
+                .face_tags
+                .iter()
+                .any(|t| t.person_id == removed.entity_id);
+            let still_linked = media
+                .links
+                .iter()
+                .any(|l| l.entity_type == "individual" && l.entity_id == removed.entity_id);
+            if !still_tagged && !still_linked {
+                media
+                    .linked_person_ids
+                    .retain(|pid| pid != &removed.entity_id);
+            }
+        }
+        media.version += 1;
+        removed
+    };
+
+    if removed_link.entity_type == "event" {
+        if let Some(ev) = store
+            .events
+            .iter_mut()
+            .find(|e| e.id == removed_link.entity_id)
+        {
+            ev.media_ids.retain(|mid| mid != &media_id);
+        }
+    }
+
+    sync_media_links_and_living(&mut store, &media_id);
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(

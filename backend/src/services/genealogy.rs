@@ -504,6 +504,39 @@ pub fn recompute_all_individuals_vitals(
 
         person.is_living = evaluate_is_living(&eval, current_year, age_threshold);
     }
+
+    let person_living_map: HashMap<String, bool> = store
+        .persons
+        .iter()
+        .map(|p| (p.id.clone(), p.is_living))
+        .collect();
+
+    for media in &mut store.media {
+        for tag in &mut media.face_tags {
+            if let Some(&living) = person_living_map.get(&tag.person_id) {
+                tag.is_living = living;
+            }
+        }
+        let mut assoc_person_ids: Vec<&str> =
+            media.linked_person_ids.iter().map(|s| s.as_str()).collect();
+        for tag in &media.face_tags {
+            if !assoc_person_ids.contains(&tag.person_id.as_str()) {
+                assoc_person_ids.push(tag.person_id.as_str());
+            }
+        }
+        for link in &media.links {
+            if link.entity_type == "individual"
+                && !assoc_person_ids.contains(&link.entity_id.as_str())
+            {
+                assoc_person_ids.push(link.entity_id.as_str());
+            }
+        }
+        if !assoc_person_ids.is_empty() {
+            media.only_living_persons = assoc_person_ids
+                .iter()
+                .all(|pid| person_living_map.get(*pid).copied().unwrap_or(false));
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]

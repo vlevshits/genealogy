@@ -801,16 +801,24 @@ export async function fetchTreeData(): Promise<TreeDataResponse> {
 
 export * from './openapi-types';
 import {
+  CreateFaceTagInput,
   CreateFamilyInput,
   CreateLifeEventInput,
+  CreateMediaInput,
+  CreateMediaLinkInput,
   CreateNoteInput,
   CreatePersonInput,
   CreatePlaceInput,
   DeleteImpactDto,
+  FaceTagDto,
   FamilyDto,
   GlobalSearchQuery,
   IndividualDto,
   LifeEventDto,
+  MediaArchiveResponse,
+  MediaAssetSummaryDto,
+  MediaFilterQuery,
+  MediaLinkDto,
   MergePlaceResponse,
   NoteDto,
   OnboardingStatusResponse,
@@ -830,8 +838,10 @@ import {
   SurnamesIndexResponse,
   TreeViewQuery,
   TreeViewResponse,
+  UpdateFaceTagInput,
   UpdateFamilyInput,
   UpdateLifeEventInput,
+  UpdateMediaInput,
   UpdateNoteInput,
   UpdatePersonInput,
   UpdatePlaceInput,
@@ -1179,6 +1189,140 @@ export async function fetchSurnamesIndex(
     `/people/surnames${qs ? `?${qs}` : ''}`
   );
 }
+
+// =============================================================================
+// Phase 1.9 — Media Upload, Gallery, Face Tagging & Avatars Endpoints
+// =============================================================================
+
+export async function fetchMediaArchive(
+  params?: MediaFilterQuery
+): Promise<MediaArchiveResponse> {
+  const search = new URLSearchParams();
+  if (params?.q) search.set('q', params.q);
+  if (params?.person_id) search.set('person_id', params.person_id);
+  if (params?.decade) search.set('decade', params.decade);
+  if (params?.type) search.set('type', params.type);
+  if (params?.untagged !== undefined) {
+    search.set('untagged', String(params.untagged));
+  }
+  if (params?.cursor) search.set('cursor', params.cursor);
+  if (params?.limit !== undefined) search.set('limit', String(params.limit));
+  const qs = search.toString();
+  return apiFetch<MediaArchiveResponse>(`/media${qs ? `?${qs}` : ''}`);
+}
+
+export async function createMediaAsset(
+  payload: CreateMediaInput
+): Promise<MediaAssetSummaryDto> {
+  return apiFetch<MediaAssetSummaryDto>('/media', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchMediaDetail(
+  id: string
+): Promise<MediaAssetSummaryDto> {
+  return apiFetch<MediaAssetSummaryDto>(`/media/${encodeURIComponent(id)}`);
+}
+
+export async function updateMediaAsset(
+  id: string,
+  payload: UpdateMediaInput
+): Promise<MediaAssetSummaryDto> {
+  return apiFetch<MediaAssetSummaryDto>(`/media/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMediaAsset(id: string): Promise<void> {
+  return apiFetch<void>(`/media/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getMediaFileUrl(id: string): string {
+  return `${API_BASE}/media/${encodeURIComponent(id)}/file`;
+}
+
+export function getMediaCropUrl(
+  id: string,
+  crop: { x: number; y: number; width: number; height: number }
+): string {
+  const params = new URLSearchParams({
+    x: crop.x.toFixed(4),
+    y: crop.y.toFixed(4),
+    w: crop.width.toFixed(4),
+    h: crop.height.toFixed(4),
+  });
+  return `${API_BASE}/media/${encodeURIComponent(id)}/crop?${params.toString()}`;
+}
+
+export async function createFaceTag(
+  mediaId: string,
+  payload: CreateFaceTagInput
+): Promise<FaceTagDto> {
+  return apiFetch<FaceTagDto>(
+    `/media/${encodeURIComponent(mediaId)}/tags`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function updateFaceTag(
+  mediaId: string,
+  tagId: string,
+  payload: UpdateFaceTagInput
+): Promise<FaceTagDto> {
+  return apiFetch<FaceTagDto>(
+    `/media/${encodeURIComponent(mediaId)}/tags/${encodeURIComponent(tagId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function deleteFaceTag(
+  mediaId: string,
+  tagId: string
+): Promise<void> {
+  return apiFetch<void>(
+    `/media/${encodeURIComponent(mediaId)}/tags/${encodeURIComponent(tagId)}`,
+    {
+      method: 'DELETE',
+    }
+  );
+}
+
+export async function createMediaLink(
+  mediaId: string,
+  payload: CreateMediaLinkInput
+): Promise<MediaLinkDto> {
+  return apiFetch<MediaLinkDto>(
+    `/media/${encodeURIComponent(mediaId)}/links`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function deleteMediaLink(
+  mediaId: string,
+  linkId: string
+): Promise<void> {
+  return apiFetch<void>(
+    `/media/${encodeURIComponent(mediaId)}/links/${encodeURIComponent(linkId)}`,
+    {
+      method: 'DELETE',
+    }
+  );
+}
+
 
 
 

@@ -410,7 +410,15 @@ pub struct VitalEventSummaryDto {
     pub place: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct AvatarCropDto {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct TreePersonNodeDto {
     pub id: String,
     pub gid: String,
@@ -433,6 +441,10 @@ pub struct TreePersonNodeDto {
     pub birth: Option<VitalEventSummaryDto>,
     pub death: Option<VitalEventSummaryDto>,
     pub avatar_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar_media_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar_crop: Option<AvatarCropDto>,
     pub notes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub birth_sort: Option<i32>,
@@ -518,6 +530,18 @@ pub struct FaceTagDto {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    #[serde(default)]
+    pub is_primary_avatar: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct MediaLinkDto {
+    pub id: String,
+    pub media_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -527,10 +551,36 @@ pub struct MediaAssetSummaryDto {
     pub title: String,
     pub mime_type: String,
     pub file_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_size_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_taken: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_sort: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place_full_name: Option<String>,
     pub is_private: bool,
     pub only_living_persons: bool,
     pub linked_person_ids: Vec<String>,
     pub face_tags: Vec<FaceTagDto>,
+    #[serde(default)]
+    pub links: Vec<MediaLinkDto>,
+    #[serde(default = "default_version")]
+    pub version: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
@@ -632,6 +682,8 @@ pub fn redact_person_for_caller(
             birth: None,
             death: None,
             avatar_url: None,
+            avatar_media_id: None,
+            avatar_crop: None,
             notes: None,
             birth_sort: None,
             death_sort: None,
@@ -685,6 +737,8 @@ pub fn redact_person_for_tree_view(
             birth: None,
             death: None,
             avatar_url: None,
+            avatar_media_id: None,
+            avatar_crop: None,
             notes: None,
             birth_sort: None,
             death_sort: None,
@@ -783,6 +837,8 @@ impl Default for GenealogyPrivacyStore {
                 place: Some("Leningrad, USSR".to_string()),
             }),
             avatar_url: Some("/api/v1/media/00000000-0000-0000-0000-000000000101/file".to_string()),
+            avatar_media_id: Some("00000000-0000-0000-0000-000000000101".to_string()),
+            avatar_crop: None,
             notes: Some("Archival engineer and family chronicler.".to_string()),
             birth_sort: Some(19120319),
             death_sort: Some(19881104),
@@ -814,6 +870,8 @@ impl Default for GenealogyPrivacyStore {
             }),
             death: None,
             avatar_url: Some("/api/v1/media/00000000-0000-0000-0000-000000000102/file".to_string()),
+            avatar_media_id: Some("00000000-0000-0000-0000-000000000102".to_string()),
+            avatar_crop: None,
             notes: Some("Graduated from Saint Petersburg State University.".to_string()),
             birth_sort: Some(19940614),
             death_sort: None,
@@ -845,6 +903,8 @@ impl Default for GenealogyPrivacyStore {
             }),
             death: None,
             avatar_url: Some("/api/v1/media/00000000-0000-0000-0000-000000000103/file".to_string()),
+            avatar_media_id: Some("00000000-0000-0000-0000-000000000103".to_string()),
+            avatar_crop: None,
             notes: Some("Confidential adoption research note.".to_string()),
             birth_sort: Some(19891102),
             death_sort: None,
@@ -859,6 +919,17 @@ impl Default for GenealogyPrivacyStore {
             title: "Mikhail Levshits Archival Portrait (1955)".to_string(),
             mime_type: "image/webp".to_string(),
             file_url: "/api/v1/media/00000000-0000-0000-0000-000000000101/file".to_string(),
+            file_name: Some("m0001.webp".to_string()),
+            original_file_name: Some("mikhail_1955.webp".to_string()),
+            file_size_bytes: Some(34),
+            sha256: None,
+            width: Some(800),
+            height: Some(1000),
+            description: Some("Archival portrait taken in Leningrad, 1955.".to_string()),
+            date_taken: Some("1955".to_string()),
+            date_sort: Some(19550000),
+            place_id: Some("00000000-0000-0000-0000-000000000201".to_string()),
+            place_full_name: Some("Saint Petersburg, Russia".to_string()),
             is_private: false,
             only_living_persons: false,
             linked_person_ids: vec![
@@ -875,6 +946,7 @@ impl Default for GenealogyPrivacyStore {
                     y: 0.30,
                     width: 0.20,
                     height: 0.25,
+                    is_primary_avatar: true,
                 },
                 FaceTagDto {
                     id: "ft-02".to_string(),
@@ -885,8 +957,11 @@ impl Default for GenealogyPrivacyStore {
                     y: 0.35,
                     width: 0.18,
                     height: 0.22,
+                    is_primary_avatar: false,
                 },
             ],
+            links: vec![],
+            version: 1,
         };
 
         let living_media = MediaAssetSummaryDto {
@@ -895,6 +970,17 @@ impl Default for GenealogyPrivacyStore {
             title: "Elena Levshits Portrait (2024)".to_string(),
             mime_type: "image/webp".to_string(),
             file_url: "/api/v1/media/00000000-0000-0000-0000-000000000102/file".to_string(),
+            file_name: Some("m0002.webp".to_string()),
+            original_file_name: Some("elena_2024.webp".to_string()),
+            file_size_bytes: Some(34),
+            sha256: None,
+            width: Some(800),
+            height: Some(1000),
+            description: None,
+            date_taken: Some("2024".to_string()),
+            date_sort: Some(20240000),
+            place_id: None,
+            place_full_name: None,
             is_private: false,
             only_living_persons: true,
             linked_person_ids: vec!["c7a8b9d0-1234-5678-90ab-cdef12345678".to_string()],
@@ -907,7 +993,10 @@ impl Default for GenealogyPrivacyStore {
                 y: 0.25,
                 width: 0.25,
                 height: 0.30,
+                is_primary_avatar: true,
             }],
+            links: vec![],
+            version: 1,
         };
 
         let private_media = MediaAssetSummaryDto {
@@ -916,10 +1005,23 @@ impl Default for GenealogyPrivacyStore {
             title: "Confidential Archival Certificate".to_string(),
             mime_type: "image/webp".to_string(),
             file_url: "/api/v1/media/00000000-0000-0000-0000-000000000103/file".to_string(),
+            file_name: Some("m0003.webp".to_string()),
+            original_file_name: Some("certificate.webp".to_string()),
+            file_size_bytes: Some(34),
+            sha256: None,
+            width: None,
+            height: None,
+            description: None,
+            date_taken: None,
+            date_sort: None,
+            place_id: None,
+            place_full_name: None,
             is_private: true,
             only_living_persons: true,
             linked_person_ids: vec!["00000000-0000-0000-0000-000000000099".to_string()],
             face_tags: vec![],
+            links: vec![],
+            version: 1,
         };
 
         let places = vec![

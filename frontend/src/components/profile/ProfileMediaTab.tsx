@@ -12,10 +12,12 @@ import {
   Badge,
   Button,
   Card,
-  Dialog,
   EmptyState,
-  FileDropzone,
 } from '../ui';
+import {
+  MediaLightboxStudio,
+  MediaUploadDialog,
+} from '../media';
 import { MediaAssetSummaryDto } from '../../api/client';
 import { useI18n } from '../../i18n';
 
@@ -23,14 +25,22 @@ export interface ProfileMediaTabProps {
   media: MediaAssetSummaryDto[];
   canEdit: boolean;
   isMaskedLiving?: boolean;
+  personId?: string;
   onSelectPersonId?: (personId: string) => void;
+  onMediaUpdated?: (asset: MediaAssetSummaryDto) => void;
+  onMediaUploaded?: (assets: MediaAssetSummaryDto[]) => void;
+  onAvatarSynchronized?: (personId: string, avatarUrl: string | null) => void;
 }
 
 export const ProfileMediaTab: React.FC<ProfileMediaTabProps> = ({
   media,
   canEdit,
   isMaskedLiving = false,
+  personId,
   onSelectPersonId,
+  onMediaUpdated,
+  onMediaUploaded,
+  onAvatarSynchronized,
 }) => {
   const { t } = useI18n();
   const [selectedAsset, setSelectedAsset] =
@@ -201,85 +211,37 @@ export const ProfileMediaTab: React.FC<ProfileMediaTabProps> = ({
         )}
       </Card>
 
-      {/* Lightbox Media Preview Dialog */}
-      <Dialog
+      {/* Lightbox Media & Face Tagging Studio */}
+      <MediaLightboxStudio
         open={Boolean(selectedAsset)}
         onOpenChange={(open) => {
           if (!open) setSelectedAsset(null);
         }}
-        size="xl"
-        title={selectedAsset?.title ?? ''}
-        description={
-          selectedAsset
-            ? `${selectedAsset.gid} · ${selectedAsset.mime_type}`
-            : undefined
-        }
-      >
-        {selectedAsset && (
-          <div className="space-y-4">
-            <div className="relative flex min-h-60 items-center justify-center rounded-2xl border border-border bg-surface-muted/60 p-6">
-              <ImageIcon className="h-16 w-16 text-brand/70" />
-            </div>
-
-            {selectedAsset.face_tags && selectedAsset.face_tags.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wider text-secondary">
-                  {t('profile.media.taggedRelativesHeading')}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {selectedAsset.face_tags.map((ft) => (
-                    <Button
-                      key={ft.id}
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setSelectedAsset(null);
-                        onSelectPersonId?.(ft.person_id);
-                      }}
-                    >
-                      {ft.person_name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                variant="secondary"
-                onClick={() => setSelectedAsset(null)}
-              >
-                {t('common.close')}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+        asset={selectedAsset}
+        canEdit={canEdit}
+        onOpenPerson={(pid) => {
+          setSelectedAsset(null);
+          onSelectPersonId?.(pid);
+        }}
+        onAssetUpdated={(updated) => {
+          setSelectedAsset(updated);
+          onMediaUpdated?.(updated);
+        }}
+        onAssetDeleted={() => {
+          setSelectedAsset(null);
+        }}
+        onAvatarSynchronized={onAvatarSynchronized}
+      />
 
       {/* Upload Photo / Scan Modal */}
-      <Dialog
+      <MediaUploadDialog
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
-        size="md"
-        title={t('profile.media.uploadModalTitle')}
-        description={t('profile.media.uploadModalDesc')}
-      >
-        <div className="space-y-4">
-          <FileDropzone
-            accept=".jpg,.png,.webp,.pdf"
-            multiple
-            onUpload={() => setUploadDialogOpen(false)}
-          />
-          <div className="flex justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => setUploadDialogOpen(false)}
-            >
-              {t('common.cancel')}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        defaultLinkedPersonId={personId}
+        onUploaded={(createdAssets) => {
+          onMediaUploaded?.(createdAssets);
+        }}
+      />
     </div>
   );
 };
