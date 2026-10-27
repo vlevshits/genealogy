@@ -15,6 +15,7 @@ RUN npm ci || npm install
 
 # Copy application sources
 COPY tsconfig.json vite.config.ts index.html ./
+COPY public ./public
 COPY src ./src
 
 # Build static bundle
