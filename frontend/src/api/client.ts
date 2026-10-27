@@ -78,6 +78,7 @@ export interface InstanceSettingsDto {
   default_locale: string;
   enable_public_access: boolean;
   living_person_age_threshold: number;
+  default_home_person_id?: string | null;
   settings_locked_from_env: boolean;
 }
 
@@ -86,7 +87,10 @@ export interface UpdateInstanceSettingsRequest {
   default_locale?: string;
   enable_public_access?: boolean;
   living_person_age_threshold?: number;
+  default_home_person_id?: string | null;
 }
+
+export type UpdateInstanceSettingsInput = UpdateInstanceSettingsRequest;
 
 export interface BackupArchiveInfo {
   filename: string;
@@ -134,6 +138,8 @@ export interface UserDto {
   locale: string | null;
   theme: string | null;
   home_person_id: string | null;
+  start_page?: 'tree' | 'dashboard';
+  digest_opt_in?: boolean;
   created_at: string;
   last_login_at: string | null;
 }
@@ -287,7 +293,9 @@ export interface UpdateProfileRequest {
   last_name?: string;
   locale?: string;
   theme?: string;
-  home_person_id?: string;
+  home_person_id?: string | null;
+  start_page?: 'tree' | 'dashboard';
+  digest_opt_in?: boolean;
 }
 
 export interface RegenerateRecoveryCodesResponse {
@@ -381,8 +389,11 @@ export interface TreePersonNodeDto {
 export interface TreeDataResponse {
   access_tier: 'public_anonymous' | 'viewer' | 'editor' | 'admin';
   enable_public_access: boolean;
+  resolved_home_person_id?: string | null;
   nodes: TreePersonNodeDto[];
 }
+
+export type TreeResponse = TreeDataResponse;
 
 export interface AdminUsersListResponse {
   items: AdminUserSummaryDto[];
@@ -784,8 +795,10 @@ import {
   CreatePlaceInput,
   DeleteImpactDto,
   FamilyDto,
+  IndividualDto,
   LifeEventDto,
   MergePlaceResponse,
+  OnboardingStatusResponse,
   PatronymicSuggestionDto,
   PersonDetailDto,
   PlaceDetailDto,
@@ -793,6 +806,7 @@ import {
   PlacesListResponse,
   QuickAddRelativeInput,
   QuickAddRelativeResponse,
+  StartWithSelfInput,
   UpdateFamilyInput,
   UpdateLifeEventInput,
   UpdatePersonInput,
@@ -980,5 +994,44 @@ export async function mergePlace(
     }
   );
 }
+
+// =============================================================================
+// Phase 1.5 — Empty-Tree Onboarding & Home Person Endpoints
+// =============================================================================
+
+export async function fetchOnboardingStatus(): Promise<OnboardingStatusResponse> {
+  return apiFetch<OnboardingStatusResponse>('/onboarding/status');
+}
+
+export async function startWithSelf(
+  data: StartWithSelfInput
+): Promise<{ individual: IndividualDto; user: UserDto }> {
+  return apiFetch<{ individual: IndividualDto; user: UserDto }>(
+    '/onboarding/start-with-self',
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export async function setHomePerson(
+  personId: string | null
+): Promise<UserDto> {
+  return apiFetch<UserDto>('/me/home-person', {
+    method: 'PUT',
+    body: JSON.stringify({ person_id: personId }),
+  });
+}
+
+export async function updateProfile(
+  data: Partial<UserDto> | UpdateProfileRequest
+): Promise<UserDto> {
+  return apiFetch<UserDto>('/me', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 
 

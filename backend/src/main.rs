@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Database initialization error: {e}"))?;
 
     // 5. Initialize application state, background scheduler, and router
-    let state = AppState::new(pool, config.clone());
+    let state = AppState::new_empty(pool, config.clone());
     spawn_background_scheduler(state.clone());
     let app = create_router(state);
 

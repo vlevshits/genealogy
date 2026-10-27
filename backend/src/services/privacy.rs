@@ -517,6 +517,27 @@ pub struct GenealogyPrivacyStore {
     pub next_event_gid_seq: u32,
     pub next_place_gid_seq: u32,
     pub next_media_gid_seq: u32,
+    pub is_demo_seed: bool,
+}
+
+impl GenealogyPrivacyStore {
+    pub fn empty() -> Self {
+        Self {
+            persons: vec![],
+            families: vec![],
+            events: vec![],
+            notes: vec![],
+            media: vec![],
+            places: vec![],
+            change_log: vec![],
+            next_gid_seq: 100,
+            next_family_gid_seq: 100,
+            next_event_gid_seq: 100,
+            next_place_gid_seq: 100,
+            next_media_gid_seq: 100,
+            is_demo_seed: false,
+        }
+    }
 }
 
 impl Default for GenealogyPrivacyStore {
@@ -750,6 +771,7 @@ impl Default for GenealogyPrivacyStore {
             next_event_gid_seq: 100,
             next_place_gid_seq: 100,
             next_media_gid_seq: 100,
+            is_demo_seed: true,
         }
     }
 }

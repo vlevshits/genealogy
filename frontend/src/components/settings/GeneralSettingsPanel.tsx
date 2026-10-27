@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Save } from 'lucide-react';
+import { Home, Lock, Save, X } from 'lucide-react';
 import {
   Alert,
+  Badge,
   Button,
   Divider,
   Select,
@@ -12,7 +13,9 @@ import {
 import { FormField, FormSection } from '../form';
 import {
   AdminSystemResponse,
+  fetchTreeData,
   InstanceSettingsDto,
+  TreePersonNodeDto,
   updateAdminSettings,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
@@ -44,6 +47,10 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
   const [livingThreshold, setLivingThreshold] = useState<number>(
     settings.living_person_age_threshold
   );
+  const [defaultHomePersonId, setDefaultHomePersonId] = useState<string>(
+    settings.default_home_person_id ?? ''
+  );
+  const [people, setPeople] = useState<TreePersonNodeDto[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -51,7 +58,20 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
     setDefaultLocale(settings.default_locale);
     setEnablePublicAccess(settings.enable_public_access);
     setLivingThreshold(settings.living_person_age_threshold);
+    setDefaultHomePersonId(settings.default_home_person_id ?? '');
   }, [settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTreeData()
+      .then((res) => {
+        if (!cancelled) setPeople(res.nodes);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isLocked = settings.settings_locked_from_env;
 
@@ -71,6 +91,7 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
         default_locale: defaultLocale,
         enable_public_access: enablePublicAccess,
         living_person_age_threshold: livingThreshold,
+        default_home_person_id: defaultHomePersonId.trim() || null,
       });
       onSettingsUpdated?.(updated);
       onInstanceTitleChange?.(updated.tree_title);
@@ -149,6 +170,73 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
               ]}
             />
           </FormField>
+
+          <div className="rounded-xl border border-border bg-canvas p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Home className="h-4 w-4 text-brand shrink-0" />
+                  <span className="text-sm font-semibold text-primary">
+                    {t('settings.general.defaultHomePersonLabel')}
+                  </span>
+                  {defaultHomePersonId ? (
+                    <Badge variant="brand" size="sm">
+                      {people.find((p) => p.id === defaultHomePersonId)?.name ?? defaultHomePersonId}
+                    </Badge>
+                  ) : (
+                    <Badge variant="neutral" size="sm">
+                      {t('settings.profile.homePersonNotSet')}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-secondary">
+                  {t('settings.general.defaultHomePersonHint')}
+                </p>
+              </div>
+
+              {defaultHomePersonId && !isLocked && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<X className="h-3.5 w-3.5" />}
+                  onClick={() => setDefaultHomePersonId('')}
+                >
+                  {t('settings.profile.clearHomePersonBtn')}
+                </Button>
+              )}
+            </div>
+
+            {people.length > 0 && (
+              <FormField
+                name="default_home_person_id"
+                label={t('settings.profile.selectHomePersonLabel')}
+              >
+                <Select
+                  ariaLabel={t('settings.general.defaultHomePersonLabel')}
+                  value={defaultHomePersonId}
+                  onChange={(val) => setDefaultHomePersonId(val)}
+                  disabled={isLocked}
+                  options={[
+                    {
+                      value: '',
+                      label: t('settings.profile.homePersonNoneOption'),
+                    },
+                    ...people.map((p) => ({
+                      value: p.id,
+                      label: `${[
+                        p.primary_name.given_name,
+                        p.primary_name.patronymic,
+                        p.primary_name.surname,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')} (${p.gid})`,
+                    })),
+                  ]}
+                />
+              </FormField>
+            )}
+          </div>
         </FormSection>
 
         <FormSection

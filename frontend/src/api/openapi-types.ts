@@ -128,6 +128,9 @@ export interface PersonDetailDto {
   is_living: boolean;
   living_override?: boolean | null;
   is_private: boolean;
+  given_name?: string | null;
+  patronymic?: string | null;
+  surname?: string | null;
   primary_name: {
     given_name: string;
     patronymic: string | null;
@@ -292,3 +295,30 @@ export type MergePlaceResponse =
       repointed_children_count?: number;
       message?: string;
     };
+
+// =============================================================================
+// Phase 1.5 — Empty-Tree Onboarding & Home Person DTOs
+// =============================================================================
+
+export type IndividualDto = PersonDetailDto;
+
+export interface OnboardingStatusResponse {
+  is_empty: boolean;
+  total_individuals: number;
+  can_onboard: boolean;
+  resolved_home_person_id: string | null;
+  default_home_person_id: string | null;
+  user_home_person_id: string | null;
+  user_person_id: string | null;
+  start_page: 'tree' | 'dashboard';
+}
+
+export interface StartWithSelfInput {
+  given_name?: string;
+  patronymic?: string | null;
+  surname?: string | null;
+  sex: SexCode;
+  birth_date?: string | null;
+  birth_place?: string | null;
+}
+

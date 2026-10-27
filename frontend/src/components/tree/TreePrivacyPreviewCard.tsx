@@ -9,6 +9,7 @@ import {
   PenTool,
   Trash2,
   Plus,
+  Home,
 } from 'lucide-react';
 import {
   Avatar,
@@ -18,6 +19,7 @@ import {
   CardBody,
   CardHeader,
   BrandLogoIcon,
+  useToast,
 } from '../ui';
 import {
   DeleteImpactDialog,
@@ -25,18 +27,22 @@ import {
   PersonEditDialog,
   QuickAddRelativeDialog,
 } from '../person';
+import { EmptyTreeOnboardingCard } from '../onboarding';
 import {
   fetchTreeData,
   QuickAddRelation,
+  setHomePerson,
   TreeDataResponse,
   TreePersonNodeDto,
 } from '../../api/client';
+import { useAuth } from '../../lib/auth-context';
 import { useI18n } from '../../i18n';
 import { PublicGuestBanner } from './PublicGuestBanner';
 
 export interface TreePrivacyPreviewCardProps {
   initialTreeData?: TreeDataResponse;
   onSignIn?: () => void;
+  onNavigate?: (path: string) => void;
 }
 
 export function buildDefaultTreePreview(
@@ -104,6 +110,7 @@ export function buildDefaultTreePreview(
   return {
     access_tier: accessTier,
     enable_public_access: true,
+    resolved_home_person_id: 'node-deceased-1',
     nodes,
   };
 }
@@ -111,8 +118,11 @@ export function buildDefaultTreePreview(
 export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
   initialTreeData,
   onSignIn,
+  onNavigate,
 }) => {
   const { t } = useI18n();
+  const { user, updateUser } = useAuth();
+  const { addToast } = useToast();
   const [treeData, setTreeData] = useState<TreeDataResponse>(
     initialTreeData ?? buildDefaultTreePreview('admin')
   );
@@ -150,6 +160,61 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
 
   const canEdit =
     treeData.access_tier === 'editor' || treeData.access_tier === 'admin';
+  const isAuthenticatedUser = treeData.access_tier !== 'public_anonymous';
+  const resolvedHomePersonId =
+    treeData.resolved_home_person_id ??
+    user?.home_person_id ??
+    user?.person_id ??
+    null;
+
+  const handleSetHomePerson = async (node: TreePersonNodeDto) => {
+    try {
+      const updatedUser = await setHomePerson(node.id);
+      updateUser(updatedUser);
+      setTreeData((prev) => ({
+        ...prev,
+        resolved_home_person_id: node.id,
+      }));
+      addToast({
+        type: 'success',
+        title: t('tree.homePersonUpdatedToast'),
+        description: formatNodeFullName(node),
+      });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('common.errorLoading'),
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  };
+
+  if (treeData.nodes.length === 0) {
+    return (
+      <div className="space-y-4">
+        {treeData.access_tier === 'public_anonymous' && (
+          <PublicGuestBanner onSignIn={onSignIn} />
+        )}
+        <EmptyTreeOnboardingCard
+          canOnboard={canEdit}
+          userRole={
+            treeData.access_tier === 'public_anonymous'
+              ? 'viewer'
+              : treeData.access_tier
+          }
+          onPersonCreated={() => reloadTree()}
+          onImportGedcom={() => {
+            if (onNavigate) {
+              onNavigate('/settings/gedcom');
+            } else if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/settings/gedcom');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   const tierLabel =
     treeData.access_tier === 'public_anonymous'
@@ -227,6 +292,12 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
                 (treeData.access_tier === 'public_anonymous' ||
                   node.primary_name.given_name === 'Living');
               const fullName = formatNodeFullName(node);
+              const isHomePerson = Boolean(
+                resolvedHomePersonId &&
+                  (node.id === resolvedHomePersonId ||
+                    node.gid === resolvedHomePersonId)
+              );
+              const isSinglePersonTree = treeData.nodes.length === 1;
 
               return (
                 <div
@@ -250,6 +321,15 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1 shrink-0">
+                      {isHomePerson && (
+                        <Badge
+                          variant="brand"
+                          size="sm"
+                          icon={<Home className="h-3 w-3" />}
+                        >
+                          {t('tree.homePersonBadge')}
+                        </Badge>
+                      )}
                       {node.is_private && (
                         <Badge
                           variant="warning"
@@ -298,75 +378,116 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
                     </div>
                   )}
 
-                  {canEdit && !isMaskedLiving && (
+                  {isAuthenticatedUser && !isMaskedLiving && (
                     <div className="border-t border-border pt-2.5 space-y-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          leftIcon={<UserPlus className="h-3 w-3" />}
-                          onClick={() =>
-                            setQuickAddState({
-                              anchor: node,
-                              relation: 'father',
-                            })
-                          }
-                        >
-                          {t('person.actions.addFather')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          leftIcon={<UserPlus className="h-3 w-3" />}
-                          onClick={() =>
-                            setQuickAddState({
-                              anchor: node,
-                              relation: 'spouse',
-                            })
-                          }
-                        >
-                          {t('person.actions.addSpouse')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          leftIcon={<UserPlus className="h-3 w-3" />}
-                          onClick={() =>
-                            setQuickAddState({
-                              anchor: node,
-                              relation: 'child',
-                            })
-                          }
-                        >
-                          {t('person.actions.addChild')}
-                        </Button>
-                      </div>
+                      {canEdit && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className={
+                              isSinglePersonTree
+                                ? 'ring-2 ring-brand/40 animate-pulse'
+                                : undefined
+                            }
+                            leftIcon={<UserPlus className="h-3 w-3" />}
+                            onClick={() =>
+                              setQuickAddState({
+                                anchor: node,
+                                relation: 'father',
+                              })
+                            }
+                          >
+                            {t('person.actions.addFather')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className={
+                              isSinglePersonTree
+                                ? 'ring-2 ring-brand/40 animate-pulse'
+                                : undefined
+                            }
+                            leftIcon={<UserPlus className="h-3 w-3" />}
+                            onClick={() =>
+                              setQuickAddState({
+                                anchor: node,
+                                relation: 'mother',
+                              })
+                            }
+                          >
+                            {t('person.actions.addMother')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            leftIcon={<UserPlus className="h-3 w-3" />}
+                            onClick={() =>
+                              setQuickAddState({
+                                anchor: node,
+                                relation: 'spouse',
+                              })
+                            }
+                          >
+                            {t('person.actions.addSpouse')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            leftIcon={<UserPlus className="h-3 w-3" />}
+                            onClick={() =>
+                              setQuickAddState({
+                                anchor: node,
+                                relation: 'child',
+                              })
+                            }
+                          >
+                            {t('person.actions.addChild')}
+                          </Button>
+                        </div>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          leftIcon={<PenTool className="h-3 w-3" />}
-                          onClick={() => setEditTarget(node)}
-                        >
-                          {t('person.actions.editProfile')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          leftIcon={<Plus className="h-3 w-3" />}
-                          onClick={() => setEventTarget(node)}
-                        >
-                          {t('person.actions.addEvent')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
-                          onClick={() => setDeleteTarget(node)}
-                        >
-                          {t('person.actions.deletePerson')}
-                        </Button>
+                        {!isHomePerson && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            leftIcon={<Home className="h-3 w-3" />}
+                            onClick={() => handleSetHomePerson(node)}
+                          >
+                            {t('tree.setAsHomePerson')}
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              leftIcon={<PenTool className="h-3 w-3" />}
+                              onClick={() => setEditTarget(node)}
+                            >
+                              {t('person.actions.editProfile')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              leftIcon={<Plus className="h-3 w-3" />}
+                              onClick={() => setEventTarget(node)}
+                            >
+                              {t('person.actions.addEvent')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              leftIcon={
+                                <Trash2 className="h-3 w-3 text-danger" />
+                              }
+                              onClick={() => setDeleteTarget(node)}
+                            >
+                              {t('person.actions.deletePerson')}
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}

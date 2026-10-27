@@ -84,6 +84,10 @@ pub struct InviteRegisterRequest {
     pub passkey: Option<PasskeyRegistrationInput>,
 }
 
+fn default_start_page() -> String {
+    "tree".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserDto {
     pub id: String,
@@ -97,6 +101,10 @@ pub struct UserDto {
     pub locale: Option<String>,
     pub theme: Option<String>,
     pub home_person_id: Option<String>,
+    #[serde(default = "default_start_page")]
+    pub start_page: String,
+    #[serde(default)]
+    pub digest_opt_in: bool,
     pub has_password: bool,
     pub passkeys_count: usize,
     pub remaining_recovery_codes: usize,
@@ -201,13 +209,20 @@ pub struct SetPasswordRequest {
     pub new_password: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct UpdateProfileRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub locale: Option<String>,
     pub theme: Option<String>,
     pub home_person_id: Option<String>,
+    pub start_page: Option<String>,
+    pub digest_opt_in: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct SetHomePersonRequest {
+    pub person_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -327,6 +342,8 @@ pub struct UserRecord {
     pub locale: Option<String>,
     pub theme: Option<String>,
     pub home_person_id: Option<Uuid>,
+    pub start_page: String,
+    pub digest_opt_in: bool,
     pub failed_login_attempts: i32,
     pub locked_until: Option<DateTime<Utc>>,
     pub last_login_at: Option<DateTime<Utc>>,
@@ -632,6 +649,8 @@ impl AuthService {
             locale: Some(state.config.default_locale.clone()),
             theme: None,
             home_person_id: None,
+            start_page: "tree".to_string(),
+            digest_opt_in: false,
             failed_login_attempts: 0,
             locked_until: None,
             last_login_at: Some(now),
@@ -894,6 +913,8 @@ impl AuthService {
             locale: Some(state.config.default_locale.clone()),
             theme: None,
             home_person_id: inv.person_id,
+            start_page: "tree".to_string(),
+            digest_opt_in: false,
             failed_login_attempts: 0,
             locked_until: None,
             last_login_at: Some(now),
@@ -1731,12 +1752,188 @@ impl AuthService {
             locale: user.locale.clone(),
             theme: user.theme.clone(),
             home_person_id: user.home_person_id.map(|id| id.to_string()),
+            start_page: user.start_page.clone(),
+            digest_opt_in: user.digest_opt_in,
             has_password: user.password_hash.is_some(),
             passkeys_count,
             remaining_recovery_codes,
             last_login_at: user.last_login_at.map(|d| d.to_rfc3339()),
             created_at: user.created_at.to_rfc3339(),
         }
+    }
+
+    pub async fn update_profile(
+        state: &AppState,
+        user_id: Uuid,
+        req: UpdateProfileRequest,
+    ) -> Result<UserDto, AppError> {
+        let mut fields = HashMap::new();
+
+        if let Some(ref first) = req.first_name {
+            let trimmed = first.trim();
+            if trimmed.is_empty() || trimmed.chars().count() > 60 {
+                fields.insert("first_name".to_string(), "invalid_length".to_string());
+            }
+        }
+        if let Some(ref last) = req.last_name {
+            let trimmed = last.trim();
+            if trimmed.is_empty() || trimmed.chars().count() > 60 {
+                fields.insert("last_name".to_string(), "invalid_length".to_string());
+            }
+        }
+        if let Some(ref locale) = req.locale {
+            if !matches!(locale.trim(), "en" | "ru") {
+                fields.insert("locale".to_string(), "invalid_locale".to_string());
+            }
+        }
+        if let Some(ref theme) = req.theme {
+            if !matches!(theme.trim(), "light" | "dark" | "system") {
+                fields.insert("theme".to_string(), "invalid_theme".to_string());
+            }
+        }
+        if let Some(ref sp) = req.start_page {
+            if !matches!(sp.trim(), "tree" | "dashboard") {
+                fields.insert("start_page".to_string(), "invalid_start_page".to_string());
+            }
+        }
+
+        let resolved_home_person: Option<Option<Uuid>> = match req.home_person_id.as_deref() {
+            Some(raw) if raw.trim().is_empty() => Some(None),
+            Some(raw) => {
+                let target = raw.trim();
+                let p_store = state.privacy_store.read().await;
+                if let Some(p) = p_store
+                    .persons
+                    .iter()
+                    .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+                {
+                    Some(Uuid::parse_str(&p.id).ok())
+                } else if let Ok(uid) = Uuid::parse_str(target) {
+                    Some(Some(uid))
+                } else {
+                    fields.insert("home_person_id".to_string(), "invalid_uuid".to_string());
+                    None
+                }
+            }
+            None => None,
+        };
+
+        if !fields.is_empty() {
+            return Err(AppError::ValidationFailed(
+                "Invalid user profile preferences".to_string(),
+                Some(fields),
+            ));
+        }
+
+        let updated_user = {
+            let mut store = state.auth_store.write().await;
+            let u = store
+                .users
+                .iter_mut()
+                .find(|u| u.id == user_id)
+                .ok_or(AppError::NotAuthenticated)?;
+
+            if let Some(first) = req.first_name {
+                u.first_name = first.trim().to_string();
+            }
+            if let Some(last) = req.last_name {
+                u.last_name = last.trim().to_string();
+            }
+            if let Some(locale) = req.locale {
+                u.locale = Some(locale.trim().to_string());
+            }
+            if let Some(theme) = req.theme {
+                u.theme = Some(theme.trim().to_string());
+            }
+            if let Some(hp_opt) = resolved_home_person {
+                u.home_person_id = hp_opt;
+            }
+            if let Some(sp) = req.start_page {
+                u.start_page = sp.trim().to_string();
+            }
+            if let Some(digest) = req.digest_opt_in {
+                u.digest_opt_in = digest;
+            }
+            u.updated_at = Utc::now();
+            u.clone()
+        };
+
+        if let Some(pool) = &state.db {
+            let _ = sqlx::query(
+                "UPDATE users
+                 SET first_name = $1, last_name = $2, locale = $3, theme = $4,
+                     home_person_id = $5, start_page = $6, digest_opt_in = $7, updated_at = NOW()
+                 WHERE id = $8",
+            )
+            .bind(&updated_user.first_name)
+            .bind(&updated_user.last_name)
+            .bind(&updated_user.locale)
+            .bind(&updated_user.theme)
+            .bind(updated_user.home_person_id)
+            .bind(&updated_user.start_page)
+            .bind(updated_user.digest_opt_in)
+            .bind(updated_user.id)
+            .execute(pool)
+            .await;
+        }
+
+        Ok(Self::build_user_dto(state, &updated_user).await)
+    }
+
+    pub async fn set_home_person(
+        state: &AppState,
+        user_id: Uuid,
+        person_id_raw: Option<String>,
+    ) -> Result<UserDto, AppError> {
+        let resolved_uuid: Option<Uuid> = match person_id_raw.as_deref() {
+            None => None,
+            Some(raw) if raw.trim().is_empty() => None,
+            Some(raw) => {
+                let target = raw.trim();
+                let p_store = state.privacy_store.read().await;
+                if let Some(p) = p_store
+                    .persons
+                    .iter()
+                    .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+                {
+                    let uid = Uuid::parse_str(&p.id).map_err(|_| {
+                        let mut fields = HashMap::new();
+                        fields.insert("person_id".to_string(), "invalid_uuid".to_string());
+                        AppError::ValidationFailed(
+                            "Resolved person ID is not a valid UUID".to_string(),
+                            Some(fields),
+                        )
+                    })?;
+                    Some(uid)
+                } else {
+                    return Err(AppError::NotFound);
+                }
+            }
+        };
+
+        let updated_user = {
+            let mut store = state.auth_store.write().await;
+            let u = store
+                .users
+                .iter_mut()
+                .find(|u| u.id == user_id)
+                .ok_or(AppError::NotAuthenticated)?;
+            u.home_person_id = resolved_uuid;
+            u.updated_at = Utc::now();
+            u.clone()
+        };
+
+        if let Some(pool) = &state.db {
+            let _ = sqlx::query(
+                "UPDATE users SET home_person_id = $1, updated_at = NOW() WHERE id = $2",
+            )
+            .bind(updated_user.home_person_id)
+            .bind(updated_user.id)
+            .execute(pool)
+            .await;
+        }
+
+        Ok(Self::build_user_dto(state, &updated_user).await)
     }
 
     pub fn to_passkey_dto(pk: &PasskeyRecord) -> PasskeyCredentialDto {
@@ -1808,15 +2005,33 @@ impl AuthService {
         let parsed_person_id = match req.person_id.as_deref() {
             Some("") => Some(None),
             Some(s) => {
-                let id = Uuid::parse_str(s.trim()).map_err(|_| {
-                    let mut fields = HashMap::new();
-                    fields.insert("person_id".to_string(), "invalid_uuid".to_string());
-                    AppError::ValidationFailed(
-                        "person_id must be a valid UUID".to_string(),
-                        Some(fields),
-                    )
-                })?;
-                Some(Some(id))
+                let target = s.trim();
+                let p_store = state.privacy_store.read().await;
+                if let Some(p) = p_store
+                    .persons
+                    .iter()
+                    .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+                {
+                    let id = Uuid::parse_str(&p.id).map_err(|_| {
+                        let mut fields = HashMap::new();
+                        fields.insert("person_id".to_string(), "invalid_uuid".to_string());
+                        AppError::ValidationFailed(
+                            "person_id must be a valid UUID".to_string(),
+                            Some(fields),
+                        )
+                    })?;
+                    Some(Some(id))
+                } else {
+                    let id = Uuid::parse_str(target).map_err(|_| {
+                        let mut fields = HashMap::new();
+                        fields.insert("person_id".to_string(), "invalid_uuid".to_string());
+                        AppError::ValidationFailed(
+                            "person_id must be a valid UUID".to_string(),
+                            Some(fields),
+                        )
+                    })?;
+                    Some(Some(id))
+                }
             }
             None => None,
         };
@@ -1859,6 +2074,9 @@ impl AuthService {
             }
             if let Some(pid_opt) = parsed_person_id {
                 u.person_id = pid_opt;
+                if u.home_person_id.is_none() {
+                    u.home_person_id = pid_opt;
+                }
             }
 
             let mut purge = false;
@@ -1890,11 +2108,12 @@ impl AuthService {
         if let Some(pool) = &state.db {
             let _ = sqlx::query(
                 "UPDATE users
-                 SET role = $1, person_id = $2, is_active = $3, deactivated_at = $4, updated_at = NOW()
-                 WHERE id = $5",
+                 SET role = $1, person_id = $2, home_person_id = $3, is_active = $4, deactivated_at = $5, updated_at = NOW()
+                 WHERE id = $6",
             )
             .bind(&updated_user.role)
             .bind(updated_user.person_id)
+            .bind(updated_user.home_person_id)
             .bind(updated_user.is_active)
             .bind(updated_user.deactivated_at)
             .bind(updated_user.id)
@@ -1962,8 +2181,8 @@ impl AuthService {
 
     async fn persist_user_to_db(pool: &sqlx::PgPool, u: &UserRecord) -> Result<(), AppError> {
         sqlx::query(
-            "INSERT INTO users (id, email, first_name, last_name, role, person_id, is_active, password_hash, locale, theme, home_person_id, last_login_at, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+            "INSERT INTO users (id, email, first_name, last_name, role, person_id, is_active, password_hash, locale, theme, home_person_id, start_page, digest_opt_in, last_login_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
         )
         .bind(u.id)
         .bind(&u.email)
@@ -1976,6 +2195,8 @@ impl AuthService {
         .bind(&u.locale)
         .bind(&u.theme)
         .bind(u.home_person_id)
+        .bind(&u.start_page)
+        .bind(u.digest_opt_in)
         .bind(u.last_login_at)
         .bind(u.created_at)
         .bind(u.updated_at)

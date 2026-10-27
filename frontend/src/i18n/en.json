@@ -332,6 +332,8 @@
       "livingThresholdLabel": "Living Person Age Threshold",
       "livingThresholdHint": "Individuals without a recorded death event born within this number of years are automatically treated as living.",
       "yearsOption": "{years} years",
+      "defaultHomePersonLabel": "Default Archive Home Person",
+      "defaultHomePersonHint": "Focal person shown to visitors and members who have not chosen a personal home person.",
       "saveButton": "Save Changes",
       "savedSuccess": "Archive settings saved",
       "savedDesc": "Updated configuration is now active across the archive.",
@@ -403,6 +405,19 @@
       "roleLabel": "Archive Role",
       "localeLabel": "Interface Language",
       "themeLabel": "Color Theme",
+      "startPageLabel": "Default Start Page",
+      "startPageHint": "Choose which view opens first when you visit the archive.",
+      "startPageDashboard": "Home Dashboard",
+      "startPageTree": "Tree Canvas",
+      "homePersonLabel": "My Home Person",
+      "homePersonHint": "Used as the initial focal person on the tree and for calculating kinship relationships to you.",
+      "homePersonNotSet": "Not set",
+      "homePersonNoneOption": "No home person selected",
+      "selectHomePersonLabel": "Select Home Person",
+      "clearHomePersonBtn": "Clear Home Person",
+      "homePersonClearedToast": "Home person cleared",
+      "digestOptInLabel": "Receive monthly family anniversary digest by email",
+      "digestOptInDesc": "Sends a monthly summary of upcoming birthdays, anniversaries, and newly added records when email delivery is configured.",
       "saveBtn": "Save Profile",
       "savedToast": "Profile updated"
     },
@@ -514,6 +529,9 @@
     "soleAdminError": "Cannot demote or deactivate the sole remaining active administrator."
   },
   "tree": {
+    "homePersonBadge": "Home Person",
+    "setAsHomePerson": "Set as my home person",
+    "homePersonUpdatedToast": "Home person updated",
     "publicBanner": {
       "badge": "Public Guest View",
       "title": "Living Family Members Are Protected",
@@ -603,6 +621,22 @@
     }
   },
   "person": {
+    "fields": {
+      "givenName": "Given Name",
+      "givenNamePlaceholder": "e.g. Ivan",
+      "patronymic": "Patronymic",
+      "patronymicPlaceholder": "e.g. Petrovich",
+      "surname": "Surname",
+      "surnamePlaceholder": "e.g. Levshits",
+      "sex": "Sex / Gender",
+      "birthDate": "Birth Date",
+      "birthPlace": "Birth Place"
+    },
+    "sex": {
+      "male": "Male",
+      "female": "Female",
+      "unknown": "Other / Unknown"
+    },
     "actions": {
       "addParent": "Add Parent",
       "addFather": "Add Father",
@@ -766,6 +800,24 @@
       "targetSelectLabel": "Target Place to Keep",
       "confirmBtn": "Merge Places",
       "mergedToast": "Places merged and references updated"
+    }
+  },
+  "onboarding": {
+    "emptyTitle": "Let's start your family tree",
+    "emptyDescription": "Create your own profile as the starting point of the family tree, or import an existing GEDCOM archive.",
+    "startWithSelfBtn": "Start with yourself",
+    "importGedcomBtn": "Import a GEDCOM file",
+    "gedcomHint": "Coming from MyHeritage, Ancestry, Geni or another app? Export a GEDCOM (.ged) there and import it here.",
+    "emptyViewerTitle": "Family Tree Archive",
+    "viewerWaitingNotice": "This family tree is still being prepared.",
+    "dashboardGreeting": "Welcome back, {name}",
+    "selfDialog": {
+      "title": "Start with Yourself",
+      "subtitle": "Your record will be linked to your account and set as your home person in the tree.",
+      "birthPlacePlaceholder": "e.g. Saint Petersburg, Russia",
+      "birthDateHint": "Supports exact dates, approximate years, or Julian (Old Style) dates.",
+      "submitBtn": "Create My Record & Open Tree",
+      "createdToast": "Your profile has been created and set as your home person"
     }
   }
 }

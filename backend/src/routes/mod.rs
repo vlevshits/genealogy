@@ -27,29 +27,31 @@ use crate::{
             list_admin_users, list_passkeys, list_sessions, login_with_password,
             login_with_recovery_code, logout, preview_invitation, regenerate_recovery_codes,
             rename_passkey, request_magic_link, revoke_admin_invite, revoke_all_user_sessions,
-            revoke_other_sessions, revoke_session, set_user_password, update_admin_user,
-            update_current_user, verify_add_passkey, verify_invite_registration,
-            verify_magic_link_get, verify_magic_link_post, verify_passkey_login,
+            revoke_other_sessions, revoke_session, set_me_home_person, set_user_password,
+            update_admin_user, update_current_user, update_me_preferences, verify_add_passkey,
+            verify_invite_registration, verify_magic_link_get, verify_magic_link_post,
+            verify_passkey_login,
         },
         health::{health_check, HealthResponse},
         rbac::{
             create_event, create_family, create_note, create_person, create_place, delete_event,
             delete_family, delete_note, delete_person, delete_place, export_gedcom,
             export_printable_pdf, get_audit_history, get_data_quality_warnings, get_family,
-            get_media_file, get_patronymic_suggestion, get_person, get_person_delete_impact,
-            get_place_detail, get_tree, import_gedcom, list_event_sources, list_events,
-            list_families, list_media_archive, list_notes, list_people_directory,
-            list_places_directory, merge_duplicate_people, merge_place, quick_add_relative,
-            restore_deleted_person, update_event, update_family, update_note, update_person,
-            update_place, AdminToolOperationResponse, CreateEventRequest, CreateFamilyRequest,
-            CreateNoteRequest, CreatePersonRequest, CreatePlaceRequest, DeleteImpactDto,
-            EventFilterQuery, EventListResponse, FamilyListResponse, MediaArchiveResponse,
-            MergePlaceRequest, NoteFilterQuery, NoteListResponse, PatronymicSuggestionQuery,
+            get_media_file, get_onboarding_status, get_patronymic_suggestion, get_person,
+            get_person_delete_impact, get_place_detail, get_tree, import_gedcom,
+            list_event_sources, list_events, list_families, list_media_archive, list_notes,
+            list_people_directory, list_places_directory, merge_duplicate_people, merge_place,
+            quick_add_relative, restore_deleted_person, start_with_self, update_event,
+            update_family, update_note, update_person, update_place, AdminToolOperationResponse,
+            CreateEventRequest, CreateFamilyRequest, CreateNoteRequest, CreatePersonRequest,
+            CreatePlaceRequest, DeleteImpactDto, EventFilterQuery, EventListResponse,
+            FamilyListResponse, MediaArchiveResponse, MergePlaceRequest, NoteFilterQuery,
+            NoteListResponse, OnboardingStatusResponse, PatronymicSuggestionQuery,
             PatronymicSuggestionResponse, PeopleDirectoryResponse, PersonMergeRequest,
             PlaceDetailDto, PlacesDirectoryResponse, PlacesFilterQuery, QuickAddRelativeRequest,
-            QuickAddRelativeResponse, SourceAutocompleteResponse, SourceSearchQuery, TreeResponse,
-            UpdateEventRequest, UpdateFamilyRequest, UpdateNoteRequest, UpdatePersonRequest,
-            UpdatePlaceRequest,
+            QuickAddRelativeResponse, SourceAutocompleteResponse, SourceSearchQuery,
+            StartWithSelfRequest, StartWithSelfResponse, TreeResponse, UpdateEventRequest,
+            UpdateFamilyRequest, UpdateNoteRequest, UpdatePersonRequest, UpdatePlaceRequest,
         },
         system::{
             download_admin_backup, get_admin_settings, get_admin_system, get_system_info,
@@ -68,8 +70,9 @@ use crate::{
             PasskeyListResponse, PasskeyLoginVerifyRequest, PasskeyRegistrationInput,
             PasswordLoginRequest, RecoveryCodeLoginRequest, RecoveryCodeLoginResponse,
             RegenerateRecoveryCodesResponse, RenamePasskeyRequest, SessionDto, SessionListResponse,
-            SetPasswordRequest, SetupCompleteResponse, SetupRequest, SetupStatusResponse,
-            UpdateAdminUserRequest, UpdateProfileRequest, UserDto, WebAuthnChallengeResponse,
+            SetHomePersonRequest, SetPasswordRequest, SetupCompleteResponse, SetupRequest,
+            SetupStatusResponse, UpdateAdminUserRequest, UpdateProfileRequest, UserDto,
+            WebAuthnChallengeResponse,
         },
         backup::{BackupArchiveInfo, BackupFileEntry, BackupManifest, BackupStats},
         privacy::{
@@ -107,6 +110,8 @@ use crate::{
         auth::login_with_recovery_code,
         auth::get_current_user,
         auth::update_current_user,
+        auth::update_me_preferences,
+        auth::set_me_home_person,
         auth::logout,
         auth::list_passkeys,
         auth::create_add_passkey_challenge,
@@ -125,6 +130,8 @@ use crate::{
         auth::revoke_admin_invite,
         auth::create_user_sign_in_link,
         auth::revoke_all_user_sessions,
+        rbac::get_onboarding_status,
+        rbac::start_with_self,
         rbac::get_tree,
         rbac::get_patronymic_suggestion,
         rbac::get_person,
@@ -210,6 +217,7 @@ use crate::{
             PasskeyListResponse,
             RenamePasskeyRequest,
             SetPasswordRequest,
+            SetHomePersonRequest,
             UpdateProfileRequest,
             SessionDto,
             SessionListResponse,
@@ -236,6 +244,9 @@ use crate::{
             PlaceBreadcrumbDto,
             PlaceSummaryDto,
             ChangeLogEntryDto,
+            OnboardingStatusResponse,
+            StartWithSelfRequest,
+            StartWithSelfResponse,
             TreeResponse,
             CreatePersonRequest,
             UpdatePersonRequest,
@@ -321,6 +332,8 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/auth/recovery-code", post(login_with_recovery_code))
         .route("/auth/me", get(get_current_user).patch(update_current_user))
+        .route("/me", get(get_current_user).patch(update_me_preferences))
+        .route("/me/home-person", put(set_me_home_person))
         .route("/auth/logout", post(logout))
         .route("/auth/passkeys", get(list_passkeys))
         .route(
@@ -342,6 +355,9 @@ pub fn create_router(state: AppState) -> Router {
             get(list_sessions).delete(revoke_other_sessions),
         )
         .route("/auth/sessions/{id}", delete(revoke_session))
+        // Onboarding & Home Person
+        .route("/onboarding/status", get(get_onboarding_status))
+        .route("/onboarding/start-with-self", post(start_with_self))
         // Core Genealogy Data Model, Person/Family/Event Editing, Places & RBAC Endpoints
         .route("/tree", get(get_tree))
         .route(

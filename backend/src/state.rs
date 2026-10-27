@@ -16,7 +16,17 @@ pub struct InstanceSettingsDto {
     pub default_locale: String,
     pub enable_public_access: bool,
     pub living_person_age_threshold: u32,
+    #[serde(default)]
+    pub default_home_person_id: Option<String>,
     pub settings_locked_from_env: bool,
+}
+
+fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -25,6 +35,9 @@ pub struct UpdateInstanceSettingsRequest {
     pub default_locale: Option<String>,
     pub enable_public_access: Option<bool>,
     pub living_person_age_threshold: Option<u32>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<String>)]
+    pub default_home_person_id: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +46,7 @@ pub struct InstanceSettingsValues {
     pub default_locale: String,
     pub enable_public_access: bool,
     pub living_person_age_threshold: u32,
+    pub default_home_person_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -52,6 +66,7 @@ impl AppState {
             default_locale: config.default_locale.clone(),
             enable_public_access: config.enable_public_access,
             living_person_age_threshold: config.living_person_age_threshold,
+            default_home_person_id: None,
         };
         Self {
             db,
@@ -63,20 +78,29 @@ impl AppState {
         }
     }
 
+    /// Creates an application state with an empty genealogy store (0 individuals) for onboarding scenarios.
+    pub fn new_empty(db: Option<PgPool>, config: AppConfig) -> Self {
+        let initial = InstanceSettingsValues {
+            tree_title: config.tree_title.clone(),
+            default_locale: config.default_locale.clone(),
+            enable_public_access: config.enable_public_access,
+            living_person_age_threshold: config.living_person_age_threshold,
+            default_home_person_id: None,
+        };
+        Self {
+            db,
+            config: Arc::new(config),
+            settings_override: Arc::new(RwLock::new(initial)),
+            auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
+            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::empty())),
+            rate_limiter: RateLimiter::new(),
+        }
+    }
+
     /// Resolves effective instance settings according to `docs/features/10-core-data-model.md §7`:
     /// - When `SETTINGS_LOCKED_FROM_ENV=true`, environment values always win.
     /// - Otherwise, values saved in `instance_settings` (or in-memory state when running standalone) win over initial `.env` defaults.
     pub async fn resolve_instance_settings(&self) -> InstanceSettingsDto {
-        if self.config.settings_locked_from_env {
-            return InstanceSettingsDto {
-                tree_title: self.config.tree_title.clone(),
-                default_locale: self.config.default_locale.clone(),
-                enable_public_access: self.config.enable_public_access,
-                living_person_age_threshold: self.config.living_person_age_threshold,
-                settings_locked_from_env: true,
-            };
-        }
-
         let mut current = self.settings_override.read().await.clone();
 
         if let Some(pool) = &self.db {
@@ -109,10 +133,33 @@ impl AppState {
                                 current.living_person_age_threshold = n as u32;
                             }
                         }
+                        "default_home_person_id" => {
+                            if val.is_null() {
+                                current.default_home_person_id = None;
+                            } else if let Some(s) = val.as_str() {
+                                let trimmed = s.trim();
+                                current.default_home_person_id = if trimmed.is_empty() {
+                                    None
+                                } else {
+                                    Some(trimmed.to_string())
+                                };
+                            }
+                        }
                         _ => {}
                     }
                 }
             }
+        }
+
+        if self.config.settings_locked_from_env {
+            return InstanceSettingsDto {
+                tree_title: self.config.tree_title.clone(),
+                default_locale: self.config.default_locale.clone(),
+                enable_public_access: self.config.enable_public_access,
+                living_person_age_threshold: self.config.living_person_age_threshold,
+                default_home_person_id: current.default_home_person_id,
+                settings_locked_from_env: true,
+            };
         }
 
         InstanceSettingsDto {
@@ -120,7 +167,33 @@ impl AppState {
             default_locale: current.default_locale,
             enable_public_access: current.enable_public_access,
             living_person_age_threshold: current.living_person_age_threshold,
+            default_home_person_id: current.default_home_person_id,
             settings_locked_from_env: false,
+        }
+    }
+
+    pub async fn set_default_home_person_if_unset(&self, person_id: &str) {
+        let mut guard = self.settings_override.write().await;
+        if guard.default_home_person_id.is_none() {
+            guard.default_home_person_id = Some(person_id.to_string());
+        }
+        drop(guard);
+
+        if let Some(pool) = &self.db {
+            let _ = sqlx::query(
+                "INSERT INTO instance_settings (key, value, updated_at)
+                 VALUES ('default_home_person_id', $1, NOW())
+                 ON CONFLICT (key) DO UPDATE
+                 SET value = CASE
+                     WHEN instance_settings.value IS NULL OR instance_settings.value = 'null'::jsonb
+                     THEN EXCLUDED.value
+                     ELSE instance_settings.value
+                 END,
+                 updated_at = NOW()",
+            )
+            .bind(serde_json::Value::String(person_id.to_string()))
+            .execute(pool)
+            .await;
         }
     }
 
@@ -156,6 +229,31 @@ impl AppState {
             }
         }
 
+        let resolved_default_home_person = match req.default_home_person_id.as_ref() {
+            Some(None) => Some(None),
+            Some(Some(raw)) if raw.trim().is_empty() => Some(None),
+            Some(Some(raw)) => {
+                let target = raw.trim();
+                let store = self.privacy_store.read().await;
+                if let Some(p) = store
+                    .persons
+                    .iter()
+                    .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+                {
+                    Some(Some(p.id.clone()))
+                } else if uuid::Uuid::parse_str(target).is_ok() {
+                    Some(Some(target.to_string()))
+                } else {
+                    field_errors.insert(
+                        "default_home_person_id".to_string(),
+                        "not_found".to_string(),
+                    );
+                    None
+                }
+            }
+            None => None,
+        };
+
         if !field_errors.is_empty() {
             return Err(AppError::ValidationFailed(
                 "Invalid instance settings".to_string(),
@@ -176,11 +274,18 @@ impl AppState {
         if let Some(threshold) = req.living_person_age_threshold {
             guard.living_person_age_threshold = threshold;
         }
+        if let Some(dhp_opt) = resolved_default_home_person {
+            guard.default_home_person_id = dhp_opt;
+        }
         let updated = guard.clone();
         drop(guard);
 
         if let Some(pool) = &self.db {
-            let entries: [(&str, serde_json::Value); 4] = [
+            let dhp_json = match &updated.default_home_person_id {
+                Some(id) => serde_json::Value::String(id.clone()),
+                None => serde_json::Value::Null,
+            };
+            let entries: [(&str, serde_json::Value); 5] = [
                 (
                     "tree_title",
                     serde_json::Value::String(updated.tree_title.clone()),
@@ -197,6 +302,7 @@ impl AppState {
                     "living_person_age_threshold",
                     serde_json::json!(updated.living_person_age_threshold),
                 ),
+                ("default_home_person_id", dhp_json),
             ];
 
             for (key, value) in entries {
@@ -218,6 +324,7 @@ impl AppState {
             default_locale: updated.default_locale,
             enable_public_access: updated.enable_public_access,
             living_person_age_threshold: updated.living_person_age_threshold,
+            default_home_person_id: updated.default_home_person_id,
             settings_locked_from_env: false,
         })
     }

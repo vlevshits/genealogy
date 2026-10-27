@@ -1,6 +1,5 @@
-import React, { useState, useEffect, Suspense } from 'react';
-import { Compass, Sparkles, Layers, Shield, FileText } from 'lucide-react';
-import { SystemStatusCard } from './components/SystemStatusCard';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import { Home, MapPin, User } from 'lucide-react';
 import {
   AccessDeniedCard,
   AppShell,
@@ -10,16 +9,25 @@ import {
   Spinner,
 } from './components/ui';
 import { TreePrivacyPreviewCard } from './components/tree';
+import { EmptyTreeOnboardingCard } from './components/onboarding';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlacesPage } from './pages/PlacesPage';
 import { AuthPages } from './pages/AuthPages';
-import { fetchSystemInfo } from './api/client';
+import {
+  fetchOnboardingStatus,
+  fetchSystemInfo,
+  OnboardingStatusResponse,
+} from './api/client';
 import { useAuth } from './lib/auth-context';
 import { useI18n } from './i18n';
 
 const DevUiWorkbench = React.lazy(() => import('./pages/DevUiWorkbench'));
 
-export const App: React.FC = () => {
+export interface AppProps {
+  initialOnboardingStatus?: OnboardingStatusResponse | null;
+}
+
+export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   const { t } = useI18n();
   const { user, setupStatus, isAuthenticated, isLoading, backendReachable } =
     useAuth();
@@ -29,7 +37,11 @@ export const App: React.FC = () => {
   const [search, setSearch] = useState<string>(() =>
     typeof window !== 'undefined' ? window.location.search : ''
   );
-  const [instanceTitle, setInstanceTitle] = useState<string | undefined>(undefined);
+  const [instanceTitle, setInstanceTitle] = useState<string | undefined>(
+    undefined
+  );
+  const [onboardingStatus, setOnboardingStatus] =
+    useState<OnboardingStatusResponse | null>(initialOnboardingStatus);
 
   useEffect(() => {
     const onPopState = () => {
@@ -59,9 +71,28 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const loadOnboardingStatus = useCallback(() => {
+    if (initialOnboardingStatus) return;
+    fetchOnboardingStatus()
+      .then((status) => {
+        setOnboardingStatus(status);
+      })
+      .catch(() => {});
+  }, [initialOnboardingStatus]);
+
+  useEffect(() => {
+    if (initialOnboardingStatus) {
+      setOnboardingStatus(initialOnboardingStatus);
+      return;
+    }
+    loadOnboardingStatus();
+  }, [initialOnboardingStatus, loadOnboardingStatus, isAuthenticated]);
+
   const navigate = (nextPath: string) => {
     const baseOrigin =
-      typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+      typeof window !== 'undefined'
+        ? window.location.origin
+        : 'http://localhost';
     const parsed = new URL(nextPath, baseOrigin);
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', `${parsed.pathname}${parsed.search}`);
@@ -97,7 +128,12 @@ export const App: React.FC = () => {
   }
 
   // 2. First-run uninitialized instance guard -> /setup (01 §2.1)
-  if (!isLoading && backendReachable && setupStatus && !setupStatus.is_initialized) {
+  if (
+    !isLoading &&
+    backendReachable &&
+    setupStatus &&
+    !setupStatus.is_initialized
+  ) {
     return (
       <AuthPages
         currentPath="/setup"
@@ -225,7 +261,10 @@ export const App: React.FC = () => {
         ]}
       >
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <TreePrivacyPreviewCard onSignIn={() => navigate('/login')} />
+          <TreePrivacyPreviewCard
+            onSignIn={() => navigate('/login')}
+            onNavigate={navigate}
+          />
         </div>
       </AppShell>
     );
@@ -274,6 +313,22 @@ export const App: React.FC = () => {
     );
   }
 
+  // 7. Home route (/) — Empty-tree onboarding or start_page preference (16-dashboard-home.md §2, §3, §4)
+  const isTreeEmpty = Boolean(onboardingStatus?.is_empty);
+  const effectiveStartPage =
+    user?.start_page ?? onboardingStatus?.start_page ?? 'dashboard';
+  const resolvedHomePersonId =
+    onboardingStatus?.resolved_home_person_id ??
+    user?.home_person_id ??
+    user?.person_id ??
+    null;
+
+  // Unauthenticated visitors on a public instance or users who chose 'tree' as their start page
+  const openTreeDirectly =
+    !isTreeEmpty &&
+    (effectiveStartPage === 'tree' ||
+      (Boolean(setupStatus?.enable_public_access) && !isAuthenticated));
+
   return (
     <AppShell
       currentPath={path}
@@ -281,119 +336,88 @@ export const App: React.FC = () => {
       instanceTitle={instanceTitle}
     >
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Archival Hero Banner */}
-        <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-b from-surface to-surface/80 p-8 sm:p-12 shadow-xs">
-          <div className="max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-1 text-xs font-medium text-brand">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>{t('app.badge')}</span>
-            </div>
+        {isTreeEmpty ? (
+          <EmptyTreeOnboardingCard
+            canOnboard={onboardingStatus?.can_onboard}
+            userRole={user?.role ?? (isAuthenticated ? 'viewer' : 'viewer')}
+            onPersonCreated={() => {
+              loadOnboardingStatus();
+              navigate('/tree');
+            }}
+            onImportGedcom={() => navigate('/settings/gedcom')}
+          />
+        ) : openTreeDirectly ? (
+          <TreePrivacyPreviewCard
+            onSignIn={() => navigate('/login')}
+            onNavigate={navigate}
+          />
+        ) : (
+          <>
+            {/* Calm Family Archive Overview Header */}
+            <section className="rounded-3xl border border-border bg-surface p-6 sm:p-10 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div className="max-w-2xl space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="brand">{t('app.badge')}</Badge>
+                    {resolvedHomePersonId && (
+                      <Badge
+                        variant="neutral"
+                        icon={<Home className="h-3 w-3" />}
+                      >
+                        {t('tree.homePersonBadge')}: {resolvedHomePersonId}
+                      </Badge>
+                    )}
+                  </div>
 
-            <h1 className="font-sans text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-primary leading-tight">
-              {instanceTitle || t('app.title')}
-            </h1>
+                  <h1 className="font-sans text-2xl sm:text-3xl font-semibold tracking-tight text-primary">
+                    {user?.first_name
+                      ? t('onboarding.dashboardGreeting', {
+                          name: user.first_name,
+                        })
+                      : instanceTitle || t('app.title')}
+                  </h1>
 
-            <p className="text-base sm:text-lg text-secondary leading-relaxed">
-              {t('app.subtitle')}. {t('app.heroDescription')}
-            </p>
+                  <p className="text-sm sm:text-base text-secondary leading-relaxed">
+                    {t('app.subtitle')}. {t('app.heroDescription')}
+                  </p>
+                </div>
 
-            <div className="pt-2">
-              <Button
-                variant="primary"
-                size="lg"
-                leftIcon={<BrandLogoIcon className="h-4.5 w-4.5" />}
-                onClick={() => navigate('/tree')}
-              >
-                {t('app.openWorkbench')}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-wrap gap-4 text-xs font-medium text-secondary">
-            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2">
-              <Shield className="h-4 w-4 text-success" />
-              <span>{t('app.zeroCloud')}</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2">
-              <Compass className="h-4 w-4 text-brand" />
-              <span>{t('app.bilingual')}</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2">
-              <Layers className="h-4 w-4 text-accent" />
-              <span>{t('app.gedcomReady')}</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Live System Status */}
-        <section>
-          <SystemStatusCard />
-        </section>
-
-        {/* Lineage & Gender Identity Tokens Showcase */}
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-xs">
-          <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">
-            {t('app.paletteTitle')}
-          </h3>
-          <p className="text-xs text-secondary mb-4">{t('app.paletteSubtitle')}</p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-canvas">
-              <span className="h-4 w-4 rounded-full bg-male shadow-2xs" />
-              <div>
-                <div className="font-semibold text-primary">{t('app.lineageMale')}</div>
-                <div className="text-secondary text-[11px]">{t('app.lineageMaleDesc')}</div>
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    leftIcon={<BrandLogoIcon className="h-4 w-4" />}
+                    onClick={() => navigate('/tree')}
+                  >
+                    {t('app.openWorkbench')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    leftIcon={<MapPin className="h-4 w-4" />}
+                    onClick={() => navigate('/places')}
+                  >
+                    {t('nav.places')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="md"
+                    leftIcon={<User className="h-4 w-4" />}
+                    onClick={() => navigate('/settings/profile')}
+                  >
+                    {t('nav.myProfile')}
+                  </Button>
+                </div>
               </div>
-            </div>
+            </section>
 
-            <div className="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-canvas">
-              <span className="h-4 w-4 rounded-full bg-female shadow-2xs" />
-              <div>
-                <div className="font-semibold text-primary">{t('app.lineageFemale')}</div>
-                <div className="text-secondary text-[11px]">{t('app.lineageFemaleDesc')}</div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-canvas">
-              <span className="h-4 w-4 rounded-full bg-accent shadow-2xs" />
-              <div>
-                <div className="font-semibold text-primary">{t('app.lineageGold')}</div>
-                <div className="text-secondary text-[11px]">{t('app.lineageGoldDesc')}</div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 rounded-xl border border-border p-3 bg-canvas">
-              <span className="h-4 w-4 rounded-full bg-neutral shadow-2xs" />
-              <div>
-                <div className="font-semibold text-primary">{t('app.lineageNeutral')}</div>
-                <div className="text-secondary text-[11px]">{t('app.lineageNeutralDesc')}</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Archive Overview */}
-        <section className="rounded-2xl border border-border bg-surface p-6 shadow-xs">
-          <div className="flex items-center gap-2 font-semibold text-primary mb-4">
-            <FileText className="h-5 w-5 text-brand" />
-            <span>{t('app.phasesTitle')}</span>
-          </div>
-
-          <div className="space-y-3 text-xs sm:text-sm">
-            <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface-muted/50">
-              <span className="font-medium text-primary">{t('app.phaseSkeleton')}</span>
-              <Badge variant="success">{t('app.completed')}</Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl border border-brand/40 bg-brand/5">
-              <span className="font-semibold text-primary">{t('app.phase0')}</span>
-              <Badge variant="brand">{t('app.completed')}</Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-canvas">
-              <span className="text-secondary">{t('app.phase1')}</span>
-              <Badge variant="neutral">{t('app.planned')}</Badge>
-            </div>
-          </div>
-        </section>
+            {/* Family Tree Records & Home Person Preview */}
+            <TreePrivacyPreviewCard
+              onSignIn={() => navigate('/login')}
+              onNavigate={navigate}
+            />
+          </>
+        )}
       </div>
     </AppShell>
   );

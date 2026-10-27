@@ -74,6 +74,9 @@ pub enum AppError {
     #[error("First-time instance setup has already been completed")]
     SetupAlreadyCompleted,
 
+    #[error("Family tree has already been onboarded")]
+    AlreadyOnboarded,
+
     #[error("Version conflict: {0}")]
     VersionConflict(String),
 
@@ -121,6 +124,7 @@ impl AppError {
             Self::SettingsLockedFromEnv => "settings_locked_from_env",
             Self::NotFound => "not_found",
             Self::SetupAlreadyCompleted => "setup_already_completed",
+            Self::AlreadyOnboarded => "already_onboarded",
             Self::VersionConflict(_) => "version_conflict",
             Self::CycleDetected(_) => "cycle_detected",
             Self::PlaceInUse => "place_in_use",
@@ -152,9 +156,10 @@ impl AppError {
             | Self::PasswordAuthDisabled
             | Self::CsrfValidationFailed => StatusCode::FORBIDDEN,
             Self::NotFound | Self::InvalidOrExpiredInvite => StatusCode::NOT_FOUND,
-            Self::VersionConflict(_) | Self::SetupAlreadyCompleted | Self::PlaceInUse => {
-                StatusCode::CONFLICT
-            }
+            Self::VersionConflict(_)
+            | Self::SetupAlreadyCompleted
+            | Self::AlreadyOnboarded
+            | Self::PlaceInUse => StatusCode::CONFLICT,
             Self::RateLimited | Self::AccountLocked => StatusCode::TOO_MANY_REQUESTS,
             Self::DatabaseError(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }

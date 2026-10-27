@@ -19,9 +19,9 @@ use crate::{
             PasskeyListResponse, PasskeyLoginVerifyRequest, PasskeyRegistrationInput,
             PasswordLoginRequest, RecoveryCodeLoginRequest, RecoveryCodeLoginResponse,
             RegenerateRecoveryCodesResponse, RenamePasskeyRequest, SessionDto, SessionListResponse,
-            SessionRecord, SetPasswordRequest, SetupCompleteResponse, SetupRequest,
-            SetupStatusResponse, UpdateAdminUserRequest, UpdateProfileRequest, UserDto, UserRecord,
-            WebAuthnChallengeResponse,
+            SessionRecord, SetHomePersonRequest, SetPasswordRequest, SetupCompleteResponse,
+            SetupRequest, SetupStatusResponse, UpdateAdminUserRequest, UpdateProfileRequest,
+            UserDto, UserRecord, WebAuthnChallengeResponse,
         },
         rbac::RequireAdmin,
     },
@@ -126,6 +126,13 @@ pub async fn complete_initial_setup(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::setup_initial_admin(&state, req, ua, Some(ip)).await?;
+    {
+        let mut store = state.privacy_store.write().await;
+        if store.is_demo_seed {
+            store.persons.clear();
+            store.is_demo_seed = false;
+        }
+    }
     Ok((
         StatusCode::CREATED,
         [(header::SET_COOKIE, cookie)],
@@ -385,7 +392,9 @@ pub async fn get_current_user(
     request_body = UpdateProfileRequest,
     responses(
         (status = 200, description = "Updated current user profile", body = UserDto),
-        (status = 401, description = "Not authenticated", body = ErrorResponse)
+        (status = 400, description = "Validation error", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 404, description = "Referenced home person not found", body = ErrorResponse)
     ),
     tag = "Auth"
 )]
@@ -395,42 +404,50 @@ pub async fn update_current_user(
     Json(req): Json<UpdateProfileRequest>,
 ) -> Result<Json<UserDto>, AppError> {
     let (user, _) = require_authenticated(&state, &headers).await?;
-    let updated_user = {
-        let mut store = state.auth_store.write().await;
-        let u = store
-            .users
-            .iter_mut()
-            .find(|u| u.id == user.id)
-            .ok_or(AppError::NotAuthenticated)?;
-        if let Some(first) = req.first_name {
-            let trimmed = first.trim();
-            if !trimmed.is_empty() {
-                u.first_name = trimmed.to_string();
-            }
-        }
-        if let Some(last) = req.last_name {
-            let trimmed = last.trim();
-            if !trimmed.is_empty() {
-                u.last_name = trimmed.to_string();
-            }
-        }
-        if let Some(locale) = req.locale {
-            if matches!(locale.as_str(), "en" | "ru") {
-                u.locale = Some(locale);
-            }
-        }
-        if let Some(theme) = req.theme {
-            if matches!(theme.as_str(), "light" | "dark" | "system") {
-                u.theme = Some(theme);
-            }
-        }
-        if let Some(hp) = req.home_person_id {
-            u.home_person_id = Uuid::parse_str(&hp).ok();
-        }
-        u.clone()
-    };
+    let dto = AuthService::update_profile(&state, user.id, req).await?;
+    Ok(Json(dto))
+}
 
-    let dto = AuthService::build_user_dto(&state, &updated_user).await;
+#[utoipa::path(
+    patch,
+    path = "/api/v1/me",
+    request_body = UpdateProfileRequest,
+    responses(
+        (status = 200, description = "Updated current user preferences (start_page, digest_opt_in, locale, theme, home_person_id)", body = UserDto),
+        (status = 400, description = "Validation error", body = ErrorResponse),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 404, description = "Referenced home person not found", body = ErrorResponse)
+    ),
+    tag = "Auth"
+)]
+pub async fn update_me_preferences(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateProfileRequest>,
+) -> Result<Json<UserDto>, AppError> {
+    let (user, _) = require_authenticated(&state, &headers).await?;
+    let dto = AuthService::update_profile(&state, user.id, req).await?;
+    Ok(Json(dto))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/me/home-person",
+    request_body = SetHomePersonRequest,
+    responses(
+        (status = 200, description = "Set or cleared personal home person override", body = UserDto),
+        (status = 401, description = "Not authenticated", body = ErrorResponse),
+        (status = 404, description = "Referenced person not found or hidden", body = ErrorResponse)
+    ),
+    tag = "Auth"
+)]
+pub async fn set_me_home_person(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SetHomePersonRequest>,
+) -> Result<Json<UserDto>, AppError> {
+    let (user, _) = require_authenticated(&state, &headers).await?;
+    let dto = AuthService::set_home_person(&state, user.id, req.person_id).await?;
     Ok(Json(dto))
 }
 
