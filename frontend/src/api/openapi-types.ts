@@ -284,8 +284,11 @@ export interface UpdatePlaceInput {
   version: number;
 }
 
-export interface MergePlaceResponse {
-  target_place: PlaceDto;
-  repointed_events_count: number;
-  repointed_children_count: number;
-}
+export type MergePlaceResponse =
+  | PlaceDto
+  | {
+      target_place: PlaceDto;
+      repointed_events_count?: number;
+      repointed_children_count?: number;
+      message?: string;
+    };

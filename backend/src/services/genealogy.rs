@@ -390,7 +390,7 @@ pub fn recompute_all_individuals_vitals(
                 let date_str = b_ev
                     .gedcom_date
                     .clone()
-                    .or_else(|| b_ev.date.as_ref().and_then(|d| d.text.clone()));
+                    .or_else(|| b_ev.date.as_ref().map(|d| d.text.clone()));
                 let place_str = b_ev.place_full_name.clone().or_else(|| {
                     b_ev.place_id
                         .as_ref()
@@ -402,12 +402,9 @@ pub fn recompute_all_individuals_vitals(
                 });
             }
 
-            let primary_death = person_events.iter().find(|e| {
-                matches!(
-                    e.event_type.as_str(),
-                    "death" | "burial" | "cremation"
-                )
-            });
+            let primary_death = person_events
+                .iter()
+                .find(|e| matches!(e.event_type.as_str(), "death" | "burial" | "cremation"));
 
             if let Some(d_ev) = primary_death {
                 person.has_death_event = true;
@@ -415,7 +412,7 @@ pub fn recompute_all_individuals_vitals(
                 let date_str = d_ev
                     .gedcom_date
                     .clone()
-                    .or_else(|| d_ev.date.as_ref().and_then(|d| d.text.clone()));
+                    .or_else(|| d_ev.date.as_ref().map(|d| d.text.clone()));
                 let place_str = d_ev.place_full_name.clone().or_else(|| {
                     d_ev.place_id
                         .as_ref()
@@ -443,12 +440,7 @@ pub fn recompute_all_individuals_vitals(
         .events
         .iter()
         .filter(|e| e.event_type == "marriage" && e.family_id.is_some() && e.date_sort.is_some())
-        .map(|e| {
-            (
-                e.family_id.clone().unwrap(),
-                e.date_sort.unwrap() / 10_000,
-            )
-        })
+        .map(|e| (e.family_id.clone().unwrap(), e.date_sort.unwrap() / 10_000))
         .collect();
 
     let families_snapshot = store.families.clone();

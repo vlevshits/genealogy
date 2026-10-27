@@ -33,12 +33,23 @@ use crate::{
         },
         health::{health_check, HealthResponse},
         rbac::{
-            create_person, delete_person, export_gedcom, export_printable_pdf, get_audit_history,
-            get_data_quality_warnings, get_media_file, get_person, get_tree, import_gedcom,
-            list_media_archive, list_people_directory, list_places_directory,
-            merge_duplicate_people, update_person, AdminToolOperationResponse, CreatePersonRequest,
-            MediaArchiveResponse, PeopleDirectoryResponse, PersonMergeRequest,
-            PlacesDirectoryResponse, TreeResponse, UpdatePersonRequest,
+            create_event, create_family, create_note, create_person, create_place, delete_event,
+            delete_family, delete_note, delete_person, delete_place, export_gedcom,
+            export_printable_pdf, get_audit_history, get_data_quality_warnings, get_family,
+            get_media_file, get_patronymic_suggestion, get_person, get_person_delete_impact,
+            get_place_detail, get_tree, import_gedcom, list_event_sources, list_events,
+            list_families, list_media_archive, list_notes, list_people_directory,
+            list_places_directory, merge_duplicate_people, merge_place, quick_add_relative,
+            restore_deleted_person, update_event, update_family, update_note, update_person,
+            update_place, AdminToolOperationResponse, CreateEventRequest, CreateFamilyRequest,
+            CreateNoteRequest, CreatePersonRequest, CreatePlaceRequest, DeleteImpactDto,
+            EventFilterQuery, EventListResponse, FamilyListResponse, MediaArchiveResponse,
+            MergePlaceRequest, NoteFilterQuery, NoteListResponse, PatronymicSuggestionQuery,
+            PatronymicSuggestionResponse, PeopleDirectoryResponse, PersonMergeRequest,
+            PlaceDetailDto, PlacesDirectoryResponse, PlacesFilterQuery, QuickAddRelativeRequest,
+            QuickAddRelativeResponse, SourceAutocompleteResponse, SourceSearchQuery, TreeResponse,
+            UpdateEventRequest, UpdateFamilyRequest, UpdateNoteRequest, UpdatePersonRequest,
+            UpdatePlaceRequest,
         },
         system::{
             download_admin_backup, get_admin_settings, get_admin_system, get_system_info,
@@ -62,8 +73,9 @@ use crate::{
         },
         backup::{BackupArchiveInfo, BackupFileEntry, BackupManifest, BackupStats},
         privacy::{
-            FaceTagDto, MediaAssetSummaryDto, PersonNameDto, PlaceSummaryDto, TreePersonNodeDto,
-            VitalEventSummaryDto,
+            ChangeLogEntryDto, FaceTagDto, FamilyChildDto, FamilyDto, IndividualAltNameDto,
+            LifeEventDto, MediaAssetSummaryDto, NoteDto, PersonNameDto, PlaceAltNameDto,
+            PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
         },
         security::csrf_protection_middleware,
     },
@@ -114,13 +126,36 @@ use crate::{
         auth::create_user_sign_in_link,
         auth::revoke_all_user_sessions,
         rbac::get_tree,
+        rbac::get_patronymic_suggestion,
         rbac::get_person,
         rbac::create_person,
         rbac::update_person,
         rbac::delete_person,
+        rbac::quick_add_relative,
+        rbac::get_person_delete_impact,
+        rbac::restore_deleted_person,
+        rbac::list_families,
+        rbac::get_family,
+        rbac::create_family,
+        rbac::update_family,
+        rbac::delete_family,
+        rbac::list_events,
+        rbac::create_event,
+        rbac::update_event,
+        rbac::delete_event,
+        rbac::list_event_sources,
+        rbac::list_notes,
+        rbac::create_note,
+        rbac::update_note,
+        rbac::delete_note,
         rbac::get_media_file,
         rbac::list_people_directory,
         rbac::list_places_directory,
+        rbac::create_place,
+        rbac::get_place_detail,
+        rbac::update_place,
+        rbac::delete_place,
+        rbac::merge_place,
         rbac::list_media_archive,
         rbac::export_gedcom,
         rbac::import_gedcom,
@@ -188,14 +223,45 @@ use crate::{
             AdminUserListResponse,
             AdminSignInLinkResponse,
             PersonNameDto,
+            IndividualAltNameDto,
             VitalEventSummaryDto,
             TreePersonNodeDto,
+            FamilyChildDto,
+            FamilyDto,
+            LifeEventDto,
+            NoteDto,
             FaceTagDto,
             MediaAssetSummaryDto,
+            PlaceAltNameDto,
+            PlaceBreadcrumbDto,
             PlaceSummaryDto,
+            ChangeLogEntryDto,
             TreeResponse,
             CreatePersonRequest,
             UpdatePersonRequest,
+            PatronymicSuggestionQuery,
+            PatronymicSuggestionResponse,
+            QuickAddRelativeRequest,
+            QuickAddRelativeResponse,
+            DeleteImpactDto,
+            CreateFamilyRequest,
+            UpdateFamilyRequest,
+            FamilyListResponse,
+            EventFilterQuery,
+            CreateEventRequest,
+            UpdateEventRequest,
+            EventListResponse,
+            SourceSearchQuery,
+            SourceAutocompleteResponse,
+            NoteFilterQuery,
+            CreateNoteRequest,
+            UpdateNoteRequest,
+            NoteListResponse,
+            PlacesFilterQuery,
+            CreatePlaceRequest,
+            UpdatePlaceRequest,
+            MergePlaceRequest,
+            PlaceDetailDto,
             PeopleDirectoryResponse,
             PlacesDirectoryResponse,
             MediaArchiveResponse,
@@ -276,21 +342,46 @@ pub fn create_router(state: AppState) -> Router {
             get(list_sessions).delete(revoke_other_sessions),
         )
         .route("/auth/sessions/{id}", delete(revoke_session))
-        // Tree, Privacy & RBAC Matrix Endpoints
+        // Core Genealogy Data Model, Person/Family/Event Editing, Places & RBAC Endpoints
         .route("/tree", get(get_tree))
+        .route(
+            "/persons/suggest-patronymic",
+            get(get_patronymic_suggestion),
+        )
         .route("/persons", post(create_person))
         .route(
             "/persons/{id}",
             get(get_person).patch(update_person).delete(delete_person),
         )
+        .route("/persons/{id}/quick-add", post(quick_add_relative))
+        .route("/persons/{id}/delete-impact", get(get_person_delete_impact))
+        .route("/persons/{id}/restore", post(restore_deleted_person))
+        .route("/families", get(list_families).post(create_family))
+        .route(
+            "/families/{id}",
+            get(get_family).patch(update_family).delete(delete_family),
+        )
+        .route("/events/sources", get(list_event_sources))
+        .route("/events", get(list_events).post(create_event))
+        .route("/events/{id}", patch(update_event).delete(delete_event))
+        .route("/notes", get(list_notes).post(create_note))
+        .route("/notes/{id}", patch(update_note).delete(delete_note))
         .route("/media/{id}/file", get(get_media_file))
         .route("/people", get(list_people_directory))
-        .route("/places", get(list_places_directory))
+        .route("/places", get(list_places_directory).post(create_place))
+        .route(
+            "/places/{id}",
+            get(get_place_detail)
+                .patch(update_place)
+                .delete(delete_place),
+        )
+        .route("/places/{id}/merge", post(merge_place))
         .route("/media", get(list_media_archive))
         .route("/gedcom/export", get(export_gedcom))
         .route("/gedcom/import", post(import_gedcom))
         .route("/export/pdf", post(export_printable_pdf))
         .route("/history", get(get_audit_history))
+        .route("/history/{id}/restore", post(restore_deleted_person))
         .route("/quality", get(get_data_quality_warnings))
         .route("/people/merge", post(merge_duplicate_people))
         // Admin Operations, Users & Invitations

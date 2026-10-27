@@ -80,6 +80,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     anchorPerson?.primary_name.surname ?? ''
   );
   const [birthDate, setBirthDate] = useState<string>('');
+  const [parsedBirthDate, setParsedBirthDate] = useState<import('../../types/gendate').GenDate | null>(null);
   const [birthPlace, setBirthPlace] = useState<string>('');
   const [livingStatus, setLivingStatus] = useState<'auto' | 'living' | 'deceased'>(
     'auto'
@@ -218,7 +219,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      size="lg"
+      size="xl"
       title={dialogTitle}
       description={t('person.quickAdd.subtitle')}
     >
@@ -387,8 +388,11 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
               optionalText
             >
               <GenDateInput
-                value={birthDate}
-                onChange={(raw) => setBirthDate(raw)}
+                value={parsedBirthDate}
+                onChange={(result) => {
+                  setParsedBirthDate(result.value);
+                  setBirthDate(result.value.text);
+                }}
               />
             </FormField>
 

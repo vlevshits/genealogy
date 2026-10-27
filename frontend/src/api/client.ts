@@ -461,6 +461,10 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     throw new ApiError(response.status, errData.error);
   }
 
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as T;
+  }
+
   return response.json();
 }
 

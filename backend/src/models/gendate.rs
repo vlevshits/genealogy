@@ -78,6 +78,62 @@ impl GenDate {
         })
     }
 
+    pub fn sort_key(&self) -> Option<i32> {
+        self.compute_sort_key()
+    }
+
+    /// Formats the structured `GenDate` into a canonical GEDCOM 5.5.1 `DATE` string (`10-core-data-model.md §3.2, §4.3`).
+    pub fn to_gedcom(&self) -> String {
+        if self.r#mod == GenDateMod::Phrase {
+            return format!("({})", self.text);
+        }
+
+        let fmt_partial = |p: &PartialDate| -> String {
+            let month_abbr = p.m.and_then(|m| match m {
+                1 => Some("JAN"),
+                2 => Some("FEB"),
+                3 => Some("MAR"),
+                4 => Some("APR"),
+                5 => Some("MAY"),
+                6 => Some("JUN"),
+                7 => Some("JUL"),
+                8 => Some("AUG"),
+                9 => Some("SEP"),
+                10 => Some("OCT"),
+                11 => Some("NOV"),
+                12 => Some("DEC"),
+                _ => None,
+            });
+            match (p.d, month_abbr) {
+                (Some(d), Some(mon)) => format!("{d} {mon} {}", p.y),
+                (None, Some(mon)) => format!("{mon} {}", p.y),
+                _ => p.y.to_string(),
+            }
+        };
+
+        let cal_prefix = match self.cal {
+            CalendarType::Julian => "@#DJULIAN@ ",
+            CalendarType::Gregorian => "",
+        };
+
+        let start_str = self.start.as_ref().map(fmt_partial).unwrap_or_default();
+        let end_str = self.end.as_ref().map(fmt_partial).unwrap_or_default();
+
+        let body = match self.r#mod {
+            GenDateMod::Exact => start_str,
+            GenDateMod::About => format!("ABT {start_str}"),
+            GenDateMod::Estimated => format!("EST {start_str}"),
+            GenDateMod::Calculated => format!("CAL {start_str}"),
+            GenDateMod::Before => format!("BEF {start_str}"),
+            GenDateMod::After => format!("AFT {start_str}"),
+            GenDateMod::Between => format!("BET {start_str} AND {end_str}"),
+            GenDateMod::FromTo => format!("FROM {start_str} TO {end_str}"),
+            GenDateMod::Phrase => format!("({})", self.text),
+        };
+
+        format!("{cal_prefix}{body}")
+    }
+
     /// Bilingual (EN / RU) flexible genealogy date parser (`00 §2.4`, `07 §2.2`, `10 §3.2`).
     /// Unparseable input never errors; it produces a `GenDateMod::Phrase` preserving `text`.
     pub fn parse(input: &str) -> Self {

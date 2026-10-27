@@ -55,12 +55,25 @@ export const PlaceMergeDialog: React.FC<PlaceMergeDialogProps> = ({
     setErrorMsg(null);
     try {
       const res = await mergePlace(targetId, sourcePlace.id);
+      const selectedTargetPlace = availableTargets.find(
+        (p) => p.id === targetId
+      );
+      const resolvedTargetPlace: PlaceDto | undefined =
+        res && 'target_place' in res
+          ? res.target_place
+          : (res as PlaceDto | undefined) ?? selectedTargetPlace;
+      const targetName =
+        resolvedTargetPlace?.full_name ??
+        selectedTargetPlace?.full_name ??
+        'Target Place';
       addToast({
         type: 'success',
         title: t('places.merge.mergedToast'),
-        description: res.target_place.full_name,
+        description: targetName,
       });
-      onMerged?.(res.target_place, sourcePlace.id);
+      if (resolvedTargetPlace) {
+        onMerged?.(resolvedTargetPlace, sourcePlace.id);
+      }
       onOpenChange(false);
     } catch (err) {
       setErrorMsg(

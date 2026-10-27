@@ -178,7 +178,7 @@ export const PlaceFormDialog: React.FC<PlaceFormDialogProps> = ({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      size="lg"
+      size="xl"
       title={
         initialPlace ? t('places.form.editTitle') : t('places.form.addTitle')
       }

@@ -120,7 +120,7 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
   const [missingCoordsOnly, setMissingCoordsOnly] = useState<boolean>(false);
 
   const [selectedPlace, setSelectedPlace] = useState<PlaceDto | null>(
-    (initialPlaces ?? DEFAULT_PLACES)[2] ?? (initialPlaces ?? DEFAULT_PLACES)[0] ?? null
+    initialPlaces ? (initialPlaces[2] ?? initialPlaces[0] ?? null) : null
   );
   const [detailBreadcrumbs, setDetailBreadcrumbs] = useState<
     PlaceBreadcrumbDto[]
@@ -141,9 +141,15 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
         if (res.map_tile_url !== undefined) {
           setMapTileUrl(res.map_tile_url);
         }
-        if (res.items.length > 0 && !selectedPlace) {
-          setSelectedPlace(res.items[0]);
-        }
+        setSelectedPlace((prev) => {
+          if (
+            res.items.length > 0 &&
+            (!prev || !res.items.some((p) => p.id === prev.id))
+          ) {
+            return res.items[0];
+          }
+          return prev;
+        });
       })
       .catch(() => {});
   };
@@ -154,7 +160,13 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
   }, [initialPlaces, searchQuery, missingCoordsOnly]);
 
   useEffect(() => {
-    if (!selectedPlace || initialPlaces) return;
+    if (
+      !selectedPlace ||
+      initialPlaces ||
+      selectedPlace.id.startsWith('pl-')
+    ) {
+      return;
+    }
     let cancelled = false;
     fetchPlaceDetail(selectedPlace.id)
       .then((res) => {

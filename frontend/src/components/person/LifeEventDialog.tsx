@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import {
   Alert,
   Button,
@@ -56,7 +56,7 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
     initialEvent?.custom_type ?? ''
   );
   const [dateRaw, setDateRaw] = useState<string>(
-    initialEvent?.date_text ?? initialEvent?.date?.raw ?? ''
+    initialEvent?.date_text ?? initialEvent?.date?.text ?? ''
   );
   const [parsedDate, setParsedDate] = useState<GenDate | null>(
     initialEvent?.date ?? null
@@ -101,7 +101,7 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
   useEffect(() => {
     setEventType(initialEvent?.event_type ?? 'birth');
     setCustomType(initialEvent?.custom_type ?? '');
-    setDateRaw(initialEvent?.date_text ?? initialEvent?.date?.raw ?? '');
+    setDateRaw(initialEvent?.date_text ?? initialEvent?.date?.text ?? '');
     setParsedDate(initialEvent?.date ?? null);
     setPlacePath(initialEvent?.place_full_name ?? '');
     setDescription(initialEvent?.description ?? '');
@@ -171,7 +171,7 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      size="lg"
+      size="xl"
       title={
         initialEvent
           ? t('events.dialogTitleEdit')
@@ -212,10 +212,10 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
 
         <FormField name="event_date" label={t('events.dateLabel')}>
           <GenDateInput
-            value={dateRaw}
-            onChange={(raw, parsed) => {
-              setDateRaw(raw);
-              setParsedDate(parsed.date);
+            value={parsedDate}
+            onChange={(result) => {
+              setDateRaw(result.value.text);
+              setParsedDate(result.value);
             }}
           />
         </FormField>

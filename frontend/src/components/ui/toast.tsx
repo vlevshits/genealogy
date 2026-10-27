@@ -32,18 +32,17 @@ const SingleToastCard: React.FC<{
   const [remaining, setRemaining] = useState(totalSec);
 
   useEffect(() => {
+    if (remaining <= 0) {
+      onDismiss(item.id);
+    }
+  }, [remaining, item.id, onDismiss]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onDismiss(item.id);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRemaining((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [item.id, onDismiss]);
+  }, []);
 
   return (
     <div

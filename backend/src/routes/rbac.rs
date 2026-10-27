@@ -332,10 +332,7 @@ pub struct PersonMergeRequest {
     pub duplicate_person_id: Option<String>,
 }
 
-fn resolve_person_id_in_store(
-    persons: &[TreePersonNodeDto],
-    id_or_gid: &str,
-) -> Option<String> {
+fn resolve_person_id_in_store(persons: &[TreePersonNodeDto], id_or_gid: &str) -> Option<String> {
     let target = id_or_gid.trim();
     persons
         .iter()
@@ -721,7 +718,9 @@ pub async fn update_person(
 
         if let Some(expected_version) = req.version {
             if expected_version != person.version {
-                return Err(AppError::VersionConflict);
+                return Err(AppError::VersionConflict(
+                    "Record was modified by another session".to_string(),
+                ));
             }
         }
 
@@ -962,7 +961,10 @@ pub async fn quick_add_relative(
                 date_sort: birth_sort,
                 gedcom_date: parsed_birth.as_ref().map(|d| d.to_gedcom()),
                 place_id: place_dto.as_ref().map(|p| p.id.clone()),
-                place_full_name: place_dto.as_ref().map(|p| p.full_name.clone()).or(birth_place),
+                place_full_name: place_dto
+                    .as_ref()
+                    .map(|p| p.full_name.clone())
+                    .or(birth_place),
                 description: None,
                 source_text: None,
                 media_ids: vec![],
@@ -995,7 +997,10 @@ pub async fn quick_add_relative(
                 date_sort: death_sort,
                 gedcom_date: parsed_death.as_ref().map(|d| d.to_gedcom()),
                 place_id: place_dto.as_ref().map(|p| p.id.clone()),
-                place_full_name: place_dto.as_ref().map(|p| p.full_name.clone()).or(death_place),
+                place_full_name: place_dto
+                    .as_ref()
+                    .map(|p| p.full_name.clone())
+                    .or(death_place),
                 description: None,
                 source_text: None,
                 media_ids: vec![],
@@ -1074,8 +1079,12 @@ pub async fn quick_add_relative(
             } else {
                 let existing_fam_gids: HashSet<String> =
                     store.families.iter().map(|f| f.gid.clone()).collect();
-                let fam_gid =
-                    allocate_gid('F', &mut store.next_family_gid_seq, None, &existing_fam_gids);
+                let fam_gid = allocate_gid(
+                    'F',
+                    &mut store.next_family_gid_seq,
+                    None,
+                    &existing_fam_gids,
+                );
                 let new_fam_id = Uuid::new_v4().to_string();
                 let fam = FamilyDto {
                     id: new_fam_id.clone(),
@@ -1138,8 +1147,12 @@ pub async fn quick_add_relative(
 
             let existing_fam_gids: HashSet<String> =
                 store.families.iter().map(|f| f.gid.clone()).collect();
-            let fam_gid =
-                allocate_gid('F', &mut store.next_family_gid_seq, None, &existing_fam_gids);
+            let fam_gid = allocate_gid(
+                'F',
+                &mut store.next_family_gid_seq,
+                None,
+                &existing_fam_gids,
+            );
             let new_fam_id = Uuid::new_v4().to_string();
             let fam = FamilyDto {
                 id: new_fam_id.clone(),
@@ -1176,8 +1189,12 @@ pub async fn quick_add_relative(
             } else {
                 let existing_fam_gids: HashSet<String> =
                     store.families.iter().map(|f| f.gid.clone()).collect();
-                let fam_gid =
-                    allocate_gid('F', &mut store.next_family_gid_seq, None, &existing_fam_gids);
+                let fam_gid = allocate_gid(
+                    'F',
+                    &mut store.next_family_gid_seq,
+                    None,
+                    &existing_fam_gids,
+                );
                 let new_fam_id = Uuid::new_v4().to_string();
                 store.families.push(FamilyDto {
                     id: new_fam_id,
@@ -1217,7 +1234,11 @@ pub async fn quick_add_relative(
                 .surname
                 .clone()
                 .filter(|s| !s.trim().is_empty())
-                .or_else(|| father_person.as_ref().map(|f| f.primary_name.surname.clone()))
+                .or_else(|| {
+                    father_person
+                        .as_ref()
+                        .map(|f| f.primary_name.surname.clone())
+                })
                 .unwrap_or_else(|| anchor.primary_name.surname.clone());
 
             let default_patronymic = req
@@ -1275,8 +1296,12 @@ pub async fn quick_add_relative(
             } else {
                 let existing_fam_gids: HashSet<String> =
                     store.families.iter().map(|f| f.gid.clone()).collect();
-                let fam_gid =
-                    allocate_gid('F', &mut store.next_family_gid_seq, None, &existing_fam_gids);
+                let fam_gid = allocate_gid(
+                    'F',
+                    &mut store.next_family_gid_seq,
+                    None,
+                    &existing_fam_gids,
+                );
                 let new_fam_id = Uuid::new_v4().to_string();
                 store.families.push(FamilyDto {
                     id: new_fam_id,
@@ -1438,8 +1463,16 @@ pub async fn get_person_delete_impact(
         let is_child = fam.children.iter().any(|c| c.child_id == person.id);
         if is_p1 || is_p2 || is_child {
             families_unlinked_count += 1;
-            let rem_p1 = if is_p1 { None } else { fam.partner1_id.as_ref() };
-            let rem_p2 = if is_p2 { None } else { fam.partner2_id.as_ref() };
+            let rem_p1 = if is_p1 {
+                None
+            } else {
+                fam.partner1_id.as_ref()
+            };
+            let rem_p2 = if is_p2 {
+                None
+            } else {
+                fam.partner2_id.as_ref()
+            };
             let rem_children = fam
                 .children
                 .iter()
@@ -1560,9 +1593,7 @@ pub async fn delete_person(
     }
 
     if !empty_family_ids.is_empty() {
-        store
-            .families
-            .retain(|f| !empty_family_ids.contains(&f.id));
+        store.families.retain(|f| !empty_family_ids.contains(&f.id));
         store.events.retain(|e| {
             e.family_id
                 .as_ref()
@@ -1799,12 +1830,26 @@ pub async fn create_family(
 
     let mut store = state.privacy_store.write().await;
 
-    let p1_id = match req.partner1_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(raw) => Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?),
+    let p1_id = match req
+        .partner1_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(raw) => {
+            Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?)
+        }
         None => None,
     };
-    let p2_id = match req.partner2_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(raw) => Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?),
+    let p2_id = match req
+        .partner2_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(raw) => {
+            Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?)
+        }
         None => None,
     };
 
@@ -1893,7 +1938,9 @@ pub async fn update_family(
 
     if let Some(expected_version) = req.version {
         if expected_version != store.families[fam_idx].version {
-            return Err(AppError::VersionConflict);
+            return Err(AppError::VersionConflict(
+                "Record was modified by another session".to_string(),
+            ));
         }
     }
 
@@ -1949,7 +1996,10 @@ pub async fn update_family(
         .collect();
 
     for ch in &next_children {
-        for parent_id in [next_p1.as_deref(), next_p2.as_deref()].into_iter().flatten() {
+        for parent_id in [next_p1.as_deref(), next_p2.as_deref()]
+            .into_iter()
+            .flatten()
+        {
             ensure_no_ancestor_cycle(&other_families, parent_id, &ch.child_id)?;
         }
     }
@@ -2029,10 +2079,9 @@ pub async fn list_events(
     let access = caller.caller_access();
     let store = state.privacy_store.read().await;
 
-    let filter_ind_id = query
-        .individual_id
-        .as_deref()
-        .and_then(|raw| resolve_person_id_in_store(&store.persons, raw).or_else(|| Some(raw.to_string())));
+    let filter_ind_id = query.individual_id.as_deref().and_then(|raw| {
+        resolve_person_id_in_store(&store.persons, raw).or_else(|| Some(raw.to_string()))
+    });
 
     let filter_fam_id = query.family_id.as_deref().map(|raw| {
         store
@@ -2096,7 +2145,9 @@ pub async fn create_event(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        Some(raw) => Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?),
+        Some(raw) => {
+            Some(resolve_person_id_in_store(&store.persons, raw).ok_or(AppError::NotFound)?)
+        }
         None => None,
     };
 
@@ -2160,7 +2211,8 @@ pub async fn create_event(
 
     let (resolved_place_id, resolved_place_full_name) = if let Some(ref pid_raw) = req.place_id {
         if !pid_raw.trim().is_empty() {
-            let pid = resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
+            let pid =
+                resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
             let fname = store
                 .places
                 .iter()
@@ -2252,14 +2304,15 @@ pub async fn update_event(
 
     if let Some(expected_version) = req.version {
         if expected_version != store.events[ev_idx].version {
-            return Err(AppError::VersionConflict);
+            return Err(AppError::VersionConflict(
+                "Record was modified by another session".to_string(),
+            ));
         }
     }
 
     if let Some(ref et) = req.event_type {
         let normalized_et = et.trim().to_ascii_lowercase();
-        if store.events[ev_idx].individual_id.is_some()
-            && is_family_only_event_type(&normalized_et)
+        if store.events[ev_idx].individual_id.is_some() && is_family_only_event_type(&normalized_et)
         {
             let mut fields = HashMap::new();
             fields.insert(
@@ -2300,7 +2353,8 @@ pub async fn update_event(
             store.events[ev_idx].place_id = None;
             store.events[ev_idx].place_full_name = None;
         } else {
-            let pid = resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
+            let pid =
+                resolve_place_id_in_store(&store.places, pid_raw).ok_or(AppError::NotFound)?;
             let fname = store
                 .places
                 .iter()
@@ -2367,12 +2421,40 @@ pub async fn delete_event(
 
     let mut store = state.privacy_store.write().await;
     let target = id.trim();
-    let before = store.events.len();
-    store
+    let ev_idx = store
         .events
-        .retain(|e| !(e.id == target || e.gid.eq_ignore_ascii_case(target)));
-    if store.events.len() == before {
-        return Err(AppError::NotFound);
+        .iter()
+        .position(|e| e.id == target || e.gid.eq_ignore_ascii_case(target))
+        .ok_or(AppError::NotFound)?;
+
+    let removed_ev = store.events.remove(ev_idx);
+    if let Some(ref ind_id) = removed_ev.individual_id {
+        let has_remaining_death = store.events.iter().any(|e| {
+            e.individual_id.as_deref() == Some(ind_id.as_str())
+                && matches!(e.event_type.as_str(), "death" | "burial" | "cremation")
+        });
+        let has_remaining_birth = store.events.iter().any(|e| {
+            e.individual_id.as_deref() == Some(ind_id.as_str())
+                && matches!(e.event_type.as_str(), "birth" | "baptism")
+        });
+
+        if let Some(person) = store.persons.iter_mut().find(|p| &p.id == ind_id) {
+            if !has_remaining_death
+                && matches!(
+                    removed_ev.event_type.as_str(),
+                    "death" | "burial" | "cremation"
+                )
+            {
+                person.has_death_event = false;
+                person.death_sort = None;
+                person.death = None;
+            }
+            if !has_remaining_birth && matches!(removed_ev.event_type.as_str(), "birth" | "baptism")
+            {
+                person.birth_sort = None;
+                person.birth = None;
+            }
+        }
     }
 
     recompute_all_places_metadata(&mut store);
@@ -2548,7 +2630,9 @@ pub async fn update_note(
 
     if let Some(expected_version) = req.version {
         if expected_version != note.version {
-            return Err(AppError::VersionConflict);
+            return Err(AppError::VersionConflict(
+                "Record was modified by another session".to_string(),
+            ));
         }
     }
 
@@ -2709,10 +2793,7 @@ pub async fn list_places_directory(
                     return false;
                 }
             }
-            if query.missing_coords == Some(true)
-                && p.latitude.is_some()
-                && p.longitude.is_some()
-            {
+            if query.missing_coords == Some(true) && p.latitude.is_some() && p.longitude.is_some() {
                 return false;
             }
             if let (Some(ref qr), Some(ref qn)) = (&q_raw, &q_norm) {
@@ -2932,7 +3013,9 @@ pub async fn update_place(
 
     if let Some(expected_version) = req.version {
         if expected_version != store.places[idx].version {
-            return Err(AppError::VersionConflict);
+            return Err(AppError::VersionConflict(
+                "Record was modified by another session".to_string(),
+            ));
         }
     }
 

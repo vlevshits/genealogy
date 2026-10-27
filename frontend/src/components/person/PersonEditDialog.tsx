@@ -164,7 +164,7 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      size="lg"
+      size="xl"
       title={t('person.edit.title')}
       description={t('person.edit.subtitle')}
     >

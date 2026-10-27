@@ -175,10 +175,10 @@ export const PlaceDetailPanel: React.FC<PlaceDetailPanelProps> = ({
                     </span>
                     <span className="font-mono text-tertiary">{ev.gid}</span>
                   </div>
-                  {(ev.date_text || ev.date?.raw) && (
+                  {(ev.date_text || ev.date?.text) && (
                     <div className="flex items-center gap-1 text-secondary">
                       <Calendar className="h-3 w-3 text-tertiary" />
-                      <span>{ev.date_text || ev.date?.raw}</span>
+                      <span>{ev.date_text || ev.date?.text}</span>
                     </div>
                   )}
                   {ev.description && (

@@ -135,7 +135,6 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
             <SearchInput
               value={searchQuery}
               onChange={(e) => onSearchQueryChange(e.target.value)}
-              onClear={() => onSearchQueryChange('')}
               placeholder={t('places.searchPlaceholder')}
               aria-label={t('places.searchPlaceholder')}
             />
