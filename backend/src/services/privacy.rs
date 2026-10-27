@@ -386,6 +386,8 @@ pub fn parse_search_query(q: &str) -> ParsedSearchQuery {
     }
 }
 
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct PersonNameDto {
     pub given_name: String,
@@ -454,6 +456,8 @@ pub struct TreePersonNodeDto {
     pub has_death_event: bool,
     #[serde(default)]
     pub alt_names: Vec<IndividualAltNameDto>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub external_ids: HashMap<String, String>,
     #[serde(default = "default_version")]
     pub version: i32,
 }
@@ -482,6 +486,8 @@ pub struct FamilyDto {
     pub relationship_type: String,
     pub is_private: bool,
     pub children: Vec<FamilyChildDto>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub external_ids: HashMap<String, String>,
     #[serde(default = "default_version")]
     pub version: i32,
 }
@@ -573,6 +579,10 @@ pub struct MediaAssetSummaryDto {
     pub place_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place_full_name: Option<String>,
+    #[serde(default)]
+    pub is_missing: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_path: Option<String>,
     pub is_private: bool,
     pub only_living_persons: bool,
     pub linked_person_ids: Vec<String>,
@@ -689,6 +699,7 @@ pub fn redact_person_for_caller(
             death_sort: None,
             has_death_event: false,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: person.version,
         });
     }
@@ -744,6 +755,7 @@ pub fn redact_person_for_tree_view(
             death_sort: None,
             has_death_event: false,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: person.version,
         });
     }
@@ -844,6 +856,7 @@ impl Default for GenealogyPrivacyStore {
             death_sort: Some(19881104),
             has_death_event: true,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: 1,
         };
 
@@ -877,6 +890,7 @@ impl Default for GenealogyPrivacyStore {
             death_sort: None,
             has_death_event: false,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: 1,
         };
 
@@ -910,6 +924,7 @@ impl Default for GenealogyPrivacyStore {
             death_sort: None,
             has_death_event: false,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: 1,
         };
 
@@ -930,6 +945,8 @@ impl Default for GenealogyPrivacyStore {
             date_sort: Some(19550000),
             place_id: Some("00000000-0000-0000-0000-000000000201".to_string()),
             place_full_name: Some("Saint Petersburg, Russia".to_string()),
+            is_missing: false,
+            external_path: None,
             is_private: false,
             only_living_persons: false,
             linked_person_ids: vec![
@@ -981,6 +998,8 @@ impl Default for GenealogyPrivacyStore {
             date_sort: Some(20240000),
             place_id: None,
             place_full_name: None,
+            is_missing: false,
+            external_path: None,
             is_private: false,
             only_living_persons: true,
             linked_person_ids: vec!["c7a8b9d0-1234-5678-90ab-cdef12345678".to_string()],
@@ -1016,6 +1035,8 @@ impl Default for GenealogyPrivacyStore {
             date_sort: None,
             place_id: None,
             place_full_name: None,
+            is_missing: false,
+            external_path: None,
             is_private: true,
             only_living_persons: true,
             linked_person_ids: vec!["00000000-0000-0000-0000-000000000099".to_string()],

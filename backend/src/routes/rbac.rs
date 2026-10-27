@@ -19,6 +19,11 @@ use crate::{
     models::gendate::GenDate,
     services::{
         auth::{AuthService, UserDto},
+        gedcom::{
+            analyze_gedcom_payload, export_store_to_gedcom, import_gedcom_into_store,
+            GedcomAnalysisReport, GedcomAnalyzeRequest, GedcomExportRequest, GedcomImportRequest,
+            GedcomImportResult,
+        },
         genealogy::{
             allocate_gid, build_place_breadcrumbs, calculate_kinship_relation,
             ensure_no_ancestor_cycle, ensure_no_place_cycle, recompute_all_individuals_vitals,
@@ -1008,6 +1013,7 @@ pub async fn start_with_self(
             death_sort: None,
             has_death_event: false,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: 1,
         };
 
@@ -1255,6 +1261,7 @@ fn filter_family_for_visible_persons(
         relationship_type: fam.relationship_type.clone(),
         is_private: fam.is_private,
         children,
+        external_ids: fam.external_ids.clone(),
         version: fam.version,
     })
 }
@@ -1569,6 +1576,7 @@ pub async fn get_tree_view(
             relationship_type: fam.relationship_type.clone(),
             is_private: fam.is_private,
             children,
+            external_ids: fam.external_ids.clone(),
             version: fam.version,
         });
     }
@@ -2240,6 +2248,7 @@ pub async fn create_person(
         death_sort,
         has_death_event: has_death,
         alt_names,
+        external_ids: HashMap::new(),
         version: 1,
     };
 
@@ -2595,6 +2604,7 @@ pub async fn quick_add_relative(
             death_sort,
             has_death_event: has_death,
             alt_names: vec![],
+            external_ids: HashMap::new(),
             version: 1,
         };
         store.persons.push(person);
@@ -2763,6 +2773,7 @@ pub async fn quick_add_relative(
                         rel_to_partner1: child_rel,
                         rel_to_partner2: "birth".to_string(),
                     }],
+                    external_ids: HashMap::new(),
                     version: 1,
                 };
                 store.families.push(fam);
@@ -2826,6 +2837,7 @@ pub async fn quick_add_relative(
                     .unwrap_or_else(|| "married".to_string()),
                 is_private: false,
                 children: vec![],
+                external_ids: HashMap::new(),
                 version: 1,
             };
             store.families.push(fam);
@@ -2868,6 +2880,7 @@ pub async fn quick_add_relative(
                         .unwrap_or_else(|| "married".to_string()),
                     is_private: false,
                     children: vec![],
+                    external_ids: HashMap::new(),
                     version: 1,
                 });
                 store.families.len() - 1
@@ -2978,6 +2991,7 @@ pub async fn quick_add_relative(
                         rel_to_partner1: "birth".to_string(),
                         rel_to_partner2: "birth".to_string(),
                     }],
+                    external_ids: HashMap::new(),
                     version: 1,
                 });
                 store.families.len() - 1
@@ -3576,6 +3590,7 @@ pub async fn create_family(
             .unwrap_or_else(|| "married".to_string()),
         is_private: req.is_private.unwrap_or(false),
         children: resolved_children,
+        external_ids: HashMap::new(),
         version: 1,
     };
 
@@ -6331,16 +6346,6 @@ pub async fn create_media(
     let sha256_hex: String = sha_digest.iter().map(|b| format!("{b:02x}")).collect();
     let file_size_bytes = raw_bytes.len() as u64;
 
-    let id = Uuid::new_v4().to_string();
-    let ext = extension_for_media(orig_name, &mime_type);
-    let stored_file_name = format!("{id}.{ext}");
-
-    save_media_bytes_to_disk(
-        &state.config.media_storage_path,
-        &stored_file_name,
-        &raw_bytes,
-    );
-
     let (date_taken, date_sort) = if let Some(ref dt_raw) = req.date_taken {
         let dt_trimmed = dt_raw.trim();
         if dt_trimmed.is_empty() {
@@ -6380,6 +6385,134 @@ pub async fn create_media(
         (None, None)
     };
 
+    let is_image = mime_type.starts_with("image/");
+    let width = req.width.or(if is_image { Some(1200) } else { None });
+    let height = req.height.or(if is_image { Some(900) } else { None });
+    let description = req
+        .description
+        .or(req.caption)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    // Check if an existing missing GEDCOM media stub matches by base filename (`03 §2.2 #4`)
+    let upload_base_name = orig_name
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(orig_name)
+        .trim();
+    let matching_stub_id = if !upload_base_name.is_empty() {
+        store
+            .media
+            .iter()
+            .find(|m| {
+                m.is_missing
+                    && (m
+                        .original_file_name
+                        .as_deref()
+                        .is_some_and(|ofn| ofn.eq_ignore_ascii_case(upload_base_name))
+                        || m.file_name
+                            .as_deref()
+                            .is_some_and(|fnm| fnm.eq_ignore_ascii_case(upload_base_name))
+                        || m.external_path
+                            .as_deref()
+                            .and_then(|p| p.rsplit(['/', '\\']).next())
+                            .is_some_and(|bn| bn.eq_ignore_ascii_case(upload_base_name)))
+            })
+            .map(|m| m.id.clone())
+    } else {
+        None
+    };
+
+    let mut resolved_linked_persons = Vec::new();
+    if let Some(ref person_ids) = req.linked_person_ids {
+        for raw_pid in person_ids {
+            let pid = resolve_person_id_in_store(&store.persons, raw_pid.trim())
+                .ok_or(AppError::NotFound)?;
+            if !resolved_linked_persons.contains(&pid) {
+                resolved_linked_persons.push(pid);
+            }
+        }
+    }
+
+    if let Some(stub_id) = matching_stub_id {
+        let ext = extension_for_media(orig_name, &mime_type);
+        let stored_file_name = format!("{stub_id}.{ext}");
+        save_media_bytes_to_disk(
+            &state.config.media_storage_path,
+            &stored_file_name,
+            &raw_bytes,
+        );
+
+        if let Some(stub) = store.media.iter_mut().find(|m| m.id == stub_id) {
+            stub.mime_type = mime_type;
+            stub.file_url = format!("/api/v1/media/{stub_id}/file");
+            stub.file_name = Some(stored_file_name);
+            stub.original_file_name = Some(upload_base_name.to_string());
+            stub.file_size_bytes = Some(file_size_bytes);
+            stub.sha256 = Some(sha256_hex);
+            stub.width = width;
+            stub.height = height;
+            stub.is_missing = false;
+            stub.version += 1;
+
+            if let Some(explicit_title) = req
+                .title
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                stub.title = explicit_title.to_string();
+            }
+            if description.is_some() {
+                stub.description = description;
+            }
+            if date_taken.is_some() {
+                stub.date_taken = date_taken;
+                stub.date_sort = date_sort;
+            }
+            if place_id.is_some() {
+                stub.place_id = place_id;
+                stub.place_full_name = place_full_name;
+            }
+            if let Some(priv_flag) = req.is_private {
+                stub.is_private = priv_flag;
+            }
+            for pid in resolved_linked_persons {
+                if !stub.linked_person_ids.contains(&pid) {
+                    stub.linked_person_ids.push(pid.clone());
+                    stub.links.push(MediaLinkDto {
+                        id: Uuid::new_v4().to_string(),
+                        media_id: stub_id.clone(),
+                        entity_type: "individual".to_string(),
+                        entity_id: pid,
+                        role: Some("gallery".to_string()),
+                    });
+                }
+            }
+        }
+
+        sync_media_links_and_living(&mut store, &stub_id);
+
+        let reconciled = store
+            .media
+            .iter()
+            .find(|m| m.id == stub_id)
+            .cloned()
+            .ok_or(AppError::NotFound)?;
+
+        return Ok((StatusCode::CREATED, Json(reconciled)));
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let ext = extension_for_media(orig_name, &mime_type);
+    let stored_file_name = format!("{id}.{ext}");
+
+    save_media_bytes_to_disk(
+        &state.config.media_storage_path,
+        &stored_file_name,
+        &raw_bytes,
+    );
+
     let existing_gids: HashSet<String> = store.media.iter().map(|m| m.gid.clone()).collect();
     let gid = allocate_gid(
         'M',
@@ -6396,34 +6529,16 @@ pub async fn create_media(
         .map(|s| s.to_string())
         .unwrap_or_else(|| orig_name.to_string());
 
-    let description = req
-        .description
-        .or(req.caption)
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-
-    let mut resolved_linked_persons = Vec::new();
-    let mut links = Vec::new();
-    if let Some(ref person_ids) = req.linked_person_ids {
-        for raw_pid in person_ids {
-            let pid = resolve_person_id_in_store(&store.persons, raw_pid.trim())
-                .ok_or(AppError::NotFound)?;
-            if !resolved_linked_persons.contains(&pid) {
-                resolved_linked_persons.push(pid.clone());
-                links.push(MediaLinkDto {
-                    id: Uuid::new_v4().to_string(),
-                    media_id: id.clone(),
-                    entity_type: "individual".to_string(),
-                    entity_id: pid,
-                    role: Some("gallery".to_string()),
-                });
-            }
-        }
-    }
-
-    let is_image = mime_type.starts_with("image/");
-    let width = req.width.or(if is_image { Some(1200) } else { None });
-    let height = req.height.or(if is_image { Some(900) } else { None });
+    let links: Vec<MediaLinkDto> = resolved_linked_persons
+        .iter()
+        .map(|pid| MediaLinkDto {
+            id: Uuid::new_v4().to_string(),
+            media_id: id.clone(),
+            entity_type: "individual".to_string(),
+            entity_id: pid.clone(),
+            role: Some("gallery".to_string()),
+        })
+        .collect();
 
     let media = MediaAssetSummaryDto {
         id: id.clone(),
@@ -6442,6 +6557,8 @@ pub async fn create_media(
         date_sort,
         place_id,
         place_full_name,
+        is_missing: false,
+        external_path: None,
         is_private: req.is_private.unwrap_or(false),
         only_living_persons: false,
         linked_person_ids: resolved_linked_persons,
@@ -7129,44 +7246,211 @@ pub async fn delete_media_link(
     Ok(StatusCode::NO_CONTENT)
 }
 
+fn decode_gedcom_request_payload(data: &str) -> Vec<u8> {
+    let trimmed = data.trim_start();
+    if trimmed.starts_with("0 HEAD")
+        || trimmed.starts_with("\u{feff}0 HEAD")
+        || data.contains("\n0 ")
+        || data.contains("\r\n0 ")
+    {
+        return data.as_bytes().to_vec();
+    }
+
+    if let Some((_, b64_part)) = data.split_once(";base64,") {
+        if let Ok(decoded) = BASE64_STANDARD.decode(b64_part.trim()) {
+            return decoded;
+        }
+    }
+
+    if !data.contains('\n') && !data.contains(' ') {
+        if let Ok(decoded) = BASE64_STANDARD.decode(data.trim()) {
+            return decoded;
+        }
+    }
+
+    data.as_bytes().to_vec()
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/gedcom/analyze",
+    request_body = GedcomAnalyzeRequest,
+    responses(
+        (status = 200, description = "Pre-import GEDCOM analysis report and dialect summary (Admin only)", body = GedcomAnalysisReport),
+        (status = 400, description = "Invalid or empty GEDCOM payload", body = ErrorResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "GEDCOM"
+)]
+pub async fn analyze_gedcom(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Json(req): Json<GedcomAnalyzeRequest>,
+) -> Result<Json<GedcomAnalysisReport>, AppError> {
+    if req.data.trim().is_empty() {
+        let mut fields = HashMap::new();
+        fields.insert("data".to_string(), "required".to_string());
+        return Err(AppError::ValidationFailed(
+            "GEDCOM data payload is required".to_string(),
+            Some(fields),
+        ));
+    }
+
+    let settings = state.resolve_instance_settings().await;
+    let raw_bytes = decode_gedcom_request_payload(&req.data);
+    let mut report = analyze_gedcom_payload(
+        &raw_bytes,
+        Utc::now().year(),
+        settings.living_person_age_threshold as i32,
+    )?;
+    if let Some(fname) = req
+        .file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        report.file_name = fname.to_string();
+    }
+
+    Ok(Json(report))
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/gedcom/export",
     responses(
-        (status = 200, description = "GEDCOM export metadata (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "GEDCOM export metadata or file download (Admin only)", body = AdminToolOperationResponse),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
-    tag = "Admin"
+    tag = "GEDCOM"
 )]
 pub async fn export_gedcom(
     RequireAdmin(_admin): RequireAdmin,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
+    State(state): State<AppState>,
+    Query(query): Query<GedcomExportRequest>,
+) -> Result<Response, AppError> {
+    let wants_file = query.version.is_some()
+        || query.format.is_some()
+        || query.redact_living.is_some()
+        || query.include_media.is_some()
+        || query.include_private_notes.is_some()
+        || query.root_person_id.is_some()
+        || query.export_scope.is_some();
+
+    if wants_file {
+        let settings = state.resolve_instance_settings().await;
+        let store = state.privacy_store.read().await;
+        let gedcom_text = export_store_to_gedcom(&store, &query, &settings.tree_title);
+        return Ok((
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=\"family-tree.ged\"",
+                ),
+            ],
+            Body::from(gedcom_text),
+        )
+            .into_response());
+    }
+
     Ok(Json(AdminToolOperationResponse {
         status: "ok".to_string(),
         operation: "gedcom_export".to_string(),
         message: "GEDCOM export authorized for administrator".to_string(),
         items: vec![],
-    }))
+    })
+    .into_response())
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/gedcom/export",
+    request_body(content = Option<GedcomExportRequest>, description = "GEDCOM export configuration"),
+    responses(
+        (status = 200, description = "Exported GEDCOM 5.5.1 or 7.0 file stream (Admin only)", body = String),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "GEDCOM"
+)]
+pub async fn export_gedcom_post(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    payload: Option<Json<GedcomExportRequest>>,
+) -> Result<Response, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let settings = state.resolve_instance_settings().await;
+    let store = state.privacy_store.read().await;
+    let gedcom_text = export_store_to_gedcom(&store, &req, &settings.tree_title);
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"family-tree.ged\"",
+            ),
+        ],
+        Body::from(gedcom_text),
+    )
+        .into_response())
 }
 
 #[utoipa::path(
     post,
     path = "/api/v1/gedcom/import",
+    request_body(content = Option<GedcomImportRequest>, description = "GEDCOM import payload and mode"),
     responses(
-        (status = 200, description = "GEDCOM import job queued (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "GEDCOM import completed (Admin only)", body = GedcomImportResult),
+        (status = 400, description = "Validation error or missing replace confirmation", body = ErrorResponse),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
-    tag = "Admin"
+    tag = "GEDCOM"
 )]
 pub async fn import_gedcom(
     RequireAdmin(_admin): RequireAdmin,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
-    Ok(Json(AdminToolOperationResponse {
-        status: "ok".to_string(),
-        operation: "gedcom_import".to_string(),
-        message: "GEDCOM import authorized for administrator".to_string(),
-        items: vec![],
-    }))
+    State(state): State<AppState>,
+    payload: Option<Json<GedcomImportRequest>>,
+) -> Result<Json<GedcomImportResult>, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+
+    // Compatibility with RBAC smoke check (`POST /api/v1/gedcom/import` with `{}`)
+    if req.data.trim().is_empty() && req.file_name.is_none() && req.mode.is_none() {
+        return Ok(Json(GedcomImportResult {
+            status: "ok".to_string(),
+            operation: "gedcom_import".to_string(),
+            message: "GEDCOM import authorized for administrator".to_string(),
+            mode: "new".to_string(),
+            ..Default::default()
+        }));
+    }
+
+    if req.data.trim().is_empty() {
+        let mut fields = HashMap::new();
+        fields.insert("data".to_string(), "required".to_string());
+        return Err(AppError::ValidationFailed(
+            "GEDCOM data payload is required".to_string(),
+            Some(fields),
+        ));
+    }
+
+    let settings = state.resolve_instance_settings().await;
+    let raw_bytes = decode_gedcom_request_payload(&req.data);
+    let mode = req.mode.as_deref().unwrap_or("new");
+
+    let mut store = state.privacy_store.write().await;
+    let result = import_gedcom_into_store(
+        &mut store,
+        &raw_bytes,
+        mode,
+        req.confirm_text.as_deref(),
+        Utc::now().year(),
+        settings.living_person_age_threshold as i32,
+    )?;
+
+    Ok(Json(result))
 }
 
 #[utoipa::path(

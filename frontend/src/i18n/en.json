@@ -1279,5 +1279,75 @@
       "metadataSavedToast": "Media metadata saved",
       "deletedToast": "Media asset deleted from archive"
     }
+  },
+  "gedcom": {
+    "import": {
+      "title": "Import GEDCOM Archive",
+      "subtitle": "Upload a GEDCOM 5.5.1, GEDCOM 7.0, or bundled GEDZIP (.gdz / .zip) archive. Supports Gramps Web 6.0.1 and MyHeritage dialect extensions.",
+      "standardsBadge": "GEDCOM 5.5.1 / 7.0 & GEDZIP",
+      "analyzingProgress": "Analyzing GEDCOM headers, character encoding, and dialect extensions…",
+      "importingProgress": "Creating rollback snapshot and importing records…",
+      "successToast": "GEDCOM archive imported into family tree"
+    },
+    "analysis": {
+      "title": "Pre-Import Summary & Dry Run",
+      "subtitle": "Review detected records, vendor dialect normalizations, and media availability before modifying the database.",
+      "dryRunBadge": "Dry Run Preview",
+      "statIndividuals": "Individuals",
+      "statFamilies": "Families",
+      "statEvents": "Events",
+      "statPlaces": "Places",
+      "statMedia": "Media",
+      "missingMediaShort": "{count} missing",
+      "dialectHeading": "Dialect & Vendor Extension Highlights",
+      "dialectCoordinates": "Geographic coordinates normalized (N/S/E/W)",
+      "dialectUids": "External _UID & RIN provenance IDs preserved",
+      "dialectUpdFiltered": "Internal _UPD sync timestamps filtered",
+      "dialectMarriedNames": "Maiden & married NAME blocks resolved",
+      "dialectParentalAsso": "Redundant parental ASSO links deduplicated",
+      "dialectMissingMediaStubs": "Media asset stubs prepared for missing binaries",
+      "warningsTitle": "Parser Warnings ({count})",
+      "proceedBtn": "Proceed to Clean Slate Import"
+    },
+    "cleanSlate": {
+      "title": "Confirm Clean Slate Replacement",
+      "subtitle": "Replacing the current family tree requires explicit confirmation.",
+      "warningTitle": "All existing tree records will be replaced",
+      "warningBody": "Importing {fileName} in Clean Slate mode will replace current individuals, families, events, and places with the contents of this archive.",
+      "snapshotNoteTitle": "Automatic Rollback Checkpoint:",
+      "snapshotNoteBody": "A full tree_snapshot checkpoint will be created automatically before replacement so you can restore the previous state from Change History at any time.",
+      "inputLabel": "Type CLEAN_SLATE or REPLACE to confirm",
+      "inputHelper": "Confirmation is required when importing over an existing tree.",
+      "confirmBtn": "Confirm & Replace Tree"
+    },
+    "report": {
+      "title": "GEDCOM Import Completed",
+      "subtitle": "All genealogical records, relationships, and provenance identifiers have been imported.",
+      "completedBadge": "Completed",
+      "snapshotLabel": "Automatic Rollback Snapshot ID",
+      "missingMediaTitle": "{count} referenced media files are missing image binaries",
+      "missingMediaDesc": "{count} media records were created as stubs from external paths. Upload your photos folder or archive to link them automatically.",
+      "uploadMediaFolderBtn": "Upload Media Folder",
+      "selectHomePersonBtn": "Select Home Person",
+      "openTreeBtn": "Open Family Tree",
+      "resetBtn": "Import Another File"
+    },
+    "export": {
+      "title": "Export Family Tree to GEDCOM",
+      "subtitle": "Generate a standards-compliant GEDCOM 5.5.1 or 7.0 file or a bundled archive with photos and documents.",
+      "formatLabel": "GEDCOM Standard Version",
+      "version551Label": "GEDCOM 5.5.1 (Recommended)",
+      "version551Desc": "Maximum compatibility with Gramps, MyHeritage, Ancestry, FamilySearch, and RootsMagic.",
+      "version70Label": "GEDCOM 7.0 (Modern UTF-8)",
+      "version70Desc": "Strict UTF-8 specification with modernized event and media structures.",
+      "includeMediaLabel": "Bundle media files (.zip)",
+      "includeMediaDesc": "Package all photographs, document scans, and relative media paths into a downloadable ZIP archive.",
+      "redactLivingLabel": "Redact living individuals (initials only)",
+      "redactLivingDesc": "Replaces living names with single initials and suppresses birthdates, surnames, and private notes.",
+      "includePrivateNotesLabel": "Include private notes",
+      "includePrivateNotesDesc": "Include internal research notes and events marked with the private flag.",
+      "downloadBtn": "Download GEDCOM Export",
+      "startedToast": "GEDCOM export prepared for download"
+    }
   }
 }

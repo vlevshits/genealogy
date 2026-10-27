@@ -781,6 +781,71 @@ export interface SurnamesIndexQuery {
   min_count?: number;
 }
 
+// =============================================================================
+// Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export DTOs
+// =============================================================================
+
+export interface GedcomDialectSummary {
+  coordinates_normalized: number;
+  uids_preserved: number;
+  vendor_upd_filtered: number;
+  married_names_resolved: number;
+  parental_asso_deduplicated: number;
+  missing_media_stubs: number;
+}
+
+export interface GedcomAnalysisReport {
+  total_individuals: number;
+  total_families: number;
+  total_events: number;
+  total_places: number;
+  total_media: number;
+  missing_media_count: number;
+  detected_software: string;
+  gedcom_version: string;
+  character_encoding: string;
+  dialect_summary: GedcomDialectSummary;
+  warnings: string[];
+  file_name: string;
+  file_size_bytes: number;
+}
+
+export interface AnalyzeGedcomInput {
+  file_name: string;
+  data?: string;
+}
+
+export type GedcomImportMode = 'clean_slate' | 'replace' | 'new' | 'merge';
+
+export interface ImportGedcomInput {
+  mode: GedcomImportMode;
+  confirm_text?: string;
+  file_name: string;
+  data?: string;
+}
+
+export interface GedcomImportResult {
+  imported_individuals: number;
+  imported_families: number;
+  imported_events: number;
+  imported_places: number;
+  imported_media: number;
+  missing_media_count: number;
+  snapshot_id: string;
+  prompt_home_person: boolean;
+  warnings: string[];
+}
+
+export type GedcomVersionOption = '5.5.1' | '7.0';
+
+export interface GedcomExportOptions {
+  version: GedcomVersionOption;
+  redact_living: boolean;
+  include_media: boolean;
+  include_private_notes: boolean;
+}
+
+
 
 
 

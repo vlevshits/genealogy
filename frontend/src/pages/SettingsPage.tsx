@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Archive,
-  CheckCircle2,
   FolderGit2,
   Settings,
   Shield,
@@ -10,12 +9,7 @@ import {
 } from 'lucide-react';
 import {
   AccessDeniedCard,
-  Badge,
-  Button,
   Card,
-  CardBody,
-  CardFooter,
-  CardHeader,
   PageHeader,
   RoleBadge,
   SideNav,
@@ -23,6 +17,7 @@ import {
 import {
   BackupsSettingsPanel,
   FamilyMembersInvitesPanel,
+  GedcomSettingsPanel,
   GeneralSettingsPanel,
   ProfileSettingsPanel,
   SecurityPasskeysPanel,
@@ -313,33 +308,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               )}
 
               {activeTab === 'gedcom' && (
-                <Card>
-                  <CardHeader className="flex items-center justify-between">
-                    <h2 className="text-base font-semibold text-primary">
-                      {t('settings.tabs.gedcom')}
-                    </h2>
-                    <Badge
-                      variant="brand"
-                      icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                    >
-                      {t('settings.upcoming.badge')}
-                    </Badge>
-                  </CardHeader>
-                  <CardBody>
-                    <p className="text-sm text-secondary leading-relaxed">
-                      {t('settings.upcoming.gedcomDesc')}
-                    </p>
-                  </CardBody>
-                  <CardFooter>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleTabChange('general')}
-                    >
-                      {t('settings.tabs.general')}
-                    </Button>
-                  </CardFooter>
-                </Card>
+                <GedcomSettingsPanel onNavigate={onNavigate} />
               )}
             </>
           )}

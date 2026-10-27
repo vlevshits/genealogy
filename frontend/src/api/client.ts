@@ -1323,6 +1323,104 @@ export async function deleteMediaLink(
   );
 }
 
+// =============================================================================
+// Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Endpoints
+// =============================================================================
+
+import type {
+  AnalyzeGedcomInput,
+  GedcomAnalysisReport,
+  GedcomDialectSummary,
+  GedcomExportOptions,
+  GedcomImportMode,
+  GedcomImportResult,
+  GedcomVersionOption,
+  ImportGedcomInput,
+} from './openapi-types';
+
+export type {
+  AnalyzeGedcomInput,
+  GedcomAnalysisReport,
+  GedcomDialectSummary,
+  GedcomExportOptions,
+  GedcomImportMode,
+  GedcomImportResult,
+  GedcomVersionOption,
+  ImportGedcomInput,
+};
+
+export async function analyzeGedcom(
+  payload: AnalyzeGedcomInput
+): Promise<GedcomAnalysisReport> {
+  return apiFetch<GedcomAnalysisReport>('/gedcom/analyze', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function importGedcom(
+  payload: ImportGedcomInput
+): Promise<GedcomImportResult> {
+  return apiFetch<GedcomImportResult>('/gedcom/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getGedcomExportUrl(options: GedcomExportOptions): string {
+  const params = new URLSearchParams({
+    version: options.version,
+    redact_living: options.redact_living ? 'true' : 'false',
+    include_media: options.include_media ? 'true' : 'false',
+    include_private_notes: options.include_private_notes ? 'true' : 'false',
+  });
+  return `${API_BASE}/gedcom/export?${params.toString()}`;
+}
+
+export async function exportGedcom(
+  options: GedcomExportOptions
+): Promise<{ blob: Blob; filename: string }> {
+  const headers = new Headers();
+  headers.set('X-Requested-With', 'genealogy');
+  headers.set('Content-Type', 'application/json');
+
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE}/gedcom/export`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(options),
+  });
+
+  if (!response.ok) {
+    let errData: ApiErrorResponse;
+    try {
+      errData = await response.json();
+    } catch {
+      errData = {
+        error: {
+          code: 'network_error',
+          message: response.statusText || 'Unknown network error',
+        },
+      };
+    }
+    throw new ApiError(response.status, errData.error);
+  }
+
+  const contentDisposition = response.headers.get('Content-Disposition') || '';
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  const ext = options.include_media ? 'zip' : 'ged';
+  const fallbackName = `family-tree-${options.version}.${ext}`;
+  const filename = match?.[1] || fallbackName;
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+
 
 
 

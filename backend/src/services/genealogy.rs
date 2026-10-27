@@ -23,10 +23,14 @@ pub fn allocate_gid(
 ) -> String {
     if let Some(raw) = requested_gid {
         let trimmed = raw.trim().trim_matches('@').to_uppercase();
-        if trimmed.starts_with(prefix) && trimmed.len() >= 2 {
+        let actual_prefix = trimmed.chars().next();
+        let prefix_matches =
+            actual_prefix == Some(prefix) || (prefix == 'M' && actual_prefix == Some('O'));
+        if prefix_matches && trimmed.len() >= 2 {
+            let eff_prefix = actual_prefix.unwrap_or(prefix);
             let digits_part = &trimmed[1..];
             if let Ok(num) = digits_part.parse::<u32>() {
-                let canonical = format!("{prefix}{num:04}");
+                let canonical = format!("{eff_prefix}{num:04}");
                 if !existing_gids.contains(&canonical) && !existing_gids.contains(&trimmed) {
                     if num >= *seq {
                         *seq = num + 1;
