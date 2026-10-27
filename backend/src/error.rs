@@ -77,6 +77,12 @@ pub enum AppError {
     #[error("Version conflict: {0}")]
     VersionConflict(String),
 
+    #[error("Relationship cycle detected: {0}")]
+    CycleDetected(String),
+
+    #[error("Place is currently referenced by events or sub-places and cannot be deleted")]
+    PlaceInUse,
+
     #[error("Rate limited")]
     RateLimited,
 
@@ -116,6 +122,8 @@ impl AppError {
             Self::NotFound => "not_found",
             Self::SetupAlreadyCompleted => "setup_already_completed",
             Self::VersionConflict(_) => "version_conflict",
+            Self::CycleDetected(_) => "cycle_detected",
+            Self::PlaceInUse => "place_in_use",
             Self::RateLimited => "rate_limited",
             Self::AccountLocked => "account_locked",
             Self::ChecksumMismatch(_) => "checksum_mismatch",
@@ -132,6 +140,7 @@ impl AppError {
             | Self::InvalidOrExpiredToken
             | Self::LastAuthMethod
             | Self::SoleAdminProtected
+            | Self::CycleDetected(_)
             | Self::ChecksumMismatch(_)
             | Self::IncompatibleSchema(_) => StatusCode::BAD_REQUEST,
             Self::NotAuthenticated
@@ -143,7 +152,9 @@ impl AppError {
             | Self::PasswordAuthDisabled
             | Self::CsrfValidationFailed => StatusCode::FORBIDDEN,
             Self::NotFound | Self::InvalidOrExpiredInvite => StatusCode::NOT_FOUND,
-            Self::VersionConflict(_) | Self::SetupAlreadyCompleted => StatusCode::CONFLICT,
+            Self::VersionConflict(_) | Self::SetupAlreadyCompleted | Self::PlaceInUse => {
+                StatusCode::CONFLICT
+            }
             Self::RateLimited | Self::AccountLocked => StatusCode::TOO_MANY_REQUESTS,
             Self::DatabaseError(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }

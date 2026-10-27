@@ -1,0 +1,288 @@
+import React, { useEffect, useState } from 'react';
+import { useToast } from '../components/ui';
+import {
+  PlaceDetailPanel,
+  PlaceFormDialog,
+  PlaceMergeDialog,
+  PlacesTreeListCard,
+} from '../components/places';
+import {
+  deletePlace,
+  fetchPlaceDetail,
+  fetchPlaces,
+  LifeEventDto,
+  PlaceBreadcrumbDto,
+  PlaceDto,
+} from '../api/client';
+import { useAuth } from '../lib/auth-context';
+import { useI18n } from '../i18n';
+import { matchesCrossScript } from '../lib/utils';
+
+export interface PlacesPageProps {
+  initialPlaces?: PlaceDto[];
+  initialMapTileUrl?: string;
+  userRole?: 'admin' | 'editor' | 'viewer';
+}
+
+export const DEFAULT_PLACES: PlaceDto[] = [
+  {
+    id: 'pl-empire',
+    gid: 'P0001',
+    name: 'Российская империя',
+    place_type: 'country',
+    parent_id: null,
+    full_name: 'Российская империя',
+    latitude: null,
+    longitude: null,
+    alt_names: [{ name: 'Russian Empire', lang: 'en' }],
+    events_count: 0,
+    children_count: 2,
+    version: 1,
+  },
+  {
+    id: 'pl-tver-gov',
+    gid: 'P0002',
+    name: 'Тверская губерния',
+    place_type: 'region',
+    parent_id: 'pl-empire',
+    full_name: 'Тверская губерния, Российская империя',
+    latitude: 57.0,
+    longitude: 35.5,
+    alt_names: [{ name: 'Tver Governorate', lang: 'en' }],
+    events_count: 2,
+    children_count: 1,
+    version: 1,
+  },
+  {
+    id: 'pl-tver-city',
+    gid: 'P0003',
+    name: 'Тверь',
+    place_type: 'city',
+    parent_id: 'pl-tver-gov',
+    full_name: 'Тверь, Тверская губерния, Российская империя',
+    latitude: 56.8587,
+    longitude: 35.9176,
+    alt_names: [
+      { name: 'Калинин', lang: 'ru', note: '1931–1990' },
+      { name: 'Tver', lang: 'en' },
+    ],
+    events_count: 6,
+    children_count: 0,
+    version: 1,
+  },
+  {
+    id: 'pl-samara-gov',
+    gid: 'P0004',
+    name: 'Самарская губерния',
+    place_type: 'region',
+    parent_id: 'pl-empire',
+    full_name: 'Самарская губерния, Российская империя',
+    latitude: 53.2,
+    longitude: 50.15,
+    alt_names: [{ name: 'Samara Governorate', lang: 'en' }],
+    events_count: 1,
+    children_count: 1,
+    version: 1,
+  },
+  {
+    id: 'pl-pokrovka',
+    gid: 'P0005',
+    name: 'Покровка',
+    place_type: 'village',
+    parent_id: 'pl-samara-gov',
+    full_name: 'Покровка, Новоузенский уезд, Самарская губерния, Российская империя',
+    latitude: null,
+    longitude: null,
+    alt_names: [{ name: 'Pokrovka', lang: 'en' }],
+    events_count: 4,
+    children_count: 0,
+    version: 1,
+  },
+];
+
+export const PlacesPage: React.FC<PlacesPageProps> = ({
+  initialPlaces,
+  initialMapTileUrl = '',
+  userRole,
+}) => {
+  const { t } = useI18n();
+  const { user } = useAuth();
+  const { addToast } = useToast();
+
+  const effectiveRole = userRole ?? user?.role ?? 'admin';
+  const canEdit = effectiveRole === 'admin' || effectiveRole === 'editor';
+
+  const [places, setPlaces] = useState<PlaceDto[]>(
+    initialPlaces ?? DEFAULT_PLACES
+  );
+  const [mapTileUrl, setMapTileUrl] = useState<string>(initialMapTileUrl);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [missingCoordsOnly, setMissingCoordsOnly] = useState<boolean>(false);
+
+  const [selectedPlace, setSelectedPlace] = useState<PlaceDto | null>(
+    (initialPlaces ?? DEFAULT_PLACES)[2] ?? (initialPlaces ?? DEFAULT_PLACES)[0] ?? null
+  );
+  const [detailBreadcrumbs, setDetailBreadcrumbs] = useState<
+    PlaceBreadcrumbDto[]
+  >([]);
+  const [detailEvents, setDetailEvents] = useState<LifeEventDto[]>([]);
+
+  const [formOpen, setFormOpen] = useState<boolean>(false);
+  const [editingPlace, setEditingPlace] = useState<PlaceDto | null>(null);
+  const [mergingPlace, setMergingPlace] = useState<PlaceDto | null>(null);
+
+  const loadPlaces = (q?: string, missingCoords?: boolean) => {
+    fetchPlaces({
+      q: q?.trim() || undefined,
+      missing_coords: missingCoords || undefined,
+    })
+      .then((res) => {
+        setPlaces(res.items);
+        if (res.map_tile_url !== undefined) {
+          setMapTileUrl(res.map_tile_url);
+        }
+        if (res.items.length > 0 && !selectedPlace) {
+          setSelectedPlace(res.items[0]);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (initialPlaces) return;
+    loadPlaces(searchQuery, missingCoordsOnly);
+  }, [initialPlaces, searchQuery, missingCoordsOnly]);
+
+  useEffect(() => {
+    if (!selectedPlace || initialPlaces) return;
+    let cancelled = false;
+    fetchPlaceDetail(selectedPlace.id)
+      .then((res) => {
+        if (!cancelled) {
+          setDetailBreadcrumbs(res.breadcrumbs);
+          setDetailEvents(res.events);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlace, initialPlaces]);
+
+  // Client-side filter fallback (also supports cross-script & alt-name search)
+  const filteredPlaces = places.filter((pl) => {
+    if (missingCoordsOnly) {
+      const hasCoords =
+        pl.latitude !== null &&
+        pl.latitude !== undefined &&
+        pl.longitude !== null &&
+        pl.longitude !== undefined;
+      if (hasCoords) return false;
+    }
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim();
+    if (matchesCrossScript(pl.name, q)) return true;
+    if (matchesCrossScript(pl.full_name, q)) return true;
+    if (
+      pl.alt_names?.some((alt) => matchesCrossScript(alt.name, q))
+    ) {
+      return true;
+    }
+    return false;
+  });
+
+  const handleDeletePlace = async (pl: PlaceDto) => {
+    try {
+      await deletePlace(pl.id);
+      setPlaces((prev) => prev.filter((item) => item.id !== pl.id));
+      if (selectedPlace?.id === pl.id) {
+        setSelectedPlace(null);
+      }
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('common.errorLoading'),
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2 min-w-0">
+          <PlacesTreeListCard
+            places={filteredPlaces}
+            selectedPlaceId={selectedPlace?.id ?? null}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            missingCoordsOnly={missingCoordsOnly}
+            onMissingCoordsChange={setMissingCoordsOnly}
+            canEdit={canEdit}
+            onSelectPlace={(pl) => setSelectedPlace(pl)}
+            onAddPlace={() => {
+              setEditingPlace(null);
+              setFormOpen(true);
+            }}
+            onEditPlace={(pl) => {
+              setEditingPlace(pl);
+              setFormOpen(true);
+            }}
+            onMergePlace={(pl) => setMergingPlace(pl)}
+            onDeletePlace={handleDeletePlace}
+          />
+        </div>
+
+        <div className="lg:col-span-1 min-w-0">
+          <PlaceDetailPanel
+            place={selectedPlace}
+            breadcrumbs={detailBreadcrumbs}
+            events={detailEvents}
+            mapTileUrl={mapTileUrl}
+            onSelectBreadcrumb={(id) => {
+              const found = places.find((p) => p.id === id);
+              if (found) setSelectedPlace(found);
+            }}
+          />
+        </div>
+      </div>
+
+      <PlaceFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        initialPlace={editingPlace}
+        availableParents={places}
+        onPlaceSaved={(saved) => {
+          setPlaces((prev) => {
+            const exists = prev.some((p) => p.id === saved.id);
+            return exists
+              ? prev.map((p) => (p.id === saved.id ? saved : p))
+              : [...prev, saved];
+          });
+          setSelectedPlace(saved);
+          loadPlaces(searchQuery, missingCoordsOnly);
+        }}
+      />
+
+      <PlaceMergeDialog
+        open={Boolean(mergingPlace)}
+        onOpenChange={(open) => {
+          if (!open) setMergingPlace(null);
+        }}
+        sourcePlace={mergingPlace}
+        availableTargets={places}
+        onMerged={(targetPlace, mergedSourceId) => {
+          setPlaces((prev) =>
+            prev
+              .filter((p) => p.id !== mergedSourceId)
+              .map((p) => (p.id === targetPlace.id ? targetPlace : p))
+          );
+          setSelectedPlace(targetPlace);
+          loadPlaces(searchQuery, missingCoordsOnly);
+        }}
+      />
+    </div>
+  );
+};
+
+export default PlacesPage;

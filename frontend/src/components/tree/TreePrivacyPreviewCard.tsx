@@ -1,15 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, MapPin, Calendar, Eye, Shield } from 'lucide-react';
+import {
+  Lock,
+  MapPin,
+  Calendar,
+  Eye,
+  Shield,
+  UserPlus,
+  PenTool,
+  Trash2,
+  Plus,
+} from 'lucide-react';
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   CardBody,
   CardHeader,
   BrandLogoIcon,
 } from '../ui';
 import {
+  DeleteImpactDialog,
+  LifeEventDialog,
+  PersonEditDialog,
+  QuickAddRelativeDialog,
+} from '../person';
+import {
   fetchTreeData,
+  QuickAddRelation,
   TreeDataResponse,
   TreePersonNodeDto,
 } from '../../api/client';
@@ -98,6 +116,21 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
   const [treeData, setTreeData] = useState<TreeDataResponse>(
     initialTreeData ?? buildDefaultTreePreview('admin')
   );
+  const [quickAddState, setQuickAddState] = useState<{
+    anchor: TreePersonNodeDto;
+    relation: QuickAddRelation;
+  } | null>(null);
+  const [editTarget, setEditTarget] = useState<TreePersonNodeDto | null>(null);
+  const [eventTarget, setEventTarget] = useState<TreePersonNodeDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TreePersonNodeDto | null>(
+    null
+  );
+
+  const reloadTree = () => {
+    fetchTreeData()
+      .then((res) => setTreeData(res))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     if (initialTreeData) {
@@ -114,6 +147,9 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
       cancelled = true;
     };
   }, [initialTreeData]);
+
+  const canEdit =
+    treeData.access_tier === 'editor' || treeData.access_tier === 'admin';
 
   const tierLabel =
     treeData.access_tier === 'public_anonymous'
@@ -261,12 +297,129 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
                       )}
                     </div>
                   )}
+
+                  {canEdit && !isMaskedLiving && (
+                    <div className="border-t border-border pt-2.5 space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          leftIcon={<UserPlus className="h-3 w-3" />}
+                          onClick={() =>
+                            setQuickAddState({
+                              anchor: node,
+                              relation: 'father',
+                            })
+                          }
+                        >
+                          {t('person.actions.addFather')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          leftIcon={<UserPlus className="h-3 w-3" />}
+                          onClick={() =>
+                            setQuickAddState({
+                              anchor: node,
+                              relation: 'spouse',
+                            })
+                          }
+                        >
+                          {t('person.actions.addSpouse')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          leftIcon={<UserPlus className="h-3 w-3" />}
+                          onClick={() =>
+                            setQuickAddState({
+                              anchor: node,
+                              relation: 'child',
+                            })
+                          }
+                        >
+                          {t('person.actions.addChild')}
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<PenTool className="h-3 w-3" />}
+                          onClick={() => setEditTarget(node)}
+                        >
+                          {t('person.actions.editProfile')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<Plus className="h-3 w-3" />}
+                          onClick={() => setEventTarget(node)}
+                        >
+                          {t('person.actions.addEvent')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
+                          onClick={() => setDeleteTarget(node)}
+                        >
+                          {t('person.actions.deletePerson')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </CardBody>
       </Card>
+
+      <QuickAddRelativeDialog
+        open={Boolean(quickAddState)}
+        onOpenChange={(open) => {
+          if (!open) setQuickAddState(null);
+        }}
+        anchorPerson={quickAddState?.anchor ?? null}
+        relation={quickAddState?.relation ?? 'child'}
+        existingPeople={treeData.nodes}
+        onRelativeAdded={() => reloadTree()}
+      />
+
+      <PersonEditDialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        person={editTarget}
+        onPersonUpdated={() => reloadTree()}
+      />
+
+      <LifeEventDialog
+        open={Boolean(eventTarget)}
+        onOpenChange={(open) => {
+          if (!open) setEventTarget(null);
+        }}
+        individualId={eventTarget?.id ?? null}
+        onEventSaved={() => reloadTree()}
+      />
+
+      <DeleteImpactDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        person={deleteTarget}
+        onPersonDeleted={(deletedId) => {
+          setTreeData((prev) => ({
+            ...prev,
+            nodes: prev.nodes.filter((n) => n.id !== deletedId),
+          }));
+          reloadTree();
+        }}
+      />
     </div>
   );
 };

@@ -768,3 +768,213 @@ export async function fetchTreeData(): Promise<TreeDataResponse> {
   return apiFetch<TreeDataResponse>('/tree');
 }
 
+// =============================================================================
+// Phase 1.4 Core Data Model: Persons, Families, Life Events & Places Endpoints
+// =============================================================================
+
+export * from './openapi-types';
+import {
+  CreateFamilyInput,
+  CreateLifeEventInput,
+  CreatePersonInput,
+  CreatePlaceInput,
+  DeleteImpactDto,
+  FamilyDto,
+  LifeEventDto,
+  MergePlaceResponse,
+  PatronymicSuggestionDto,
+  PersonDetailDto,
+  PlaceDetailDto,
+  PlaceDto,
+  PlacesListResponse,
+  QuickAddRelativeInput,
+  QuickAddRelativeResponse,
+  UpdateFamilyInput,
+  UpdateLifeEventInput,
+  UpdatePersonInput,
+  UpdatePlaceInput,
+} from './openapi-types';
+
+export async function fetchPersonDetail(id: string): Promise<PersonDetailDto> {
+  return apiFetch<PersonDetailDto>(`/persons/${encodeURIComponent(id)}`);
+}
+
+export async function createPerson(
+  payload: CreatePersonInput
+): Promise<PersonDetailDto> {
+  return apiFetch<PersonDetailDto>('/persons', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePerson(
+  id: string,
+  payload: UpdatePersonInput
+): Promise<PersonDetailDto> {
+  return apiFetch<PersonDetailDto>(`/persons/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchPersonDeleteImpact(
+  id: string
+): Promise<DeleteImpactDto> {
+  return apiFetch<DeleteImpactDto>(
+    `/persons/${encodeURIComponent(id)}/delete-impact`
+  );
+}
+
+export async function deletePerson(
+  id: string
+): Promise<{ status: string; deleted_id?: string }> {
+  return apiFetch<{ status: string; deleted_id?: string }>(
+    `/persons/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    }
+  );
+}
+
+export async function quickAddRelative(
+  personId: string,
+  payload: QuickAddRelativeInput
+): Promise<QuickAddRelativeResponse> {
+  return apiFetch<QuickAddRelativeResponse>(
+    `/persons/${encodeURIComponent(personId)}/quick-add`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function suggestSlavicPatronymic(
+  fatherGivenName: string,
+  sex: 'M' | 'F' | 'U' = 'M'
+): Promise<PatronymicSuggestionDto> {
+  const params = new URLSearchParams({
+    father_given_name: fatherGivenName,
+    sex,
+  });
+  return apiFetch<PatronymicSuggestionDto>(
+    `/persons/patronymic-suggest?${params.toString()}`
+  );
+}
+
+export async function createLifeEvent(
+  payload: CreateLifeEventInput
+): Promise<LifeEventDto> {
+  return apiFetch<LifeEventDto>('/events', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateLifeEvent(
+  id: string,
+  payload: UpdateLifeEventInput
+): Promise<LifeEventDto> {
+  return apiFetch<LifeEventDto>(`/events/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteLifeEvent(
+  id: string
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/events/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchEventSources(
+  query?: string
+): Promise<{ items: string[] }> {
+  const qs = query ? `?q=${encodeURIComponent(query)}` : '';
+  return apiFetch<{ items: string[] }>(`/events/sources${qs}`);
+}
+
+export async function createFamily(
+  payload: CreateFamilyInput
+): Promise<FamilyDto> {
+  return apiFetch<FamilyDto>('/families', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateFamily(
+  id: string,
+  payload: UpdateFamilyInput
+): Promise<FamilyDto> {
+  return apiFetch<FamilyDto>(`/families/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteFamily(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/families/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchPlaces(params?: {
+  q?: string;
+  parent_id?: string;
+  missing_coords?: boolean;
+}): Promise<PlacesListResponse> {
+  const search = new URLSearchParams();
+  if (params?.q) search.set('q', params.q);
+  if (params?.parent_id) search.set('parent_id', params.parent_id);
+  if (params?.missing_coords) search.set('missing_coords', 'true');
+  const qs = search.toString();
+  return apiFetch<PlacesListResponse>(`/places${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchPlaceDetail(id: string): Promise<PlaceDetailDto> {
+  return apiFetch<PlaceDetailDto>(`/places/${encodeURIComponent(id)}`);
+}
+
+export async function createPlace(
+  payload: CreatePlaceInput
+): Promise<PlaceDto> {
+  return apiFetch<PlaceDto>('/places', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePlace(
+  id: string,
+  payload: UpdatePlaceInput
+): Promise<PlaceDto> {
+  return apiFetch<PlaceDto>(`/places/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePlace(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/places/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function mergePlace(
+  targetId: string,
+  sourcePlaceId: string
+): Promise<MergePlaceResponse> {
+  return apiFetch<MergePlaceResponse>(
+    `/places/${encodeURIComponent(targetId)}/merge`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ other_id: sourcePlaceId, source_place_id: sourcePlaceId }),
+    }
+  );
+}
+
+

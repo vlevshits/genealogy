@@ -11,6 +11,7 @@ import {
 } from './components/ui';
 import { TreePrivacyPreviewCard } from './components/tree';
 import { SettingsPage } from './pages/SettingsPage';
+import { PlacesPage } from './pages/PlacesPage';
 import { AuthPages } from './pages/AuthPages';
 import { fetchSystemInfo } from './api/client';
 import { useAuth } from './lib/auth-context';
@@ -226,6 +227,23 @@ export const App: React.FC = () => {
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <TreePrivacyPreviewCard onSignIn={() => navigate('/login')} />
         </div>
+      </AppShell>
+    );
+  }
+
+  // 5b. Places & Historical Jurisdictions route (/places)
+  if (path.startsWith('/places')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'places', label: t('nav.places') },
+        ]}
+      >
+        <PlacesPage />
       </AppShell>
     );
   }
