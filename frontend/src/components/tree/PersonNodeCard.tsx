@@ -10,6 +10,8 @@ import {
 import { Avatar, Badge, Button } from '../ui';
 import { QuickAddRelation, TreePersonNodeDto } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { formatPersonName, PersonNameFormatMode } from '../../lib/formatters';
+import { Locale } from '../../types/common';
 import { cn } from '../../lib/utils';
 import { CARD_HEIGHT, CARD_WIDTH } from '../../lib/tree-layouts';
 
@@ -29,9 +31,13 @@ export interface PersonNodeCardProps {
   className?: string;
 }
 
+const DRAG_THRESHOLD_PX = 6;
+
 export function formatTreeCardName(
   node: TreePersonNodeDto,
-  accessTier: string = 'admin'
+  accessTier: string = 'admin',
+  locale: Locale = 'en',
+  format: PersonNameFormatMode = 'card'
 ): { displayName: string; isMaskedLiving: boolean } {
   const isPublicGuest = accessTier === 'public_anonymous';
   const rawGiven = (node.primary_name.given_name || '').trim();
@@ -53,13 +59,19 @@ export function formatTreeCardName(
     return { displayName: `${initial}.`, isMaskedLiving: true };
   }
 
-  const fullName = [
-    node.primary_name.given_name,
-    node.primary_name.patronymic,
-    node.primary_name.surname,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const fullName = formatPersonName(
+    {
+      given_name: node.primary_name.given_name,
+      patronymic: node.primary_name.patronymic,
+      surname: node.primary_name.surname,
+      birth_surname: node.birth_surname,
+    },
+    {
+      format,
+      locale,
+      showMaiden: false,
+    }
+  );
 
   return {
     displayName: fullName || node.gid,
@@ -81,10 +93,17 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
   onQuickAdd,
   className,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const wasDraggedRef = useRef<boolean>(false);
 
-  const { displayName, isMaskedLiving } = formatTreeCardName(node, accessTier);
+  const { displayName, isMaskedLiving } = formatTreeCardName(
+    node,
+    accessTier,
+    locale,
+    'card'
+  );
 
   const stripeColorClass =
     node.sex === 'M'
@@ -93,9 +112,19 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
       ? 'bg-female'
       : 'bg-neutral';
 
-  const handlePointerDown = () => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    wasDraggedRef.current = false;
+    clearLongPress();
     longPressTimerRef.current = setTimeout(() => {
+      if (wasDraggedRef.current) return;
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
           navigator.vibrate(15);
@@ -107,11 +136,21 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
     }, 500);
   };
 
-  const clearLongPress = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointerStartRef.current) return;
+    const dist = Math.hypot(
+      e.clientX - pointerStartRef.current.x,
+      e.clientY - pointerStartRef.current.y
+    );
+    if (dist > DRAG_THRESHOLD_PX) {
+      wasDraggedRef.current = true;
+      clearLongPress();
     }
+  };
+
+  const handlePointerEnd = () => {
+    clearLongPress();
+    pointerStartRef.current = null;
   };
 
   const positionedStyle: React.CSSProperties | undefined =
@@ -136,15 +175,17 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
       data-node-id={node.id}
       data-gid={node.gid}
       style={positionedStyle}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        handlePointerDown();
-      }}
-      onPointerUp={clearLongPress}
-      onPointerCancel={clearLongPress}
-      onPointerLeave={clearLongPress}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      onPointerLeave={handlePointerEnd}
       onClick={(e) => {
         e.stopPropagation();
+        if (wasDraggedRef.current) {
+          wasDraggedRef.current = false;
+          return;
+        }
         onSelect?.(node);
       }}
       className={cn(
@@ -242,15 +283,16 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
           </div>
         )}
 
-        {/* Compact Tree Quick Actions (Focus & Quick-Add) */}
+        {/* Compact Tree Quick Actions (Focus & Quick-Add) with >=40-44px mobile touch targets */}
         <div
-          className="flex items-center justify-end gap-1.5 border-t border-border/60 pt-1 opacity-85 group-hover:opacity-100 transition-opacity"
+          className="flex items-center justify-end gap-1.5 border-t border-border/60 pt-1 opacity-90 group-hover:opacity-100 transition-opacity"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 px-2 text-[11px] text-secondary hover:text-primary"
+            className="min-h-11 sm:min-h-8 px-2.5 text-[11px] text-secondary hover:text-primary"
             leftIcon={<Crosshair className="h-3 w-3" />}
             onClick={() => onFocusNode?.(node)}
           >
@@ -261,7 +303,7 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-2 text-[11px] text-brand hover:text-brand"
+              className="min-h-11 sm:min-h-8 px-2.5 text-[11px] text-brand hover:text-brand"
               leftIcon={<UserPlus className="h-3 w-3" />}
               onClick={() => onQuickAdd?.(node, 'child')}
             >

@@ -51,12 +51,17 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
   onEditPerson,
   onOpenProfile,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState<boolean>(false);
 
   if (!person) return null;
 
-  const { displayName, isMaskedLiving } = formatTreeCardName(person, accessTier);
+  const { displayName, isMaskedLiving } = formatTreeCardName(
+    person,
+    accessTier,
+    locale,
+    'card'
+  );
   const isAuthenticated = accessTier !== 'public_anonymous';
 
   return (
@@ -100,14 +105,15 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
                     {t('tree.homePersonBadge')}
                   </Badge>
                 )}
-                <Badge
-                  variant={person.is_living ? 'brand' : 'neutral'}
-                  size="sm"
-                >
-                  {person.is_living
-                    ? t('tree.privacyPreview.livingBadge')
-                    : t('tree.privacyPreview.deceasedBadge')}
-                </Badge>
+                {!person.is_living && (
+                  <span
+                    aria-label={t('person.quickAdd.livingNo')}
+                    title={t('person.quickAdd.livingNo')}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface-muted font-serif text-xs font-semibold text-secondary"
+                  >
+                    †
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -155,7 +161,12 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
                     ...family.spouses,
                     ...family.children,
                   ].map((rel) => {
-                    const formatted = formatTreeCardName(rel, accessTier);
+                    const formatted = formatTreeCardName(
+                      rel,
+                      accessTier,
+                      locale,
+                      'card'
+                    );
                     return (
                       <Button
                         key={rel.id}

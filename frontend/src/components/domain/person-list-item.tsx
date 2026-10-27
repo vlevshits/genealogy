@@ -5,7 +5,9 @@ import { Avatar } from '../ui/avatar';
 import { PersonName } from './person-name';
 import { LifeSpan } from './life-span';
 import { PlaceText } from './place-text';
-import { LivingBadge, PrivacyBadge } from './privacy-badge';
+import { PrivacyBadge } from './privacy-badge';
+import { useI18n } from '../../i18n';
+import { formatPersonName } from '../../lib/formatters';
 
 export interface PersonListItemProps extends React.HTMLAttributes<HTMLDivElement> {
   person: Individual;
@@ -20,7 +22,8 @@ export const PersonListItem: React.FC<PersonListItemProps> = ({
   ref,
   ...props
 }) => {
-  const fullName = [person.given_name, person.surname].filter(Boolean).join(' ');
+  const { locale } = useI18n();
+  const fullName = formatPersonName(person, { locale, format: 'compact' });
 
   return (
     <div
@@ -45,7 +48,6 @@ export const PersonListItem: React.FC<PersonListItemProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <PersonName person={person} variant="full" className="text-sm font-semibold truncate" />
             <span className="font-mono text-[11px] text-tertiary">{person.gid}</span>
-            {person.is_living && <LivingBadge />}
             {person.is_private && <PrivacyBadge />}
           </div>
           <div className="mt-0.5 flex items-center flex-wrap gap-2 text-xs text-secondary">

@@ -675,7 +675,7 @@ async fn test_tier3_viewer_and_tier4_editor_and_tier5_admin_rbac_matrix() {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    assert_eq!(res.status(), StatusCode::OK);
 
     // =========================================================================
     // Admin-Only Isolation for both Viewer and Editor (`02 §7 DoD #6, #7, #8, #9`)

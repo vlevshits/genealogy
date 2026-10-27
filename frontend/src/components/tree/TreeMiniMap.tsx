@@ -56,7 +56,7 @@ export const TreeMiniMap: React.FC<TreeMiniMapProps> = ({
     return (
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute bottom-6 right-4 sm:right-6 z-20"
+        className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-3 sm:right-6 z-20"
       >
         <Button
           size="md"
@@ -75,7 +75,7 @@ export const TreeMiniMap: React.FC<TreeMiniMapProps> = ({
     <div
       aria-label={t('tree.miniMap.title')}
       onPointerDown={(e) => e.stopPropagation()}
-      className="absolute bottom-6 right-4 sm:right-6 z-20 w-48 h-32 rounded-xl border border-border bg-surface/90 p-2 shadow-sm backdrop-blur-md flex flex-col justify-between"
+      className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-3 sm:right-6 z-20 w-48 h-32 rounded-xl border border-border bg-surface/90 p-2 shadow-sm backdrop-blur-md flex flex-col justify-between"
     >
       <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-secondary">
         <span className="truncate">{t('tree.miniMap.title')}</span>
@@ -84,9 +84,9 @@ export const TreeMiniMap: React.FC<TreeMiniMapProps> = ({
           variant="ghost"
           label={t('tree.miniMap.collapseAria')}
           onClick={() => setCollapsed(true)}
-          className="h-6 w-6 min-h-6 min-w-6"
+          className="h-7 w-7 min-h-7 min-w-7"
         >
-          <Minimize2 className="h-3 w-3" />
+          <Minimize2 className="h-3.5 w-3.5" />
         </IconButton>
       </div>
 

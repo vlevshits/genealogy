@@ -13,6 +13,7 @@ import {
   fetchPersonDeleteImpact,
   TreePersonNodeDto,
 } from '../../api/client';
+import { useUndoToast } from '../../hooks/useUndoToast';
 import { useI18n } from '../../i18n';
 
 export interface DeleteImpactDialogProps {
@@ -32,6 +33,7 @@ export const DeleteImpactDialog: React.FC<DeleteImpactDialogProps> = ({
 }) => {
   const { t } = useI18n();
   const { addToast } = useToast();
+  const { showUndoToast } = useUndoToast();
 
   const fallbackImpact: DeleteImpactDto | null = person
     ? {
@@ -83,12 +85,20 @@ export const DeleteImpactDialog: React.FC<DeleteImpactDialogProps> = ({
     setDeleting(true);
     setErrorMsg(null);
     try {
-      await deletePerson(person.id);
-      addToast({
-        type: 'success',
-        title: t('person.deleteImpact.deletedToast'),
-        description: `${impact.display_name} (${impact.gid})`,
-      });
+      const res = await deletePerson(person.id);
+      if (res?.tx_id) {
+        showUndoToast({
+          txId: res.tx_id,
+          title: t('history.undo_toast_label'),
+          description: t('person.deleteImpact.deletedToast'),
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: t('person.deleteImpact.deletedToast'),
+          description: `${impact.display_name} (${impact.gid})`,
+        });
+      }
       onPersonDeleted?.(person.id);
       onOpenChange(false);
     } catch (err) {

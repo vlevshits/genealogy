@@ -1353,5 +1353,130 @@
       "downloadBtn": "Download GEDCOM Export",
       "startedToast": "GEDCOM export prepared for download"
     }
+  },
+  "pwa": {
+    "install_title": "Install Family Archive",
+    "install_prompt": "Add {instanceName} to your home screen for one-tap access.",
+    "install_action": "Install",
+    "dismiss_action": "Not now",
+    "ios_share_step": "Tap the Share button in Safari.",
+    "ios_add_step": "Select 'Add to Home Screen'.",
+    "offline_banner": "You are currently offline. Live family tree data requires a network connection."
+  },
+  "history": {
+    "undo_toast_label": "Changes saved",
+    "undo_confirmed_toast": "Changes undone",
+    "unknownActor": "Family Member",
+    "actions": {
+      "created": "Created",
+      "updated": "Updated",
+      "deleted": "Deleted",
+      "restored": "Restored",
+      "undone": "Undone"
+    },
+    "txLabels": {
+      "default": "Record Change",
+      "personAddParent": "Added Parent",
+      "personAddChild": "Added Child",
+      "personAddSpouse": "Added Spouse",
+      "personAddSibling": "Added Sibling",
+      "personCreate": "Created Person Record",
+      "personUpdateProfile": "Edited Profile Details",
+      "personDelete": "Deleted Person Record",
+      "familyCreate": "Created Family Union",
+      "familyUpdate": "Updated Family Union",
+      "eventCreate": "Added Life Event",
+      "eventUpdate": "Updated Life Event",
+      "eventDelete": "Deleted Life Event",
+      "mediaUpload": "Uploaded Archival Media",
+      "placeUpdate": "Updated Place Directory"
+    },
+    "drawer": {
+      "title": "Record Change History",
+      "emptyTitle": "No Changes Recorded",
+      "emptyDesc": "No revision entries were found for this record yet.",
+      "fieldsChangedCount": "{count} field(s) modified",
+      "hideDiffsBtn": "Hide field changes",
+      "showDiffsBtn": "Show field changes ({count})",
+      "emptyValue": "Empty",
+      "restoreVersionBtn": "Restore this version"
+    },
+    "restore": {
+      "confirmTitle": "Restore Previous Version",
+      "confirmDesc": "This will restore the record state from this revision and record a new entry in the change log.",
+      "confirmBtn": "Restore Version",
+      "successToast": "Record state restored"
+    },
+    "conflict": {
+      "title": "Concurrent Edit Detected",
+      "subtitle": "This record was modified while you were editing. Choose how to reconcile the changes.",
+      "bannerText": "{name} saved changes to this record ({time}). Review the differences below.",
+      "anotherEditor": "Another family member",
+      "colField": "Field",
+      "colMine": "Your Unsaved Changes",
+      "colTheirs": "Latest Saved Version",
+      "noFieldDiffs": "No conflicting field values detected.",
+      "useTheirsBtn": "Use their changes",
+      "mergeFieldByFieldBtn": "Merge field by field",
+      "applyMergedBtn": "Save Merged Record",
+      "keepMineBtn": "Keep my changes",
+      "mergeInstruction": "Select which value to keep for each modified field."
+    },
+    "liveVersion": {
+      "warningBanner": "{name} just updated this record in another session. Saving will prompt you to merge any overlapping fields."
+    },
+    "filters": {
+      "entityAll": "All record types",
+      "entityPerson": "Individuals",
+      "entityFamily": "Families",
+      "entityEvent": "Events",
+      "entityPlace": "Places",
+      "entityMedia": "Media",
+      "entityNote": "Notes",
+      "opAll": "All actions",
+      "opCreate": "Created",
+      "opUpdate": "Updated",
+      "opDelete": "Deleted",
+      "opRestore": "Restored",
+      "entityTypeLabel": "Record Type",
+      "actionLabel": "Action",
+      "fromDateLabel": "From Date",
+      "toDateLabel": "To Date",
+      "onlyDeletionsLabel": "Only deleted records"
+    },
+    "page": {
+      "title": "Change History & Audit Log",
+      "subtitle": "Inspect every creation, edit, and deletion across the family archive, undo recent transactions, or restore deleted records.",
+      "totalTransactions": "{count} transaction(s)",
+      "emptyTitle": "No Matching History Entries",
+      "emptyDesc": "Try adjusting your filters or date range to inspect earlier revisions.",
+      "restoreDeletedBtn": "Restore Record"
+    },
+    "snapshots": {
+      "title": "Tree Checkpoints & Rollback Snapshots",
+      "subtitle": "Create manual checkpoints before major edits or roll back the entire family tree to an earlier snapshot.",
+      "labelPlaceholder": "Checkpoint label (e.g., Before merging maternal branch)",
+      "createBtn": "Create Checkpoint",
+      "defaultManualLabel": "Manual Tree Checkpoint",
+      "createdToast": "Tree checkpoint created",
+      "rolledBackToast": "Family tree restored to checkpoint",
+      "emptyTitle": "No Tree Checkpoints Yet",
+      "emptyDesc": "Create a manual checkpoint or import a GEDCOM archive to generate an automatic rollback point.",
+      "reasonManual": "Manual Checkpoint",
+      "reasonPreGedcom": "Pre-GEDCOM Import",
+      "reasonPreRollback": "Pre-Rollback Safety",
+      "expiresInDays": "Retained for {days}d",
+      "countIndividuals": "Persons: {count}",
+      "countFamilies": "Families: {count}",
+      "countEvents": "Events: {count}",
+      "countPlaces": "Places: {count}",
+      "rollbackBtn": "Roll Back to Checkpoint",
+      "rollbackDialogTitle": "Roll Back Entire Family Tree",
+      "rollbackDialogSubtitle": "Restoring a full tree snapshot replaces current individuals, families, events, and places with the checkpoint state.",
+      "rollbackWarningTitle": "Target checkpoint: {label}",
+      "rollbackSafetyNote": "An automatic pre-rollback snapshot of the current tree state will be saved first so you can undo this rollback if needed.",
+      "typeRollbackLabel": "Type ROLLBACK to confirm full tree restoration",
+      "confirmRollbackBtn": "Confirm Full Tree Rollback"
+    }
   }
 }

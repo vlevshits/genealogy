@@ -122,7 +122,7 @@ describe('Component Library, Accessibility & Design Token Verification', () => {
       />,
       'en'
     );
-    expect(html).toContain('1912 – 1989');
+    expect(html).toContain('1912 – †1989');
     expect(html).toContain('77 yrs');
   });
 

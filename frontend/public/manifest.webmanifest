@@ -1,0 +1,63 @@
+{
+  "name": "Levshits Family Archive",
+  "short_name": "Levshits Tree",
+  "description": "Private, self-hosted family genealogy and biographical archive.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#F8F9FA",
+  "theme_color": "#F8F9FA",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["lifestyle", "education", "reference"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Interactive Family Tree",
+      "short_name": "Family Tree",
+      "description": "Open the interactive pedigree and hourglass family tree canvas",
+      "url": "/tree?source=pwa_shortcut",
+      "icons": [{ "src": "/icons/shortcut-tree.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "People Directory",
+      "short_name": "People",
+      "description": "Browse all family members and surnames",
+      "url": "/people?source=pwa_shortcut",
+      "icons": [{ "src": "/icons/shortcut-people.png", "sizes": "96x96" }]
+    }
+  ]
+}

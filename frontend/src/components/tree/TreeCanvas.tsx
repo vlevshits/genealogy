@@ -101,6 +101,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   );
   const pinchInitialDistRef = useRef<number | null>(null);
   const pinchInitialZoomRef = useRef<number>(1);
+  const pinchInitialCenterRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   // Selected person for Drawer / BottomSheet
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(
@@ -269,6 +270,12 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       pinchInitialDistRef.current = Math.max(10, dist);
       pinchInitialZoomRef.current = zoom;
+      pinchInitialCenterRef.current = {
+        x: (pts[0].x + pts[1].x) / 2,
+        y: (pts[0].y + pts[1].y) / 2,
+        panX: pan.x,
+        panY: pan.y,
+      };
       isDraggingRef.current = false;
     } else if (activePointersRef.current.size === 1) {
       isDraggingRef.current = true;
@@ -300,6 +307,25 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
         MAX_ZOOM,
         Math.max(MIN_ZOOM, pinchInitialZoomRef.current * ratio)
       );
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      if (pinchInitialCenterRef.current && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const initLocalX = pinchInitialCenterRef.current.x - rect.left;
+        const initLocalY = pinchInitialCenterRef.current.y - rect.top;
+        const curLocalX = midX - rect.left;
+        const curLocalY = midY - rect.top;
+        const worldX =
+          (initLocalX - pinchInitialCenterRef.current.panX) /
+          pinchInitialZoomRef.current;
+        const worldY =
+          (initLocalY - pinchInitialCenterRef.current.panY) /
+          pinchInitialZoomRef.current;
+        setPan({
+          x: curLocalX - worldX * nextZoom,
+          y: curLocalY - worldY * nextZoom,
+        });
+      }
       setZoom(nextZoom);
       return;
     }
@@ -317,6 +343,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     activePointersRef.current.delete(e.pointerId);
     if (activePointersRef.current.size < 2) {
       pinchInitialDistRef.current = null;
+      pinchInitialCenterRef.current = null;
     }
     if (activePointersRef.current.size === 0) {
       isDraggingRef.current = false;
@@ -425,7 +452,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] w-full overflow-hidden">
       {treeView.access_tier === 'public_anonymous' && (
         <div className="px-4 sm:px-6 py-2 shrink-0">
           <PublicGuestBanner onSignIn={onSignIn} />

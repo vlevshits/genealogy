@@ -17,6 +17,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../i18n';
 import { BrandLogoIcon } from './brand-logo-icon';
+import { Button } from './button';
 import { Drawer } from './drawer';
 import { ThemeMode } from '../../types/common';
 
@@ -114,7 +115,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <>
       <nav
-        aria-label={t('nav.openMenu')}
+        aria-label="Main navigation"
         className={cn(
           'border-t border-border bg-surface/95 backdrop-blur-md',
           inlinePreview
@@ -146,13 +147,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             );
           })}
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             aria-expanded={moreOpen}
             aria-haspopup="dialog"
             onClick={() => setMoreOpen(true)}
             className={cn(
-              'flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors cursor-pointer',
+              'flex min-h-12 min-w-12 h-auto flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors cursor-pointer',
               moreOpen || isMoreActive
                 ? 'text-brand font-semibold'
                 : 'text-secondary hover:bg-surface-muted hover:text-primary'
@@ -160,7 +162,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           >
             <MoreHorizontal className="h-5 w-5" />
             <span className="truncate max-w-full">{t('nav.more')}</span>
-          </button>
+          </Button>
         </div>
       </nav>
 
@@ -201,30 +203,32 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 {t('common.language')}
               </span>
               <div className="inline-flex rounded-lg border border-border bg-surface-muted p-0.5">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => setLocale('en')}
                   className={cn(
-                    'min-h-9 px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer',
+                    'min-h-11 min-w-11 px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer',
                     locale === 'en'
                       ? 'bg-surface text-primary shadow-xs'
                       : 'text-secondary hover:text-primary'
                   )}
                 >
                   EN
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => setLocale('ru')}
                   className={cn(
-                    'min-h-9 px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer',
+                    'min-h-11 min-w-11 px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer',
                     locale === 'ru'
                       ? 'bg-surface text-primary shadow-xs'
                       : 'text-secondary hover:text-primary'
                   )}
                 >
                   RU
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -235,45 +239,48 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   {t('common.themeSelector')}
                 </span>
                 <div className="inline-flex rounded-lg border border-border bg-surface-muted p-0.5">
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<Sun className="h-3.5 w-3.5" />}
                     onClick={() => onThemeChange('light')}
                     className={cn(
-                      'inline-flex min-h-9 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
+                      'inline-flex min-h-11 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
                       themeMode === 'light'
                         ? 'bg-surface text-primary shadow-xs'
                         : 'text-secondary hover:text-primary'
                     )}
                   >
-                    <Sun className="h-3.5 w-3.5" />
                     <span>{t('common.lightMode')}</span>
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<Moon className="h-3.5 w-3.5" />}
                     onClick={() => onThemeChange('dark')}
                     className={cn(
-                      'inline-flex min-h-9 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
+                      'inline-flex min-h-11 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
                       themeMode === 'dark'
                         ? 'bg-surface text-primary shadow-xs'
                         : 'text-secondary hover:text-primary'
                     )}
                   >
-                    <Moon className="h-3.5 w-3.5" />
                     <span>{t('common.darkMode')}</span>
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<Monitor className="h-3.5 w-3.5" />}
                     onClick={() => onThemeChange('system')}
                     className={cn(
-                      'inline-flex min-h-9 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
+                      'inline-flex min-h-11 items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
                       themeMode === 'system'
                         ? 'bg-surface text-primary shadow-xs'
                         : 'text-secondary hover:text-primary'
                     )}
                   >
-                    <Monitor className="h-3.5 w-3.5" />
                     <span>{t('common.systemMode')}</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

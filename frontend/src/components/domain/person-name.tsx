@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { Individual } from '../../types/person';
 import { useI18n } from '../../i18n';
+import { formatPersonName } from '../../lib/formatters';
 
 export type PersonNameVariant = 'full' | 'short' | 'card';
 
@@ -40,35 +41,16 @@ export const PersonName: React.FC<PersonNameProps> = ({
     );
   }
 
-  const given = person.given_name?.trim() ?? '';
-  const patr = person.patronymic?.trim() ?? '';
-  const sur = person.surname?.trim() ?? '';
-  const birthSur =
-    person.birth_surname && person.birth_surname !== sur
-      ? `(${person.birth_surname})`
-      : '';
-
-  let formatted = '';
-  if (variant === 'short') {
-    formatted = [given, sur].filter(Boolean).join(' ');
-  } else if (variant === 'card') {
-    formatted =
-      locale === 'ru'
-        ? [given, patr, sur, birthSur].filter(Boolean).join(' ')
-        : [given, patr, sur, birthSur].filter(Boolean).join(' ');
-  } else {
-    // 'full'
-    formatted =
-      locale === 'ru'
-        ? [sur, birthSur, given, patr].filter(Boolean).join(' ')
-        : [person.name_prefix, given, patr, sur, birthSur, person.name_suffix]
-            .filter(Boolean)
-            .join(' ');
-  }
+  const formatted = formatPersonName(person, {
+    locale,
+    format: variant === 'short' ? 'compact' : variant,
+    showMaiden: variant !== 'short',
+    maidenStyle: 'parens',
+  });
 
   return (
     <span ref={ref} className={cn('font-medium text-primary', className)} {...props}>
-      {formatted || t('domain.unknownYear')}
+      {formatted || t('domain.livingPerson')}
     </span>
   );
 };

@@ -352,6 +352,19 @@ pub struct UserRecord {
     pub updated_at: DateTime<Utc>,
 }
 
+impl UserRecord {
+    pub fn display_name(&self) -> String {
+        let joined = format!("{} {}", self.first_name.trim(), self.last_name.trim())
+            .trim()
+            .to_string();
+        if joined.is_empty() {
+            self.email.clone()
+        } else {
+            joined
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PasskeyRecord {
     pub id: Uuid,

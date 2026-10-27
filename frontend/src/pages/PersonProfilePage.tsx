@@ -18,6 +18,8 @@ import {
   PersonEditDialog,
   QuickAddRelativeDialog,
 } from '../components/person';
+import { RecordHistoryDrawer } from '../components/history';
+import { useUndoToast } from '../hooks/useUndoToast';
 import { PublicGuestBanner } from '../components/tree/PublicGuestBanner';
 import { formatTreeCardName } from '../components/tree/PersonNodeCard';
 import {
@@ -370,9 +372,10 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
   onSignIn,
   onPersonLoaded,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user, isAuthenticated, updateUser } = useAuth();
   const { addToast } = useToast();
+  const { showUndoToast } = useUndoToast();
 
   const resolvedAccessTier =
     propAccessTier ??
@@ -408,6 +411,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     relation: QuickAddRelation;
   }>({ open: false, relation: 'child' });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState<boolean>(false);
 
   const loadProfile = useCallback(() => {
     if (initialProfile) return;
@@ -474,7 +478,9 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
 
   const { displayName, isMaskedLiving } = formatTreeCardName(
     profile.person,
-    resolvedAccessTier
+    resolvedAccessTier,
+    locale,
+    'card'
   );
 
   useEffect(() => {
@@ -494,10 +500,20 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         ...updated,
       },
     }));
-    addToast({
-      type: 'success',
-      title: t('person.edit.savedToast'),
-    });
+    const txId = (updated as unknown as { tx_id?: string }).tx_id;
+    if (txId) {
+      showUndoToast({
+        txId,
+        title: t('history.undo_toast_label'),
+        description: t('person.edit.savedToast'),
+        onUndone: () => loadProfile(),
+      });
+    } else {
+      addToast({
+        type: 'success',
+        title: t('person.edit.savedToast'),
+      });
+    }
     loadProfile();
   };
 
@@ -514,10 +530,20 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         biography: nextBio,
       },
     }));
-    addToast({
-      type: 'success',
-      title: t('profile.biography.savedToast'),
-    });
+    const txId = (updated as unknown as { tx_id?: string }).tx_id;
+    if (txId) {
+      showUndoToast({
+        txId,
+        title: t('history.undo_toast_label'),
+        description: t('profile.biography.savedToast'),
+        onUndone: () => loadProfile(),
+      });
+    } else {
+      addToast({
+        type: 'success',
+        title: t('profile.biography.savedToast'),
+      });
+    }
     loadProfile();
   };
 
@@ -561,10 +587,20 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
           is_private: nextPrivate,
         },
       }));
-      addToast({
-        type: 'success',
-        title: t('person.edit.savedToast'),
-      });
+      const txId = (updated as unknown as { tx_id?: string }).tx_id;
+      if (txId) {
+        showUndoToast({
+          txId,
+          title: t('history.undo_toast_label'),
+          description: t('person.edit.savedToast'),
+          onUndone: () => loadProfile(),
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: t('person.edit.savedToast'),
+        });
+      }
     } catch (err) {
       addToast({
         type: 'error',
@@ -576,15 +612,24 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
 
   const handleDeleteEvent = async (ev: ProfileLifeEventDto) => {
     try {
-      await deleteLifeEvent(ev.id);
+      const res = await deleteLifeEvent(ev.id);
       setProfile((prev) => ({
         ...prev,
         events: prev.events.filter((item) => item.id !== ev.id),
       }));
-      addToast({
-        type: 'success',
-        title: t('profile.chronology.eventDeletedToast'),
-      });
+      if (res?.tx_id) {
+        showUndoToast({
+          txId: res.tx_id,
+          title: t('history.undo_toast_label'),
+          description: t('profile.chronology.eventDeletedToast'),
+          onUndone: () => loadProfile(),
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: t('profile.chronology.eventDeletedToast'),
+        });
+      }
       loadProfile();
     } catch (err) {
       addToast({
@@ -597,15 +642,25 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
 
   const handleDeleteNote = async (note: NoteDto) => {
     try {
-      await deleteNote(note.id);
+      const res = await deleteNote(note.id);
       setProfile((prev) => ({
         ...prev,
         notes: prev.notes.filter((n) => n.id !== note.id),
       }));
-      addToast({
-        type: 'success',
-        title: t('profile.notes.deletedToast'),
-      });
+      const txId = (res as { tx_id?: string } | undefined)?.tx_id;
+      if (txId) {
+        showUndoToast({
+          txId,
+          title: t('history.undo_toast_label'),
+          description: t('profile.notes.deletedToast'),
+          onUndone: () => loadProfile(),
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: t('profile.notes.deletedToast'),
+        });
+      }
       loadProfile();
     } catch (err) {
       addToast({
@@ -778,7 +833,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         onSetHomePerson={() => void handleSetHomePerson()}
         onTogglePrivate={() => void handleTogglePrivate()}
         onDeletePerson={() => setDeleteDialogOpen(true)}
-        onOpenHistory={() => navigateTo('/history')}
+        onOpenHistory={() => setHistoryDrawerOpen(true)}
         onMergePerson={() =>
           navigateTo(
             `/people/merge?primary=${encodeURIComponent(profile.person.id)}`
@@ -859,6 +914,15 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         onOpenChange={setDeleteDialogOpen}
         person={profile.person}
         onPersonDeleted={() => navigateTo('/tree')}
+      />
+
+      <RecordHistoryDrawer
+        open={historyDrawerOpen}
+        onOpenChange={setHistoryDrawerOpen}
+        entityType="person"
+        entityId={profile.person.id}
+        entityLabel={displayName}
+        onRestored={() => loadProfile()}
       />
     </div>
   );

@@ -54,12 +54,13 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
 
   return (
     <>
-      {/* Top-Left Floating Projection Switcher */}
-      <div
-        onPointerDown={(e) => e.stopPropagation()}
-        className="absolute top-4 left-4 sm:left-6 z-20 flex flex-wrap items-center gap-2"
-      >
-        <div className="rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md">
+      {/* Top Floating Bar: stacks vertically on narrow mobile (< 640px) so mode switcher & depth controls never collide */}
+      <div className="pointer-events-none absolute top-3 inset-x-3 sm:top-4 sm:inset-x-6 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        {/* Projection Mode Switcher */}
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="pointer-events-auto self-start max-w-full overflow-x-auto rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
+        >
           <SegmentedControl<TreeProjectionMode>
             ariaLabel={t('tree.toolbar.modeSwitcherAria')}
             value={mode}
@@ -84,43 +85,43 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
             ]}
           />
         </div>
-      </div>
 
-      {/* Top-Right Floating Depth & Framing Controls */}
-      <div
-        onPointerDown={(e) => e.stopPropagation()}
-        className="absolute top-4 right-4 sm:right-6 z-20 flex items-center gap-2 rounded-xl border border-border bg-surface/90 p-1.5 shadow-sm backdrop-blur-md"
-      >
-        <div className="w-36 sm:w-44">
-          <Select
-            ariaLabel={t('tree.toolbar.generationsAria')}
-            value={String(generations)}
-            onChange={(val) => onGenerationsChange(Number(val))}
-            options={generationOptions}
-          />
+        {/* Depth & Framing Controls */}
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="pointer-events-auto self-start sm:self-auto flex items-center gap-1.5 sm:gap-2 rounded-xl border border-border bg-surface/90 p-1.5 shadow-sm backdrop-blur-md"
+        >
+          <div className="w-36 sm:w-44">
+            <Select
+              ariaLabel={t('tree.toolbar.generationsAria')}
+              value={String(generations)}
+              onChange={(val) => onGenerationsChange(Number(val))}
+              options={generationOptions}
+            />
+          </div>
+
+          <IconButton
+            label={t('tree.toolbar.centerHomeAria')}
+            variant="secondary"
+            onClick={onCenterFocal}
+          >
+            <Home className="h-4 w-4" />
+          </IconButton>
+
+          <IconButton
+            label={t('tree.toolbar.fitScreenAria')}
+            variant="secondary"
+            onClick={onFitToScreen}
+          >
+            <Maximize2 className="h-4 w-4" />
+          </IconButton>
         </div>
-
-        <IconButton
-          label={t('tree.toolbar.centerHomeAria')}
-          variant="secondary"
-          onClick={onCenterFocal}
-        >
-          <Home className="h-4 w-4" />
-        </IconButton>
-
-        <IconButton
-          label={t('tree.toolbar.fitScreenAria')}
-          variant="secondary"
-          onClick={onFitToScreen}
-        >
-          <Maximize2 className="h-4 w-4" />
-        </IconButton>
       </div>
 
-      {/* Bottom-Left Floating Zoom Pill */}
+      {/* Bottom-Left Floating Zoom Pill — lifted above BottomNav on mobile (< 768px) */}
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute bottom-6 left-4 sm:left-6 z-20 flex items-center gap-1 rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
+        className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-3 sm:left-6 z-20 flex items-center gap-1 rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
       >
         <IconButton
           label={t('tree.toolbar.zoomOutAria')}
@@ -135,7 +136,7 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
           variant="ghost"
           aria-label={t('tree.toolbar.zoomResetAria')}
           onClick={onZoomReset}
-          className="min-w-14 font-mono text-xs font-semibold"
+          className="min-w-14 min-h-11 font-mono text-xs font-semibold"
         >
           {Math.round(zoom * 100)}%
         </Button>

@@ -16,6 +16,7 @@ import { PersonProfilePage } from './pages/PersonProfilePage';
 import { PeoplePage } from './pages/PeoplePage';
 import { SurnamesPage } from './pages/SurnamesPage';
 import { MediaPage } from './pages/MediaPage';
+import { HistoryPage } from './pages/HistoryPage';
 import { AuthPages } from './pages/AuthPages';
 import {
   fetchOnboardingStatus,
@@ -251,6 +252,23 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         </AppShell>
       );
     }
+  }
+
+  // 4d. History route (/history) — Admin-only global change history & undo/restore feed (14-change-history-concurrency.md §5)
+  if (path.startsWith('/history')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'history', label: t('nav.history') },
+        ]}
+      >
+        <HistoryPage onNavigate={navigate} />
+      </AppShell>
+    );
   }
 
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)

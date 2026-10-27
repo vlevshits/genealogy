@@ -83,6 +83,9 @@ pub enum AppError {
     #[error("Version conflict: {0}")]
     VersionConflict(String),
 
+    #[error("Version conflict: {0}")]
+    VersionConflictWithRecord(String, serde_json::Value),
+
     #[error("Relationship cycle detected: {0}")]
     CycleDetected(String),
 
@@ -129,7 +132,7 @@ impl AppError {
             Self::PersonNotFound => "person_not_found",
             Self::SetupAlreadyCompleted => "setup_already_completed",
             Self::AlreadyOnboarded => "already_onboarded",
-            Self::VersionConflict(_) => "version_conflict",
+            Self::VersionConflict(_) | Self::VersionConflictWithRecord(_, _) => "version_conflict",
             Self::CycleDetected(_) => "cycle_detected",
             Self::PlaceInUse => "place_in_use",
             Self::RateLimited => "rate_limited",
@@ -163,6 +166,7 @@ impl AppError {
                 StatusCode::NOT_FOUND
             }
             Self::VersionConflict(_)
+            | Self::VersionConflictWithRecord(_, _)
             | Self::SetupAlreadyCompleted
             | Self::AlreadyOnboarded
             | Self::PlaceInUse => StatusCode::CONFLICT,
@@ -197,11 +201,16 @@ impl IntoResponse for AppError {
             _ => None,
         };
 
+        let details = match &self {
+            Self::VersionConflictWithRecord(_, record_details) => Some(record_details.clone()),
+            _ => None,
+        };
+
         let body = ErrorResponse {
             error: ErrorDetail {
                 code,
                 message,
-                details: None,
+                details,
                 field_errors,
             },
         };

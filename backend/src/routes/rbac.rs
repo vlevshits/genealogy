@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{Path, Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -29,6 +29,14 @@ use crate::{
             ensure_no_ancestor_cycle, ensure_no_place_cycle, recompute_all_individuals_vitals,
             recompute_all_places_metadata, resolve_or_create_place_chain, ProfileKinshipDto,
         },
+        history::{
+            create_snapshot, get_entity_version, log_change, parse_if_match_version,
+            query_history_feed, query_record_history, restore_change, rollback_snapshot,
+            undo_transaction, verify_optimistic_version, CreateSnapshotRequest,
+            EntityVersionResponse, HistoryFeedQuery, HistoryFeedResponse, RecordHistoryResponse,
+            RollbackSnapshotRequest, RollbackSnapshotResponse, SnapshotListResponse,
+            UndoTransactionResponse,
+        },
         privacy::{
             canonicalize_surname_display, evaluate_is_living, fold_slavic_surname_stem,
             normalize_russian_orthography_word, normalize_search_tokens, parse_search_query,
@@ -37,7 +45,7 @@ use crate::{
             FaceTagDto, FamilyChildDto, FamilyDto, GenealogyPrivacyStore, IndividualAltNameDto,
             LifeEventDto, MediaAssetSummaryDto, MediaLinkDto, NoteDto, PersonLivingEvaluationInput,
             PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
-            VitalEventSummaryDto,
+            TreeSnapshotDto, VitalEventSummaryDto,
         },
         rbac::{CallerAccess, PublicOrAuth, RequireAdmin, RequireAuth, RequireEditor},
     },
@@ -307,6 +315,8 @@ pub struct QuickAddRelativeResponse {
     pub person: TreePersonNodeDto,
     pub family: FamilyDto,
     pub created_new_person: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tx_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -1015,6 +1025,7 @@ pub async fn start_with_self(
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: 1,
+            tx_id: None,
         };
 
         store.persons.push(node);
@@ -1053,7 +1064,7 @@ pub async fn start_with_self(
         recompute_all_places_metadata(&mut store);
         recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-        let created_person = store
+        let mut created_person = store
             .persons
             .iter()
             .find(|p| p.id == person_id)
@@ -1069,17 +1080,22 @@ pub async fn start_with_self(
         .trim()
         .to_string();
 
-        let change_entry = ChangeLogEntryDto {
-            id: Uuid::new_v4().to_string(),
-            op: "create".to_string(),
-            entity_type: "individual".to_string(),
-            entity_id: person_id,
+        let entity_label = format_person_display_name(&created_person);
+        let change_entry = log_change(
+            &mut store,
+            None,
+            "tree.start_with_self",
+            "individual",
+            &person_id,
+            "create",
+            Some(entity_label),
             summary,
-            before_json: None,
-            after_json: serde_json::to_value(&created_person).ok(),
-            created_at: Utc::now().to_rfc3339(),
-        };
-        store.change_log.push(change_entry.clone());
+            None,
+            serde_json::to_value(&created_person).ok(),
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
+        created_person.tx_id = Some(change_entry.tx_id.clone());
 
         (
             created_person,
@@ -2111,7 +2127,7 @@ pub async fn get_person_profile(
     tag = "Tree & Privacy"
 )]
 pub async fn create_person(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreatePersonRequest>,
 ) -> Result<(StatusCode, Json<TreePersonNodeDto>), AppError> {
@@ -2250,6 +2266,7 @@ pub async fn create_person(
         alt_names,
         external_ids: HashMap::new(),
         version: 1,
+        tx_id: None,
     };
 
     store.persons.push(node);
@@ -2336,12 +2353,29 @@ pub async fn create_person(
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-    let created = store
+    let mut created = store
         .persons
         .iter()
         .find(|p| p.id == person_id)
         .cloned()
         .ok_or(AppError::NotFound)?;
+
+    let entity_label = format_person_display_name(&created);
+    let entry = log_change(
+        &mut store,
+        None,
+        "person.create",
+        "individual",
+        &created.id,
+        "create",
+        Some(entity_label.clone()),
+        format!("Created individual {} ({})", created.gid, entity_label),
+        None,
+        serde_json::to_value(&created).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+    created.tx_id = Some(entry.tx_id);
     drop(store);
 
     if was_empty {
@@ -2367,9 +2401,10 @@ pub async fn create_person(
     tag = "Tree & Privacy"
 )]
 pub async fn update_person(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdatePersonRequest>,
 ) -> Result<Json<TreePersonNodeDto>, AppError> {
     let settings = state.resolve_instance_settings().await;
@@ -2378,20 +2413,22 @@ pub async fn update_person(
 
     let mut store = state.privacy_store.write().await;
     let target = id.trim();
-    let person_id = {
+    let (person_id, before_json) = {
         let person = store
             .persons
             .iter_mut()
             .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
             .ok_or(AppError::NotFound)?;
 
-        if let Some(expected_version) = req.version {
-            if expected_version != person.version {
-                return Err(AppError::VersionConflict(
-                    "Record was modified by another session".to_string(),
-                ));
-            }
-        }
+        let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+        verify_optimistic_version(
+            person.version,
+            expected_version,
+            &format!("Individual {}", person.gid),
+            serde_json::to_value(&*person).unwrap_or_default(),
+        )?;
+
+        let before_snapshot = serde_json::to_value(&*person).ok();
 
         if let Some(given) = req.given_name {
             person.primary_name.given_name = given.trim().to_string();
@@ -2470,17 +2507,34 @@ pub async fn update_person(
         }
 
         person.version += 1;
-        person.id.clone()
+        (person.id.clone(), before_snapshot)
     };
 
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-    let updated = store
+    let mut updated = store
         .persons
         .iter()
         .find(|p| p.id == person_id)
         .cloned()
         .ok_or(AppError::NotFound)?;
+
+    let entity_label = format_person_display_name(&updated);
+    let entry = log_change(
+        &mut store,
+        None,
+        "person.update",
+        "individual",
+        &updated.id,
+        "update",
+        Some(entity_label.clone()),
+        format!("Updated individual {} ({})", updated.gid, entity_label),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+    updated.tx_id = Some(entry.tx_id);
 
     Ok(Json(updated))
 }
@@ -2500,7 +2554,7 @@ pub async fn update_person(
     tag = "Tree & Privacy"
 )]
 pub async fn quick_add_relative(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<QuickAddRelativeRequest>,
@@ -2606,6 +2660,7 @@ pub async fn quick_add_relative(
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: 1,
+            tx_id: None,
         };
         store.persons.push(person);
 
@@ -3064,7 +3119,7 @@ pub async fn quick_add_relative(
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-    let person = store
+    let mut person = store
         .persons
         .iter()
         .find(|p| p.id == rel_person_id)
@@ -3077,12 +3132,54 @@ pub async fn quick_add_relative(
         .cloned()
         .ok_or(AppError::NotFound)?;
 
+    let tx_id = Uuid::new_v4().to_string();
+    let tx_label = format!("person.quick_add_{relation}");
+    let person_label = format_person_display_name(&person);
+    if created_new_person {
+        log_change(
+            &mut store,
+            Some(tx_id.clone()),
+            &tx_label,
+            "individual",
+            &person.id,
+            "create",
+            Some(person_label.clone()),
+            format!(
+                "Created {} {} ({}) for {}",
+                relation, person.gid, person_label, anchor.gid
+            ),
+            None,
+            serde_json::to_value(&person).ok(),
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
+    }
+    let entry = log_change(
+        &mut store,
+        Some(tx_id),
+        &tx_label,
+        "family",
+        &family.id,
+        "create",
+        Some(family.gid.clone()),
+        format!(
+            "Linked {} {} in family {}",
+            relation, person.gid, family.gid
+        ),
+        None,
+        serde_json::to_value(&family).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+    person.tx_id = Some(entry.tx_id.clone());
+
     Ok((
         StatusCode::CREATED,
         Json(QuickAddRelativeResponse {
             person,
             family,
             created_new_person,
+            tx_id: Some(entry.tx_id),
         }),
     ))
 }
@@ -3186,17 +3283,17 @@ pub async fn get_person_delete_impact(
         ("id" = String, Path, description = "Person UUID or GID")
     ),
     responses(
-        (status = 204, description = "Person safely deleted and snapshot logged to change_log"),
+        (status = 200, description = "Person safely deleted and snapshot logged to change_log", body = serde_json::Value),
         (status = 403, description = "Viewer role is read-only", body = ErrorResponse),
         (status = 404, description = "Person not found", body = ErrorResponse)
     ),
     tag = "Tree & Privacy"
 )]
 pub async fn delete_person(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<StatusCode, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
     let settings = state.resolve_instance_settings().await;
     let current_year = Utc::now().year();
     let age_threshold = settings.living_person_age_threshold as i32;
@@ -3291,6 +3388,7 @@ pub async fn delete_person(
         families_before,
     };
 
+    let entity_label = format_person_display_name(&removed_person);
     let summary = format!(
         "Deleted individual {} ({} {})",
         removed_person.gid,
@@ -3300,16 +3398,20 @@ pub async fn delete_person(
     .trim()
     .to_string();
 
-    store.change_log.push(ChangeLogEntryDto {
-        id: Uuid::new_v4().to_string(),
-        op: "delete".to_string(),
-        entity_type: "individual".to_string(),
-        entity_id: person_id.clone(),
+    let entry = log_change(
+        &mut store,
+        None,
+        "person.delete",
+        "individual",
+        &person_id,
+        "delete",
+        Some(entity_label),
         summary,
-        before_json: serde_json::to_value(snapshot).ok(),
-        after_json: None,
-        created_at: Utc::now().to_rfc3339(),
-    });
+        serde_json::to_value(snapshot).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
@@ -3334,113 +3436,44 @@ pub async fn delete_person(
         }
     }
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(serde_json::json!({
+        "status": "deleted",
+        "deleted_id": person_id,
+        "tx_id": entry.tx_id
+    })))
 }
 
 #[utoipa::path(
     post,
     path = "/api/v1/history/{id}/restore",
     params(
-        ("id" = String, Path, description = "Change log entry ID or deleted person UUID/GID")
+        ("id" = String, Path, description = "Change log entry ID or deleted entity UUID/GID")
     ),
     responses(
-        (status = 200, description = "Deleted person and their links restored from change_log", body = TreePersonNodeDto),
+        (status = 200, description = "Deleted or modified record restored from change_log", body = TreePersonNodeDto),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
         (status = 404, description = "Change log entry or snapshot not found", body = ErrorResponse)
     ),
-    tag = "Tree & Privacy"
+    tag = "History & Concurrency"
 )]
 pub async fn restore_deleted_person(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<TreePersonNodeDto>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
     let settings = state.resolve_instance_settings().await;
     let current_year = Utc::now().year();
     let age_threshold = settings.living_person_age_threshold as i32;
 
     let mut store = state.privacy_store.write().await;
-    let target = id.trim();
-
-    let log_entry = store
-        .change_log
-        .iter()
-        .rev()
-        .find(|entry| {
-            entry.op == "delete"
-                && entry.entity_type == "individual"
-                && (entry.id == target
-                    || entry.entity_id == target
-                    || entry
-                        .before_json
-                        .as_ref()
-                        .and_then(|v| v.get("person"))
-                        .and_then(|p| p.get("gid"))
-                        .and_then(|g| g.as_str())
-                        .is_some_and(|g| g.eq_ignore_ascii_case(target)))
-        })
-        .cloned()
-        .ok_or(AppError::NotFound)?;
-
-    let before_val = log_entry.before_json.ok_or(AppError::NotFound)?;
-    let snapshot: DeletedPersonSnapshot = serde_json::from_value(before_val)
-        .map_err(|e| AppError::Internal(format!("Failed to deserialize snapshot: {e}")))?;
-
-    let restored_person_id = snapshot.person.id.clone();
-
-    if !store.persons.iter().any(|p| p.id == restored_person_id) {
-        store.persons.push(snapshot.person);
-    }
-
-    for ev in snapshot.events {
-        if !store.events.iter().any(|e| e.id == ev.id) {
-            store.events.push(ev);
-        }
-    }
-
-    for note in snapshot.notes {
-        if !store.notes.iter().any(|n| n.id == note.id) {
-            store.notes.push(note);
-        }
-    }
-
-    // Restore family links
-    for old_fam in snapshot.families_before {
-        if let Some(existing_fam) = store.families.iter_mut().find(|f| f.id == old_fam.id) {
-            if old_fam.partner1_id.as_deref() == Some(restored_person_id.as_str())
-                && existing_fam.partner1_id.is_none()
-            {
-                existing_fam.partner1_id = Some(restored_person_id.clone());
-            }
-            if old_fam.partner2_id.as_deref() == Some(restored_person_id.as_str())
-                && existing_fam.partner2_id.is_none()
-            {
-                existing_fam.partner2_id = Some(restored_person_id.clone());
-            }
-            for ch in &old_fam.children {
-                if ch.child_id == restored_person_id
-                    && !existing_fam
-                        .children
-                        .iter()
-                        .any(|c| c.child_id == restored_person_id)
-                {
-                    existing_fam.children.push(ch.clone());
-                }
-            }
-            existing_fam.version += 1;
-        } else {
-            store.families.push(old_fam);
-        }
-    }
-
-    recompute_all_places_metadata(&mut store);
-    recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
-
-    let restored = store
-        .persons
-        .iter()
-        .find(|p| p.id == restored_person_id)
-        .cloned()
-        .ok_or(AppError::NotFound)?;
+    let restored = restore_change(
+        &mut store,
+        &id,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+        current_year,
+        age_threshold,
+    )?;
 
     Ok(Json(restored))
 }
@@ -3516,7 +3549,7 @@ pub async fn get_family(
     tag = "Tree & Privacy"
 )]
 pub async fn create_family(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreateFamilyRequest>,
 ) -> Result<(StatusCode, Json<FamilyDto>), AppError> {
@@ -3597,6 +3630,21 @@ pub async fn create_family(
     store.families.push(fam.clone());
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
+    log_change(
+        &mut store,
+        None,
+        "family.create",
+        "family",
+        &fam.id,
+        "create",
+        Some(fam.gid.clone()),
+        format!("Created family union {}", fam.gid),
+        None,
+        serde_json::to_value(&fam).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok((StatusCode::CREATED, Json(fam)))
 }
 
@@ -3616,9 +3664,10 @@ pub async fn create_family(
     tag = "Tree & Privacy"
 )]
 pub async fn update_family(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdateFamilyRequest>,
 ) -> Result<Json<FamilyDto>, AppError> {
     let settings = state.resolve_instance_settings().await;
@@ -3633,13 +3682,15 @@ pub async fn update_family(
         .position(|f| f.id == target || f.gid.eq_ignore_ascii_case(target))
         .ok_or(AppError::NotFound)?;
 
-    if let Some(expected_version) = req.version {
-        if expected_version != store.families[fam_idx].version {
-            return Err(AppError::VersionConflict(
-                "Record was modified by another session".to_string(),
-            ));
-        }
-    }
+    let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+    verify_optimistic_version(
+        store.families[fam_idx].version,
+        expected_version,
+        &format!("Family {}", store.families[fam_idx].gid),
+        serde_json::to_value(&store.families[fam_idx]).unwrap_or_default(),
+    )?;
+
+    let before_json = serde_json::to_value(&store.families[fam_idx]).ok();
 
     let next_p1 = if let Some(ref raw) = req.partner1_id {
         if raw.trim().is_empty() {
@@ -3716,6 +3767,21 @@ pub async fn update_family(
     let updated = fam.clone();
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
+    log_change(
+        &mut store,
+        None,
+        "family.update",
+        "family",
+        &updated.id,
+        "update",
+        Some(updated.gid.clone()),
+        format!("Updated family union {}", updated.gid),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok(Json(updated))
 }
 
@@ -3732,7 +3798,7 @@ pub async fn update_family(
     tag = "Tree & Privacy"
 )]
 pub async fn delete_family(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
@@ -3755,6 +3821,21 @@ pub async fn delete_family(
 
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+
+    log_change(
+        &mut store,
+        None,
+        "family.delete",
+        "family",
+        &removed_fam.id,
+        "delete",
+        Some(removed_fam.gid.clone()),
+        format!("Deleted family union {}", removed_fam.gid),
+        serde_json::to_value(&removed_fam).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -3826,7 +3907,7 @@ pub async fn list_events(
     tag = "Tree & Privacy"
 )]
 pub async fn create_event(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreateEventRequest>,
 ) -> Result<(StatusCode, Json<LifeEventDto>), AppError> {
@@ -3964,6 +4045,21 @@ pub async fn create_event(
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
+    log_change(
+        &mut store,
+        None,
+        "event.create",
+        "event",
+        &ev.id,
+        "create",
+        Some(format!("{} ({})", ev.event_type, ev.gid)),
+        format!("Created {} event {}", ev.event_type, ev.gid),
+        None,
+        serde_json::to_value(&ev).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok((StatusCode::CREATED, Json(ev)))
 }
 
@@ -3982,9 +4078,10 @@ pub async fn create_event(
     tag = "Tree & Privacy"
 )]
 pub async fn update_event(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdateEventRequest>,
 ) -> Result<Json<LifeEventDto>, AppError> {
     let settings = state.resolve_instance_settings().await;
@@ -3999,13 +4096,15 @@ pub async fn update_event(
         .position(|e| e.id == target || e.gid.eq_ignore_ascii_case(target))
         .ok_or(AppError::NotFound)?;
 
-    if let Some(expected_version) = req.version {
-        if expected_version != store.events[ev_idx].version {
-            return Err(AppError::VersionConflict(
-                "Record was modified by another session".to_string(),
-            ));
-        }
-    }
+    let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+    verify_optimistic_version(
+        store.events[ev_idx].version,
+        expected_version,
+        &format!("Event {}", store.events[ev_idx].gid),
+        serde_json::to_value(&store.events[ev_idx]).unwrap_or_default(),
+    )?;
+
+    let before_json = serde_json::to_value(&store.events[ev_idx]).ok();
 
     if let Some(ref et) = req.event_type {
         let normalized_et = et.trim().to_ascii_lowercase();
@@ -4092,6 +4191,21 @@ pub async fn update_event(
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
+    log_change(
+        &mut store,
+        None,
+        "event.update",
+        "event",
+        &updated.id,
+        "update",
+        Some(format!("{} ({})", updated.event_type, updated.gid)),
+        format!("Updated {} event {}", updated.event_type, updated.gid),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok(Json(updated))
 }
 
@@ -4108,7 +4222,7 @@ pub async fn update_event(
     tag = "Tree & Privacy"
 )]
 pub async fn delete_event(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
@@ -4156,6 +4270,21 @@ pub async fn delete_event(
 
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+
+    log_change(
+        &mut store,
+        None,
+        "event.delete",
+        "event",
+        &removed_ev.id,
+        "delete",
+        Some(format!("{} ({})", removed_ev.event_type, removed_ev.gid)),
+        format!("Deleted {} event {}", removed_ev.event_type, removed_ev.gid),
+        serde_json::to_value(&removed_ev).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -4257,7 +4386,7 @@ pub async fn list_notes(
     tag = "Tree & Privacy"
 )]
 pub async fn create_note(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreateNoteRequest>,
 ) -> Result<(StatusCode, Json<NoteDto>), AppError> {
@@ -4295,6 +4424,21 @@ pub async fn create_note(
     };
     store.notes.push(note.clone());
 
+    log_change(
+        &mut store,
+        None,
+        "note.create",
+        "note",
+        &note.id,
+        "create",
+        Some(format!("Note on {}", note.entity_type)),
+        format!("Created note on {} {}", note.entity_type, note.entity_id),
+        None,
+        serde_json::to_value(&note).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok((StatusCode::CREATED, Json(note)))
 }
 
@@ -4313,26 +4457,30 @@ pub async fn create_note(
     tag = "Tree & Privacy"
 )]
 pub async fn update_note(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdateNoteRequest>,
 ) -> Result<Json<NoteDto>, AppError> {
     let mut store = state.privacy_store.write().await;
-    let note = store
+    let note_idx = store
         .notes
-        .iter_mut()
-        .find(|n| n.id == id.trim())
+        .iter()
+        .position(|n| n.id == id.trim())
         .ok_or(AppError::NotFound)?;
 
-    if let Some(expected_version) = req.version {
-        if expected_version != note.version {
-            return Err(AppError::VersionConflict(
-                "Record was modified by another session".to_string(),
-            ));
-        }
-    }
+    let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+    verify_optimistic_version(
+        store.notes[note_idx].version,
+        expected_version,
+        &format!("Note {}", store.notes[note_idx].id),
+        serde_json::to_value(&store.notes[note_idx]).unwrap_or_default(),
+    )?;
 
+    let before_json = serde_json::to_value(&store.notes[note_idx]).ok();
+
+    let note = &mut store.notes[note_idx];
     if let Some(body) = req.body {
         note.body = body;
     }
@@ -4343,8 +4491,24 @@ pub async fn update_note(
         note.sort_order = so;
     }
     note.version += 1;
+    let updated = note.clone();
 
-    Ok(Json(note.clone()))
+    log_change(
+        &mut store,
+        None,
+        "note.update",
+        "note",
+        &updated.id,
+        "update",
+        Some(format!("Note on {}", updated.entity_type)),
+        format!("Updated note {}", updated.id),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
+    Ok(Json(updated))
 }
 
 #[utoipa::path(
@@ -4360,16 +4524,33 @@ pub async fn update_note(
     tag = "Tree & Privacy"
 )]
 pub async fn delete_note(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     let mut store = state.privacy_store.write().await;
-    let before = store.notes.len();
-    store.notes.retain(|n| n.id != id.trim());
-    if store.notes.len() == before {
-        return Err(AppError::NotFound);
-    }
+    let idx = store
+        .notes
+        .iter()
+        .position(|n| n.id == id.trim())
+        .ok_or(AppError::NotFound)?;
+    let removed = store.notes.remove(idx);
+
+    log_change(
+        &mut store,
+        None,
+        "note.delete",
+        "note",
+        &removed.id,
+        "delete",
+        Some(format!("Note on {}", removed.entity_type)),
+        format!("Deleted note {}", removed.id),
+        serde_json::to_value(&removed).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -5481,7 +5662,7 @@ pub async fn list_places_directory(
     tag = "Tree & Privacy"
 )]
 pub async fn create_place(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreatePlaceRequest>,
 ) -> Result<(StatusCode, Json<PlaceSummaryDto>), AppError> {
@@ -5514,6 +5695,20 @@ pub async fn create_place(
             req.longitude,
             req.alt_names,
         )?;
+        log_change(
+            &mut store,
+            None,
+            "place.create",
+            "place",
+            &leaf.id,
+            "create",
+            Some(leaf.full_name.clone()),
+            format!("Created place {} ({})", leaf.gid, leaf.full_name),
+            None,
+            serde_json::to_value(&leaf).ok(),
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
         return Ok((StatusCode::CREATED, Json(leaf)));
     }
 
@@ -5573,6 +5768,21 @@ pub async fn create_place(
         .find(|p| p.id == new_id)
         .cloned()
         .ok_or(AppError::NotFound)?;
+
+    log_change(
+        &mut store,
+        None,
+        "place.create",
+        "place",
+        &created.id,
+        "create",
+        Some(created.full_name.clone()),
+        format!("Created place {} ({})", created.gid, created.full_name),
+        None,
+        serde_json::to_value(&created).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok((StatusCode::CREATED, Json(created)))
 }
@@ -5641,9 +5851,10 @@ pub async fn get_place_detail(
     tag = "Tree & Privacy"
 )]
 pub async fn update_place(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdatePlaceRequest>,
 ) -> Result<Json<PlaceSummaryDto>, AppError> {
     let settings = state.resolve_instance_settings().await;
@@ -5658,13 +5869,15 @@ pub async fn update_place(
         .position(|p| p.id == place_id)
         .ok_or(AppError::NotFound)?;
 
-    if let Some(expected_version) = req.version {
-        if expected_version != store.places[idx].version {
-            return Err(AppError::VersionConflict(
-                "Record was modified by another session".to_string(),
-            ));
-        }
-    }
+    let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+    verify_optimistic_version(
+        store.places[idx].version,
+        expected_version,
+        &format!("Place {}", store.places[idx].gid),
+        serde_json::to_value(&store.places[idx]).unwrap_or_default(),
+    )?;
+
+    let before_json = serde_json::to_value(&store.places[idx]).ok();
 
     if req.clear_parent == Some(true) {
         store.places[idx].parent_id = None;
@@ -5731,6 +5944,21 @@ pub async fn update_place(
         .cloned()
         .ok_or(AppError::NotFound)?;
 
+    log_change(
+        &mut store,
+        None,
+        "place.update",
+        "place",
+        &updated.id,
+        "update",
+        Some(updated.full_name.clone()),
+        format!("Updated place {} ({})", updated.gid, updated.full_name),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok(Json(updated))
 }
 
@@ -5748,7 +5976,7 @@ pub async fn update_place(
     tag = "Tree & Privacy"
 )]
 pub async fn delete_place(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
@@ -5768,8 +5996,28 @@ pub async fn delete_place(
         return Err(AppError::PlaceInUse);
     }
 
-    store.places.retain(|p| p.id != place_id);
+    let idx = store
+        .places
+        .iter()
+        .position(|p| p.id == place_id)
+        .ok_or(AppError::NotFound)?;
+    let removed = store.places.remove(idx);
     recompute_all_places_metadata(&mut store);
+
+    log_change(
+        &mut store,
+        None,
+        "place.delete",
+        "place",
+        &removed.id,
+        "delete",
+        Some(removed.full_name.clone()),
+        format!("Deleted place {} ({})", removed.gid, removed.full_name),
+        serde_json::to_value(&removed).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -5789,7 +6037,7 @@ pub async fn delete_place(
     tag = "Tree & Privacy"
 )]
 pub async fn merge_place(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<MergePlaceRequest>,
@@ -5827,6 +6075,12 @@ pub async fn merge_place(
             Some(fields),
         ));
     }
+
+    let before_target_json = store
+        .places
+        .iter()
+        .find(|p| p.id == target_id)
+        .and_then(|p| serde_json::to_value(p).ok());
 
     let source_idx = store
         .places
@@ -5871,7 +6125,7 @@ pub async fn merge_place(
             lang: None,
             note: Some(format!("Merged from {}", source_place.gid)),
         }];
-        candidate_alts.extend(source_place.alt_names);
+        candidate_alts.extend(source_place.alt_names.clone());
 
         for cand in candidate_alts {
             let matches_primary = target_place.name.eq_ignore_ascii_case(&cand.name);
@@ -5910,6 +6164,42 @@ pub async fn merge_place(
         .find(|p| p.id == target_id)
         .cloned()
         .ok_or(AppError::NotFound)?;
+
+    let tx_id = Uuid::new_v4().to_string();
+    log_change(
+        &mut store,
+        Some(tx_id.clone()),
+        "place.merge",
+        "place",
+        &source_place.id,
+        "delete",
+        Some(source_place.full_name.clone()),
+        format!(
+            "Merged place {} ({}) into {} ({})",
+            source_place.gid, source_place.full_name, merged.gid, merged.full_name
+        ),
+        serde_json::to_value(&source_place).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+    log_change(
+        &mut store,
+        Some(tx_id),
+        "place.merge",
+        "place",
+        &merged.id,
+        "update",
+        Some(merged.full_name.clone()),
+        format!(
+            "Merged {} into place {} ({})",
+            source_place.gid, merged.gid, merged.full_name
+        ),
+        before_target_json,
+        serde_json::to_value(&merged).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(Json(merged))
 }
@@ -6287,7 +6577,7 @@ fn extension_for_media(file_name: &str, mime_type: &str) -> &'static str {
     tag = "Media & Avatars"
 )]
 pub async fn create_media(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Json(req): Json<CreateMediaRequest>,
 ) -> Result<(StatusCode, Json<MediaAssetSummaryDto>), AppError> {
@@ -6500,6 +6790,24 @@ pub async fn create_media(
             .cloned()
             .ok_or(AppError::NotFound)?;
 
+        log_change(
+            &mut store,
+            None,
+            "media.reconcile_stub",
+            "media",
+            &reconciled.id,
+            "update",
+            Some(reconciled.title.clone()),
+            format!(
+                "Reconciled media stub {} ({})",
+                reconciled.gid, reconciled.title
+            ),
+            None,
+            serde_json::to_value(&reconciled).ok(),
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
+
         return Ok((StatusCode::CREATED, Json(reconciled)));
     }
 
@@ -6577,6 +6885,21 @@ pub async fn create_media(
         .cloned()
         .ok_or(AppError::NotFound)?;
 
+    log_change(
+        &mut store,
+        None,
+        "media.create",
+        "media",
+        &created.id,
+        "create",
+        Some(created.title.clone()),
+        format!("Uploaded media {} ({})", created.gid, created.title),
+        None,
+        serde_json::to_value(&created).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
+
     Ok((StatusCode::CREATED, Json(created)))
 }
 
@@ -6627,9 +6950,10 @@ pub async fn get_media_detail(
     tag = "Media & Avatars"
 )]
 pub async fn update_media(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<UpdateMediaRequest>,
 ) -> Result<Json<MediaAssetSummaryDto>, AppError> {
     let mut store = state.privacy_store.write().await;
@@ -6666,60 +6990,78 @@ pub async fn update_media(
         None
     };
 
-    let media = store
-        .media
-        .iter_mut()
-        .find(|m| m.id == media_id)
-        .ok_or(AppError::NotFound)?;
+    let (updated, before_json) = {
+        let media = store
+            .media
+            .iter_mut()
+            .find(|m| m.id == media_id)
+            .ok_or(AppError::NotFound)?;
 
-    if let Some(expected_version) = req.version {
-        if media.version != expected_version {
-            return Err(AppError::VersionConflict(format!(
-                "Optimistic lock conflict on media {}: expected version {}, current version {}",
-                media.gid, expected_version, media.version
-            )));
+        let expected_version = req.version.or_else(|| parse_if_match_version(&headers));
+        verify_optimistic_version(
+            media.version,
+            expected_version,
+            &format!("Media {}", media.gid),
+            serde_json::to_value(&*media).unwrap_or_default(),
+        )?;
+
+        let before_snapshot = serde_json::to_value(&*media).ok();
+
+        if let Some(ref title) = req.title {
+            let trimmed = title.trim();
+            if !trimmed.is_empty() {
+                media.title = trimmed.to_string();
+            }
         }
-    }
 
-    if let Some(ref title) = req.title {
-        let trimmed = title.trim();
-        if !trimmed.is_empty() {
-            media.title = trimmed.to_string();
+        if let Some(desc) = req.description.or(req.caption) {
+            let trimmed = desc.trim();
+            media.description = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
         }
-    }
 
-    if let Some(desc) = req.description.or(req.caption) {
-        let trimmed = desc.trim();
-        media.description = if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        };
-    }
-
-    if let Some(ref dt_raw) = req.date_taken {
-        let trimmed = dt_raw.trim();
-        if trimmed.is_empty() {
-            media.date_taken = None;
-            media.date_sort = None;
-        } else {
-            let parsed = GenDate::parse(trimmed);
-            media.date_sort = parsed.sort_key();
-            media.date_taken = Some(trimmed.to_string());
+        if let Some(ref dt_raw) = req.date_taken {
+            let trimmed = dt_raw.trim();
+            if trimmed.is_empty() {
+                media.date_taken = None;
+                media.date_sort = None;
+            } else {
+                let parsed = GenDate::parse(trimmed);
+                media.date_sort = parsed.sort_key();
+                media.date_taken = Some(trimmed.to_string());
+            }
         }
-    }
 
-    if let Some((pid, fname)) = resolved_place {
-        media.place_id = pid;
-        media.place_full_name = fname;
-    }
+        if let Some((pid, fname)) = resolved_place {
+            media.place_id = pid;
+            media.place_full_name = fname;
+        }
 
-    if let Some(is_priv) = req.is_private {
-        media.is_private = is_priv;
-    }
+        if let Some(is_priv) = req.is_private {
+            media.is_private = is_priv;
+        }
 
-    media.version += 1;
-    let updated = media.clone();
+        media.version += 1;
+        (media.clone(), before_snapshot)
+    };
+
+    log_change(
+        &mut store,
+        None,
+        "media.update",
+        "media",
+        &updated.id,
+        "update",
+        Some(updated.title.clone()),
+        format!("Updated media {} ({})", updated.gid, updated.title),
+        before_json,
+        serde_json::to_value(&updated).ok(),
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(Json(updated))
 }
@@ -6738,7 +7080,7 @@ pub async fn update_media(
     tag = "Media & Avatars"
 )]
 pub async fn delete_media(
-    RequireEditor(_editor): RequireEditor,
+    RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, AppError> {
@@ -6764,6 +7106,21 @@ pub async fn delete_media(
             person.avatar_url = None;
         }
     }
+
+    log_change(
+        &mut store,
+        None,
+        "media.delete",
+        "media",
+        &removed.id,
+        "delete",
+        Some(removed.title.clone()),
+        format!("Deleted media {} ({})", removed.gid, removed.title),
+        serde_json::to_value(&removed).ok(),
+        None,
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -7476,23 +7833,197 @@ pub async fn export_printable_pdf(
 #[utoipa::path(
     get,
     path = "/api/v1/history",
+    params(HistoryFeedQuery),
     responses(
-        (status = 200, description = "Global system audit history feed (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "Global system audit history feed with filters and transaction grouping (Admin only)", body = HistoryFeedResponse),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
-    tag = "Admin"
+    tag = "History & Concurrency"
 )]
 pub async fn get_audit_history(
     RequireAdmin(_admin): RequireAdmin,
     State(state): State<AppState>,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
+    Query(query): Query<HistoryFeedQuery>,
+) -> Result<Json<HistoryFeedResponse>, AppError> {
     let store = state.privacy_store.read().await;
-    Ok(Json(AdminToolOperationResponse {
-        status: "ok".to_string(),
-        operation: "audit_history".to_string(),
-        message: "Global change history feed authorized for administrator".to_string(),
-        items: store.change_log.clone(),
-    }))
+    let resp = query_history_feed(&store, &query);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/history/{entity_type}/{entity_id}",
+    params(
+        ("entity_type" = String, Path, description = "Entity type ('individual', 'person', 'family', 'event', 'place', 'media', 'note')"),
+        ("entity_id" = String, Path, description = "Entity UUID or GID")
+    ),
+    responses(
+        (status = 200, description = "Per-record chronological change history with field-level diffs (Editor or Admin)", body = RecordHistoryResponse),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn get_record_history(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path((entity_type, entity_id)): Path<(String, String)>,
+) -> Result<Json<RecordHistoryResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let resp = query_record_history(&store, &entity_type, &entity_id)?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/history/tx/{tx_id}/undo",
+    params(
+        ("tx_id" = String, Path, description = "Transaction ID or change log entry ID to undo")
+    ),
+    responses(
+        (status = 200, description = "Transaction reversed in reverse chronological order", body = UndoTransactionResponse),
+        (status = 403, description = "Only the author (within 10 minutes) or an Administrator can undo", body = ErrorResponse),
+        (status = 404, description = "Transaction not found", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn undo_history_transaction(
+    RequireEditor(editor): RequireEditor,
+    State(state): State<AppState>,
+    Path(tx_id): Path<String>,
+) -> Result<Json<UndoTransactionResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let current_year = Utc::now().year();
+    let age_threshold = settings.living_person_age_threshold as i32;
+    let is_admin = editor.user.role == "admin";
+
+    let mut store = state.privacy_store.write().await;
+    let resp = undo_transaction(
+        &mut store,
+        &tx_id,
+        &editor.user.id.to_string(),
+        Some(editor.user.display_name()),
+        is_admin,
+        current_year,
+        age_threshold,
+    )?;
+
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/snapshots",
+    responses(
+        (status = 200, description = "List of point-in-time tree snapshots (Admin only)", body = SnapshotListResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn list_snapshots(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+) -> Result<Json<SnapshotListResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let mut items = store.snapshots.clone();
+    items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    let total = items.len();
+    Ok(Json(SnapshotListResponse { items, total }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/snapshots",
+    request_body(content = Option<CreateSnapshotRequest>, description = "Optional snapshot label and reason"),
+    responses(
+        (status = 201, description = "Point-in-time tree snapshot created (Admin only)", body = TreeSnapshotDto),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn create_manual_snapshot(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    payload: Option<Json<CreateSnapshotRequest>>,
+) -> Result<(StatusCode, Json<TreeSnapshotDto>), AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let reason = req.reason.as_deref().unwrap_or("manual");
+
+    let mut store = state.privacy_store.write().await;
+    let snapshot = create_snapshot(
+        &mut store,
+        req.label,
+        reason,
+        Some(admin.user.id.to_string()),
+        Some(admin.user.display_name()),
+        &state.config.backup_path,
+    )?;
+
+    Ok((StatusCode::CREATED, Json(snapshot)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/snapshots/{id}/rollback",
+    params(
+        ("id" = String, Path, description = "Snapshot UUID to roll back to")
+    ),
+    request_body = RollbackSnapshotRequest,
+    responses(
+        (status = 200, description = "Tree rolled back to snapshot after taking automatic pre_rollback safety snapshot", body = RollbackSnapshotResponse),
+        (status = 400, description = "Missing or invalid ROLLBACK confirmation text", body = ErrorResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 404, description = "Snapshot not found", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn rollback_to_snapshot(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    payload: Option<Json<RollbackSnapshotRequest>>,
+) -> Result<Json<RollbackSnapshotResponse>, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let settings = state.resolve_instance_settings().await;
+    let current_year = Utc::now().year();
+    let age_threshold = settings.living_person_age_threshold as i32;
+
+    let mut store = state.privacy_store.write().await;
+    let resp = rollback_snapshot(
+        &mut store,
+        &id,
+        Some(admin.user.id.to_string()),
+        Some(admin.user.display_name()),
+        req.confirm_text.as_deref(),
+        &state.config.backup_path,
+        current_year,
+        age_threshold,
+    )?;
+
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/{entity_type}/{id}/version",
+    params(
+        ("entity_type" = String, Path, description = "Entity type ('persons', 'individual', 'families', 'events', 'places', 'media', 'notes')"),
+        ("id" = String, Path, description = "Entity UUID or GID")
+    ),
+    responses(
+        (status = 200, description = "Current entity version and last-modified metadata for optimistic concurrency polling", body = EntityVersionResponse),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse)
+    ),
+    tag = "History & Concurrency"
+)]
+pub async fn get_record_version(
+    RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
+    Path((entity_type, id)): Path<(String, String)>,
+) -> Result<Json<EntityVersionResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let resp = get_entity_version(&store, &entity_type, &id)?;
+    Ok(Json(resp))
 }
 
 #[utoipa::path(

@@ -26,6 +26,7 @@ import {
 } from '../../api/client';
 import { useI18n } from '../../i18n';
 import { formatBytes } from './SystemDiagnosticsCard';
+import { TreeSnapshotsCard } from './TreeSnapshotsCard';
 
 export interface BackupsSettingsPanelProps {
   backupList: BackupListResponse;
@@ -170,6 +171,9 @@ export const BackupsSettingsPanel: React.FC<BackupsSettingsPanelProps> = ({
           </div>
         </CardBody>
       </Card>
+
+      {/* Tree Snapshots & Rollback Checkpoints (Phase 1.11 / 14 §3.3) */}
+      <TreeSnapshotsCard />
 
       {/* Available Backup Archives List */}
       <Card>

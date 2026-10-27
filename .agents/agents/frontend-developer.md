@@ -92,6 +92,12 @@ If the spec is ambiguous, stop and report the question to the parent agent.
      reporting. (Full DoD verification remains the QA analyst's job.)
 4. If you introduce a shortcut or postpone something, add a row to
    `docs/technical-debt.md`.
+5. **UX tasks:** when given `UX-NNN` task IDs from a `docs/ux-reviews/*.md`
+   report, read each task's problem, proposed fix and acceptance criteria;
+   implement them (prefer fixing the shared design-system component over
+   page-level patches); verify each acceptance criterion in the browser; and
+   report per-task status (done / partially done / not done + reason). If a
+   proposed fix conflicts with the specs, report it instead of guessing.
 
 # Final Report (return to parent agent)
 

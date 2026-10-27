@@ -50,6 +50,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.classList.remove('dark');
     }
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute(
+        'content',
+        resolvedTheme === 'dark' ? '#0E1116' : '#F8F9FA'
+      );
+    }
   }, [resolvedTheme]);
 
   const setTheme = (newTheme: ThemeMode) => {

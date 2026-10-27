@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { CheckCircle2, AlertCircle, Info, RotateCcw, Undo2, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../i18n';
+import { Button } from './button';
+import { IconButton } from './icon-button';
 
 export type ToastType = 'success' | 'error' | 'info' | 'undo';
 
@@ -44,12 +46,15 @@ const SingleToastCard: React.FC<{
     return () => clearInterval(interval);
   }, []);
 
+  const progressPct = Math.max(0, Math.min(100, Math.round((remaining / totalSec) * 100)));
+
   return (
     <div
       role="status"
       aria-live="polite"
+      data-testid={`toast-${item.type}`}
       className={cn(
-        'flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-xs sm:text-sm text-primary shadow-lg transition-all'
+        'relative overflow-hidden flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-xs sm:text-sm text-primary shadow-lg transition-all'
       )}
     >
       <div className="flex items-center gap-2.5 min-w-0">
@@ -57,7 +62,10 @@ const SingleToastCard: React.FC<{
         {item.type === 'error' && <AlertCircle className="h-4 w-4 text-danger shrink-0" />}
         {item.type === 'info' && <Info className="h-4 w-4 text-brand shrink-0" />}
         {item.type === 'undo' && (
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand/15 font-mono text-[11px] font-bold text-brand shrink-0">
+          <span
+            data-testid="undo-toast-countdown"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand/15 font-mono text-[11px] font-bold text-brand shrink-0"
+          >
             {remaining}s
           </span>
         )}
@@ -71,40 +79,48 @@ const SingleToastCard: React.FC<{
 
       <div className="flex items-center gap-1.5 shrink-0">
         {item.type === 'undo' && item.onUndo && (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="primary"
+            leftIcon={<Undo2 className="h-3.5 w-3.5" />}
             onClick={() => {
               item.onUndo?.();
               onDismiss(item.id);
             }}
-            className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1 text-xs font-semibold text-surface hover:opacity-90 cursor-pointer"
           >
-            <Undo2 className="h-3.5 w-3.5" />
-            <span>{t('common.undo')}</span>
-          </button>
+            {t('common.undo')}
+          </Button>
         )}
         {item.type === 'error' && item.onRetry && (
-          <button
-            type="button"
+          <Button
+            size="sm"
+            variant="secondary"
+            leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
             onClick={() => {
               item.onRetry?.();
               onDismiss(item.id);
             }}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-2.5 py-1 text-xs font-semibold text-primary hover:bg-surface cursor-pointer"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>{t('common.retry')}</span>
-          </button>
+            {t('common.retry')}
+          </Button>
         )}
-        <button
-          type="button"
-          aria-label={t('common.close')}
+        <IconButton
+          size="sm"
+          label={t('common.close')}
           onClick={() => onDismiss(item.id)}
-          className="rounded p-1 text-tertiary hover:text-primary cursor-pointer"
         >
           <X className="h-3.5 w-3.5" />
-        </button>
+        </IconButton>
       </div>
+
+      {item.type === 'undo' && (
+        <div
+          aria-hidden="true"
+          data-testid="undo-toast-progress"
+          style={{ width: `${progressPct}%` }}
+          className="absolute bottom-0 left-0 h-0.5 bg-brand transition-all duration-1000"
+        />
+      )}
     </div>
   );
 };
@@ -128,7 +144,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       <div
         aria-live="polite"
         aria-label="Notifications"
-        className="fixed bottom-4 left-1/2 z-50 flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 sm:left-auto sm:right-4 sm:translate-x-0"
+        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-4 left-1/2 z-50 flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 sm:left-auto sm:right-4 sm:translate-x-0"
       >
         {toasts.map((item) => (
           <SingleToastCard key={item.id} item={item} onDismiss={dismissToast} />

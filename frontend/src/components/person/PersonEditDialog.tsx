@@ -20,6 +20,9 @@ import {
   TreePersonNodeDto,
   updatePerson,
 } from '../../api/client';
+import { ConflictResolutionModal } from '../history';
+import { useLiveVersion } from '../../hooks/useLiveVersion';
+import { useUndoToast } from '../../hooks/useUndoToast';
 import { useI18n } from '../../i18n';
 
 export interface PersonEditDialogProps {
@@ -37,6 +40,7 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
 }) => {
   const { t } = useI18n();
   const { addToast } = useToast();
+  const { showUndoToast } = useUndoToast();
 
   const [givenName, setGivenName] = useState(
     person?.primary_name.given_name ?? ''
@@ -70,6 +74,26 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
   );
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [conflictState, setConflictState] = useState<{
+    open: boolean;
+    myChanges: Record<string, unknown>;
+    theirChanges: Record<string, unknown>;
+    remoteVersion: number;
+    updatedByName?: string | null;
+    updatedAt?: string | null;
+  }>({
+    open: false,
+    myChanges: {},
+    theirChanges: {},
+    remoteVersion: 2,
+  });
+
+  const { hasRemoteUpdate, remoteVersion, updatedByName } = useLiveVersion({
+    entityType: 'persons',
+    entityId: person?.id,
+    initialVersion: person?.version ?? 1,
+    enabled: open && Boolean(person?.id),
+  });
 
   useEffect(() => {
     if (!person) return;
@@ -112,44 +136,128 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
     setAltNames((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  const buildPayload = (versionToUse: number) => {
+    const livingOverride =
+      livingStatus === 'living'
+        ? true
+        : livingStatus === 'deceased'
+        ? false
+        : null;
+    return {
+      given_name: givenName.trim(),
+      patronymic: patronymic.trim() || null,
+      surname: surname.trim() || null,
+      birth_surname: birthSurname.trim() || null,
+      nickname: nickname.trim() || null,
+      name_prefix: namePrefix.trim() || null,
+      name_suffix: nameSuffix.trim() || null,
+      sex,
+      living_override: livingOverride,
+      is_private: isPrivate,
+      biography: biography.trim() || null,
+      alt_names: altNames,
+      version: versionToUse,
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving || !givenName.trim()) return;
     setSaving(true);
     setErrorMsg(null);
+    const payload = buildPayload(person.version ?? 1);
     try {
-      const livingOverride =
-        livingStatus === 'living'
-          ? true
-          : livingStatus === 'deceased'
-          ? false
-          : null;
-
-      const updated = await updatePerson(person.id, {
-        given_name: givenName.trim(),
-        patronymic: patronymic.trim() || null,
-        surname: surname.trim() || null,
-        birth_surname: birthSurname.trim() || null,
-        nickname: nickname.trim() || null,
-        name_prefix: namePrefix.trim() || null,
-        name_suffix: nameSuffix.trim() || null,
-        sex,
-        living_override: livingOverride,
-        is_private: isPrivate,
-        biography: biography.trim() || null,
-        alt_names: altNames,
-        version: person.version ?? 1,
-      });
-
-      addToast({
-        type: 'success',
-        title: t('person.edit.savedToast'),
-      });
+      const updated = await updatePerson(person.id, payload);
+      const txId = (updated as unknown as { tx_id?: string }).tx_id;
+      if (txId) {
+        showUndoToast({
+          txId,
+          title: t('history.undo_toast_label'),
+          description: t('person.edit.savedToast'),
+          onUndone: () => onPersonUpdated?.(person as PersonDetailDto),
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: t('person.edit.savedToast'),
+        });
+      }
       onPersonUpdated?.(updated);
       onOpenChange(false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setErrorMsg(t('person.edit.conflictError'));
+        const details = (err.details ?? {}) as {
+          current?: Record<string, unknown>;
+          their_data?: Record<string, unknown>;
+          version?: number;
+          current_version?: number;
+          expected_version?: number;
+          updated_by_name?: string;
+          updated_at?: string;
+        };
+        const theirData = (details.their_data ??
+          details.current ??
+          {}) as Record<string, unknown>;
+        const theirPrimaryName = (theirData.primary_name ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const currentRemote: Record<string, unknown> = {
+          given_name:
+            theirPrimaryName.given_name ??
+            theirData.given_name ??
+            person.primary_name.given_name,
+          patronymic:
+            theirPrimaryName.patronymic ??
+            theirData.patronymic ??
+            person.primary_name.patronymic,
+          surname:
+            theirPrimaryName.surname ??
+            theirData.surname ??
+            person.primary_name.surname,
+          birth_surname: theirData.birth_surname ?? person.birth_surname,
+          nickname: theirData.nickname ?? person.nickname,
+          sex: theirData.sex ?? person.sex,
+          biography:
+            theirData.biography ??
+            theirData.notes ??
+            person.biography ??
+            person.notes ??
+            null,
+        };
+        const resolvedRemoteVersion =
+          details.current_version ??
+          details.version ??
+          (typeof theirData.version === 'number'
+            ? theirData.version
+            : undefined) ??
+          remoteVersion ??
+          (person.version ?? 1) + 1;
+        setConflictState({
+          open: true,
+          myChanges: {
+            given_name: payload.given_name,
+            patronymic: payload.patronymic,
+            surname: payload.surname,
+            birth_surname: payload.birth_surname,
+            nickname: payload.nickname,
+            sex: payload.sex,
+            biography: payload.biography,
+          },
+          theirChanges: currentRemote,
+          remoteVersion: resolvedRemoteVersion,
+          updatedByName:
+            details.updated_by_name ??
+            (typeof theirData.updated_by_name === 'string'
+              ? theirData.updated_by_name
+              : undefined) ??
+            updatedByName,
+          updatedAt:
+            details.updated_at ??
+            (typeof theirData.updated_at === 'string'
+              ? theirData.updated_at
+              : undefined),
+        });
       } else {
         setErrorMsg(
           err instanceof Error ? err.message : t('common.errorLoading')
@@ -161,6 +269,7 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
   };
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
@@ -169,6 +278,13 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
       description={t('person.edit.subtitle')}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {hasRemoteUpdate && (
+          <Alert variant="warning" data-testid="live-version-warning-banner">
+            {t('history.liveVersion.warningBanner', {
+              name: updatedByName || t('history.conflict.anotherEditor'),
+            })}
+          </Alert>
+        )}
         {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -389,5 +505,38 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
         </div>
       </form>
     </Dialog>
+
+    <ConflictResolutionModal
+      open={conflictState.open}
+      onOpenChange={(nextOpen) =>
+        setConflictState((prev) => ({ ...prev, open: nextOpen }))
+      }
+      updatedByName={conflictState.updatedByName}
+      updatedAt={conflictState.updatedAt}
+      myChanges={conflictState.myChanges}
+      theirChanges={conflictState.theirChanges}
+      onKeepMine={async () => {
+        const updated = await updatePerson(
+          person.id,
+          buildPayload(conflictState.remoteVersion)
+        );
+        onPersonUpdated?.(updated);
+        onOpenChange(false);
+      }}
+      onUseTheirs={() => {
+        onOpenChange(false);
+      }}
+      onMerge={async (mergedFields) => {
+        const base = buildPayload(conflictState.remoteVersion);
+        const updated = await updatePerson(person.id, {
+          ...base,
+          ...(mergedFields as Partial<typeof base>),
+          version: conflictState.remoteVersion,
+        });
+        onPersonUpdated?.(updated);
+        onOpenChange(false);
+      }}
+    />
+    </>
   );
 };

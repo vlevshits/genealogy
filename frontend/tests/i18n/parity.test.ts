@@ -3,6 +3,11 @@ import en from '../../src/i18n/en.json';
 import ru from '../../src/i18n/ru.json';
 import { formatKinshipLabel } from '../../src/lib/kinship';
 import { matchesCrossScript } from '../../src/lib/utils';
+import {
+  formatLifeSpanText,
+  formatPersonName,
+  formatVitalEventLabel,
+} from '../../src/lib/formatters';
 
 function collectKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = [];
@@ -32,7 +37,10 @@ describe('i18n Key Parity & Localization Helpers', () => {
           checkValues(v as Record<string, unknown>, locale);
         } else {
           expect(typeof v, `${locale}.${k} should be a string`).toBe('string');
-          expect((v as string).trim().length, `${locale}.${k} should not be empty`).toBeGreaterThan(0);
+          expect(
+            (v as string).trim().length,
+            `${locale}.${k} should not be empty`
+          ).toBeGreaterThan(0);
         }
       }
     };
@@ -96,7 +104,7 @@ describe('i18n Key Parity & Localization Helpers', () => {
         } else if (typeof v === 'string') {
           expect(
             leadingIconRegex.test(v),
-            `${locale}.${keyPath} ("${v}") must not start with a leading icon symbol (+, arrow, checkmark); render icons via leftIcon/rightIcon instead`
+            `${locale}.${keyPath} ("${v}") must not start with an icon symbol`
           ).toBe(false);
           expect(
             emojiRegex.test(v),
@@ -108,5 +116,86 @@ describe('i18n Key Parity & Localization Helpers', () => {
 
     checkNoIconPrefixes(en as Record<string, unknown>, 'en');
     checkNoIconPrefixes(ru as Record<string, unknown>, 'ru');
+  });
+
+  it('formats Slavic tripartite names and maiden surnames per locale rules', () => {
+    const malePerson = {
+      given_name: 'Александр',
+      patronymic: 'Иванович',
+      surname: 'Кузнецов',
+    };
+    expect(formatPersonName(malePerson, { locale: 'ru', format: 'full' })).toBe(
+      'Кузнецов Александр Иванович'
+    );
+    expect(formatPersonName(malePerson, { locale: 'ru', format: 'compact' })).toBe(
+      'Александр Кузнецов'
+    );
+
+    const femalePersonRu = {
+      given_name: 'Вера',
+      patronymic: 'Ивановна',
+      surname: 'Левшиц',
+      birth_surname: 'Морозова',
+    };
+    expect(
+      formatPersonName(femalePersonRu, { locale: 'ru', format: 'full' })
+    ).toBe('Левшиц (Морозова) Вера Ивановна');
+
+    const femalePersonEn = {
+      given_name: 'Vera',
+      patronymic: 'Ivanovna',
+      surname: 'Levshits',
+      birth_surname: 'Morozova',
+    };
+    expect(
+      formatPersonName(femalePersonEn, { locale: 'en', format: 'full' })
+    ).toBe('Vera Ivanovna Levshits (née Morozova)');
+    expect(
+      formatPersonName(femalePersonEn, { locale: 'en', format: 'directory' })
+    ).toBe('Levshits (née Morozova), Vera Ivanovna');
+  });
+
+  it('agrees Russian vital event verbs with biological sex', () => {
+    expect(formatVitalEventLabel('birth', 'M', { locale: 'ru' })).toBe('родился');
+    expect(formatVitalEventLabel('birth', 'F', { locale: 'ru' })).toBe('родилась');
+    expect(formatVitalEventLabel('birth', 'U', { locale: 'ru' })).toBe('род.');
+    expect(formatVitalEventLabel('death', 'M', { locale: 'ru' })).toBe('умер');
+    expect(formatVitalEventLabel('death', 'F', { locale: 'ru' })).toBe('умерла');
+    expect(formatVitalEventLabel('baptism', 'M', { locale: 'ru' })).toBe('крещён');
+    expect(formatVitalEventLabel('baptism', 'F', { locale: 'ru' })).toBe('крещена');
+    expect(formatVitalEventLabel('burial', 'M', { locale: 'ru' })).toBe('похоронен');
+    expect(formatVitalEventLabel('burial', 'F', { locale: 'ru' })).toBe('похоронена');
+  });
+
+  it('formats lifespans with dagger † for deceased and zero Living text for living', () => {
+    expect(
+      formatLifeSpanText({
+        birthYear: 1994,
+        isLiving: true,
+        locale: 'en',
+      })
+    ).toBe('b. 1994');
+    expect(
+      formatLifeSpanText({
+        birthYear: 1994,
+        isLiving: true,
+        locale: 'ru',
+      })
+    ).toBe('р. 1994');
+    expect(
+      formatLifeSpanText({
+        birthYear: 1912,
+        deathYear: 1985,
+        isLiving: false,
+        locale: 'en',
+      })
+    ).toBe('1912 – †1985');
+    expect(
+      formatLifeSpanText({
+        isLiving: true,
+        isRedacted: true,
+        locale: 'en',
+      })
+    ).toBe('');
   });
 });

@@ -3,13 +3,15 @@ import { Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Individual } from '../../types/person';
 import { Avatar } from '../ui/avatar';
+import { IconButton } from '../ui/icon-button';
 import { PersonName } from './person-name';
 import { LifeSpan } from './life-span';
 import { PlaceText } from './place-text';
-import { LivingBadge, PrivacyBadge } from './privacy-badge';
+import { PrivacyBadge } from './privacy-badge';
 import { useI18n } from '../../i18n';
+import { formatPersonName } from '../../lib/formatters';
 
-export type QuickAddDirection = 'parent' | 'spouse' | 'child' | 'sibling';
+export type QuickAddDirection = 'parent' | 'spouse' | 'child';
 
 export interface PersonCardProps {
   person: Individual;
@@ -26,7 +28,7 @@ export const PersonCard: React.FC<PersonCardProps> = ({
   onQuickAdd,
   className,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const accentBorder =
     person.sex === 'male'
@@ -35,49 +37,49 @@ export const PersonCard: React.FC<PersonCardProps> = ({
         ? 'border-l-4 border-l-female'
         : 'border-l-4 border-l-neutral';
 
-  const fullName = [person.given_name, person.surname].filter(Boolean).join(' ');
+  const fullName = formatPersonName(person, { locale, format: 'compact' });
 
   return (
     <div className={cn('group relative inline-block p-3', className)}>
-      {/* Quick-add directional hover buttons */}
+      {/* Quick-add directional buttons — visible on mobile touch and revealed on desktop hover/focus */}
       {onQuickAdd && (
         <>
-          <button
-            type="button"
-            aria-label={t('domain.addFather')}
+          <IconButton
+            size="sm"
+            label={t('domain.addFather')}
             title={t('domain.addFather')}
             onClick={(e) => {
               e.stopPropagation();
               onQuickAdd(person, 'parent');
             }}
-            className="absolute -top-0.5 left-1/2 -translate-x-1/2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
+            className="absolute -top-1 left-1/2 -translate-x-1/2 z-10 flex h-8 w-8 min-h-8 min-w-8 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-85 sm:opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('domain.addSpouse')}
+          </IconButton>
+          <IconButton
+            size="sm"
+            label={t('domain.addSpouse')}
             title={t('domain.addSpouse')}
             onClick={(e) => {
               e.stopPropagation();
               onQuickAdd(person, 'spouse');
             }}
-            className="absolute -right-0.5 top-1/2 -translate-y-1/2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
+            className="absolute -right-1 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 min-h-8 min-w-8 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-85 sm:opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            aria-label={t('domain.addChild')}
+          </IconButton>
+          <IconButton
+            size="sm"
+            label={t('domain.addChild')}
             title={t('domain.addChild')}
             onClick={(e) => {
               e.stopPropagation();
               onQuickAdd(person, 'child');
             }}
-            className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
+            className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-10 flex h-8 w-8 min-h-8 min-w-8 items-center justify-center rounded-full border border-border bg-surface text-secondary opacity-85 sm:opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-brand hover:text-surface cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
-          </button>
+          </IconButton>
         </>
       )}
 
@@ -128,10 +130,9 @@ export const PersonCard: React.FC<PersonCardProps> = ({
             </div>
           )}
 
-          {(person.is_living || person.is_private) && (
+          {person.is_private && (
             <div className="flex items-center gap-1.5 pt-1">
-              {person.is_living && <LivingBadge />}
-              {person.is_private && <PrivacyBadge />}
+              <PrivacyBadge />
             </div>
           )}
         </div>

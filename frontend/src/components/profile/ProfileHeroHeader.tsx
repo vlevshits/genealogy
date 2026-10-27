@@ -81,7 +81,9 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
   const { t, locale } = useI18n();
   const { displayName, isMaskedLiving } = formatTreeCardName(
     person,
-    accessTier
+    accessTier,
+    locale,
+    'card'
   );
 
   // In-place identity editing state (03 §3.3)

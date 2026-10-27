@@ -460,6 +460,8 @@ pub struct TreePersonNodeDto {
     pub external_ids: HashMap<String, String>,
     #[serde(default = "default_version")]
     pub version: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tx_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
@@ -638,18 +640,58 @@ fn default_place_type() -> String {
     "other".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct ChangeLogEntryDto {
     pub id: String,
+    #[serde(default)]
+    pub tx_id: String,
+    #[serde(default)]
+    pub tx_label: String,
     pub op: String,
+    #[serde(default)]
+    pub action: String,
     pub entity_type: String,
     pub entity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_name: Option<String>,
     pub summary: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before_json: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after_json: Option<serde_json::Value>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct TreeSnapshotRecordCountsDto {
+    pub individuals: usize,
+    pub families: usize,
+    pub events: usize,
+    pub places: usize,
+    pub media: usize,
+    pub notes: usize,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct TreeSnapshotDto {
+    pub id: String,
+    pub label: String,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_by_name: Option<String>,
+    pub created_at: String,
+    pub expires_at: String,
+    pub record_counts: TreeSnapshotRecordCountsDto,
+    #[serde(skip)]
+    pub payload_json: Option<serde_json::Value>,
 }
 
 /// Applies the RBAC & Living-Person Redaction Contract (`02-rbac-access-control.md §3.2, §3.3, §4.2`).
@@ -701,6 +743,7 @@ pub fn redact_person_for_caller(
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: person.version,
+            tx_id: None,
         });
     }
 
@@ -757,6 +800,7 @@ pub fn redact_person_for_tree_view(
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: person.version,
+            tx_id: None,
         });
     }
 
@@ -793,6 +837,7 @@ pub struct GenealogyPrivacyStore {
     pub media: Vec<MediaAssetSummaryDto>,
     pub places: Vec<PlaceSummaryDto>,
     pub change_log: Vec<ChangeLogEntryDto>,
+    pub snapshots: Vec<TreeSnapshotDto>,
     pub next_gid_seq: u32,
     pub next_family_gid_seq: u32,
     pub next_event_gid_seq: u32,
@@ -811,6 +856,7 @@ impl GenealogyPrivacyStore {
             media: vec![],
             places: vec![],
             change_log: vec![],
+            snapshots: vec![],
             next_gid_seq: 100,
             next_family_gid_seq: 100,
             next_event_gid_seq: 100,
@@ -858,6 +904,7 @@ impl Default for GenealogyPrivacyStore {
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: 1,
+            tx_id: None,
         };
 
         let living_relative = TreePersonNodeDto {
@@ -892,6 +939,7 @@ impl Default for GenealogyPrivacyStore {
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: 1,
+            tx_id: None,
         };
 
         let private_record = TreePersonNodeDto {
@@ -926,6 +974,7 @@ impl Default for GenealogyPrivacyStore {
             alt_names: vec![],
             external_ids: HashMap::new(),
             version: 1,
+            tx_id: None,
         };
 
         let deceased_media = MediaAssetSummaryDto {
@@ -1104,6 +1153,7 @@ impl Default for GenealogyPrivacyStore {
             media: vec![deceased_media, living_media, private_media],
             places,
             change_log: vec![],
+            snapshots: vec![],
             next_gid_seq: 100,
             next_family_gid_seq: 100,
             next_event_gid_seq: 100,

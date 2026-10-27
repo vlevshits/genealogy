@@ -837,10 +837,25 @@ pub fn import_gedcom_into_store(
     let (decoded_text, detected_charset) = decode_gedcom_bytes(raw_bytes);
     let roots = parse_gedcom_tree(&decoded_text)?;
 
-    let snapshot_id = Some(format!("snap-pre-gedcom-{}", Uuid::new_v4()));
+    let snap_reason = if mode == "merge" {
+        "merge_import"
+    } else {
+        "clean_slate_import"
+    };
+    let created_snap = crate::services::history::create_snapshot(
+        store,
+        Some(format!("Pre-GEDCOM import ({mode})")),
+        snap_reason,
+        None,
+        None,
+        "/tmp/genealogy-backups",
+    )?;
+    let snapshot_id = Some(created_snap.id);
 
     if mode == "new" || mode == "replace" {
+        let preserved_snapshots = store.snapshots.clone();
         *store = GenealogyPrivacyStore::empty();
+        store.snapshots = preserved_snapshots;
     } else if store.is_demo_seed {
         store.is_demo_seed = false;
     }
@@ -1213,6 +1228,7 @@ pub fn import_gedcom_into_store(
                 alt_names,
                 external_ids,
                 version: 1,
+                tx_id: None,
             });
             new_pid
         };
@@ -1666,11 +1682,18 @@ pub fn import_gedcom_into_store(
         ));
     }
 
+    let import_tx_id = Uuid::new_v4().to_string();
     store.change_log.push(ChangeLogEntryDto {
         id: Uuid::new_v4().to_string(),
+        tx_id: import_tx_id,
+        tx_label: "gedcom.import".to_string(),
         op: "gedcom_import".to_string(),
+        action: "gedcom_import".to_string(),
         entity_type: "tree".to_string(),
         entity_id: "root".to_string(),
+        entity_label: Some("GEDCOM Import".to_string()),
+        actor_id: None,
+        actor_name: None,
         summary: format!(
             "Imported GEDCOM ({} individuals, {} families, {} media)",
             individuals_imported, families_imported, media_imported

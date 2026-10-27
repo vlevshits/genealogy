@@ -15,6 +15,7 @@ instead of doing it inline.
 | React/TypeScript UI, design-system components, Tailwind styles, i18n, API client, Nginx/frontend Docker | `frontend-developer` |
 | Feature design/planning, architecture decisions, code review, spec conformance, security review | `architect-reviewer` |
 | Test plans, automated tests, DoD verification, bug reproduction, regression checks | `qa-analyst` |
+| UI/UX review of screens: accessibility, alignment, use of space, visual hierarchy, discoverability, consistency; raising UX tasks for the frontend | `ux-reviewer` |
 
 ## Standard Feature Workflow
 
@@ -34,8 +35,22 @@ instead of doing it inline.
    UI scope. Route defects to the owning developer agent, then re-run QA.
    If a subagent reports it cannot launch the browser, the main agent runs
    the listed browser scenarios itself with `browser_subagent`.
-5. **Close** — update `docs/technical-debt.md` and add an implementation
-   report in `docs/implementation/` summarizing the outcome.
+5. **UX Review** — **mandatory whenever the phase/change set touched
+   `frontend/`** (skip only for backend-only work). Invoke `ux-reviewer`
+   with the phase name, changed files and affected screens/routes. It writes
+   a report to `docs/ux-reviews/` with `UX-NNN` tasks.
+   - Send all `critical` and `major` tasks to `frontend-developer` (pass the
+     report path and task IDs), then re-run `ux-reviewer` on the affected
+     screens until none remain open.
+   - `minor` / `suggestion` tasks: fix in the same loop if cheap, otherwise
+     record them in `docs/technical-debt.md` referencing the `UX-NNN` ID.
+   - Tasks tagged `spec-change` go to `spec-writer` first (confirm with the
+     user), then to `frontend-developer`.
+   - If UX fixes were made, have `qa-analyst` run a quick regression on the
+     touched screens.
+6. **Close** — update `docs/technical-debt.md` and add an implementation
+   report in `docs/implementation/` summarizing the outcome, including the
+   UX review verdict and link to its report.
 
 ## Delegation Guidelines
 

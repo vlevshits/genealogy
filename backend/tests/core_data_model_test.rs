@@ -105,7 +105,7 @@ async fn test_gid_allocation_gedcom_preservation_and_non_reuse() {
         )
         .await
         .unwrap();
-    assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+    assert_eq!(del_resp.status(), StatusCode::OK);
 
     let r2 = app
         .clone()
@@ -523,7 +523,7 @@ async fn test_safe_delete_person_and_restore_from_history() {
         )
         .await
         .unwrap();
-    assert_eq!(del_pavel.status(), StatusCode::NO_CONTENT);
+    assert_eq!(del_pavel.status(), StatusCode::OK);
 
     // Verify Vera still exists
     let get_vera = app
