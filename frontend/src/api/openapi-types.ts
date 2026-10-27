@@ -552,5 +552,139 @@ export interface PersonProfileResponseDto {
   capabilities: ProfileCapabilitiesDto;
 }
 
+// =============================================================================
+// Phase 1.8 — Global Search (Omnibox), People Directory & Surnames Index DTOs
+// =============================================================================
+
+export interface SearchPersonResultDto {
+  id: string;
+  gid: string;
+  display_name: string;
+  given_name: string;
+  patronymic: string | null;
+  surname: string;
+  sex: string;
+  birth_year: number | null;
+  death_year: number | null;
+  birth_place: string | null;
+  avatar_url: string | null;
+  is_living: boolean;
+  is_private: boolean;
+  score: number;
+}
+
+export interface SearchPlaceResultDto {
+  id: string;
+  gid: string;
+  name: string;
+  full_name: string;
+  place_type: string;
+  events_count: number;
+  has_coordinates: boolean;
+}
+
+export interface SearchMediaResultDto {
+  id: string;
+  gid: string;
+  title: string;
+  mime_type: string;
+  file_url: string;
+  is_private: boolean;
+}
+
+export interface SearchActionDto {
+  id: string;
+  label: string;
+  hint: string;
+  path: string;
+  icon: string;
+  required_role: string;
+}
+
+export interface SearchResultResponseDto {
+  query: string;
+  people: SearchPersonResultDto[];
+  places: SearchPlaceResultDto[];
+  media: SearchMediaResultDto[];
+  actions: SearchActionDto[];
+  timing_ms: number;
+}
+
+export interface GlobalSearchQuery {
+  q?: string;
+  types?: string;
+  limit?: number;
+}
+
+export interface PeopleDirectoryItemDto {
+  id: string;
+  gid: string;
+  given_name: string;
+  patronymic: string | null;
+  surname: string;
+  birth_surname?: string | null;
+  display_name: string;
+  sex: string;
+  birth_date: string | null;
+  birth_year: number | null;
+  birth_place: string | null;
+  death_date: string | null;
+  death_year: number | null;
+  death_place: string | null;
+  avatar_url: string | null;
+  is_living: boolean;
+  is_private: boolean;
+  has_parents: boolean;
+  has_birth_date: boolean;
+  version: number;
+  updated_at?: string | null;
+}
+
+export interface PeopleDirectoryResponse {
+  items: PeopleDirectoryItemDto[];
+  next_cursor: string | null;
+  total: number;
+  total_unfiltered: number;
+}
+
+export interface PeopleDirectoryQuery {
+  q?: string;
+  surname?: string;
+  born_from?: number;
+  born_to?: number;
+  sex?: string;
+  living?: string;
+  has_photo?: boolean;
+  incomplete?: boolean;
+  sort?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SurnameIndexEntryDto {
+  canonical_surname: string;
+  variants: string[];
+  count: number;
+  earliest_year: number | null;
+  latest_year: number | null;
+}
+
+export interface SurnameLetterGroupDto {
+  letter: string;
+  items: SurnameIndexEntryDto[];
+}
+
+export interface SurnamesIndexResponse {
+  groups: SurnameLetterGroupDto[];
+  total_surnames: number;
+  total_people: number;
+}
+
+export interface SurnamesIndexQuery {
+  letter?: string;
+  min_count?: number;
+}
+
+
 
 

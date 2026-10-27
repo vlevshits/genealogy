@@ -12,6 +12,7 @@ import {
 import { FormField, GenDateInput } from '../form';
 import {
   ApiError,
+  createPerson,
   PersonDetailDto,
   QuickAddRelation,
   quickAddRelative,
@@ -24,8 +25,8 @@ import { useI18n } from '../../i18n';
 export interface QuickAddRelativeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  anchorPerson: TreePersonNodeDto | null;
-  relation: QuickAddRelation;
+  anchorPerson?: TreePersonNodeDto | null;
+  relation?: QuickAddRelation;
   existingPeople?: TreePersonNodeDto[];
   initialMode?: 'create' | 'link';
   onRelativeAdded?: (createdOrLinked?: PersonDetailDto) => void;
@@ -34,8 +35,8 @@ export interface QuickAddRelativeDialogProps {
 export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
   open,
   onOpenChange,
-  anchorPerson,
-  relation,
+  anchorPerson = null,
+  relation = 'child',
   existingPeople = [],
   initialMode = 'create',
   onRelativeAdded,
@@ -89,9 +90,8 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!anchorPerson) return;
     const nextSex = defaultSexForRelation(relation);
-    setMode(initialMode);
+    setMode(anchorPerson ? initialMode : 'create');
     setSelectedExistingId('');
     setGivenName('');
     setBirthDate('');
@@ -99,9 +99,9 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     setBirthPlace('');
     setLivingStatus('auto');
     setSex(nextSex);
-    setSurname(anchorPerson.primary_name.surname || '');
+    setSurname(anchorPerson?.primary_name.surname || '');
     setPatronymicTouched(false);
-    if (relation === 'child' && anchorPerson.sex === 'M') {
+    if (anchorPerson && relation === 'child' && anchorPerson.sex === 'M') {
       setPatronymic(
         computeSlavicPatronymic(anchorPerson.primary_name.given_name, nextSex)
       );
@@ -111,30 +111,34 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     setErrorMsg(null);
   }, [anchorPerson, relation, open, initialMode]);
 
-  if (!anchorPerson) return null;
+  if (!anchorPerson && !open) return null;
 
-  const anchorDisplayName = [
-    anchorPerson.primary_name.given_name,
-    anchorPerson.primary_name.patronymic,
-    anchorPerson.primary_name.surname,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const anchorDisplayName = anchorPerson
+    ? [
+        anchorPerson.primary_name.given_name,
+        anchorPerson.primary_name.patronymic,
+        anchorPerson.primary_name.surname,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : '';
 
-  const dialogTitle =
-    relation === 'father'
-      ? t('person.quickAdd.titleFather', { name: anchorDisplayName })
-      : relation === 'mother'
-      ? t('person.quickAdd.titleMother', { name: anchorDisplayName })
-      : relation === 'spouse'
-      ? t('person.quickAdd.titleSpouse', { name: anchorDisplayName })
-      : relation === 'child'
-      ? t('person.quickAdd.titleChild', { name: anchorDisplayName })
-      : t('person.quickAdd.titleSibling', { name: anchorDisplayName });
+  const dialogTitle = !anchorPerson
+    ? t('nav.addPerson')
+    : relation === 'father'
+    ? t('person.quickAdd.titleFather', { name: anchorDisplayName })
+    : relation === 'mother'
+    ? t('person.quickAdd.titleMother', { name: anchorDisplayName })
+    : relation === 'spouse'
+    ? t('person.quickAdd.titleSpouse', { name: anchorDisplayName })
+    : relation === 'child'
+    ? t('person.quickAdd.titleChild', { name: anchorDisplayName })
+    : t('person.quickAdd.titleSibling', { name: anchorDisplayName });
 
   const handleSexChange = (nextSex: SexCode) => {
     setSex(nextSex);
     if (
+      anchorPerson &&
       !patronymicTouched &&
       relation === 'child' &&
       anchorPerson.sex === 'M'
@@ -150,7 +154,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     mode === 'create' && givenName.trim().length >= 2
       ? existingPeople.find(
           (p) =>
-            p.id !== anchorPerson.id &&
+            p.id !== anchorPerson?.id &&
             p.primary_name.given_name.toLowerCase() ===
               givenName.trim().toLowerCase() &&
             (!surname.trim() ||
@@ -160,7 +164,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
       : undefined;
 
   const candidateOptions = existingPeople
-    .filter((p) => p.id !== anchorPerson.id)
+    .filter((p) => p.id !== anchorPerson?.id)
     .map((p) => ({
       value: p.id,
       label: `${[
@@ -184,6 +188,23 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
           : livingStatus === 'deceased'
           ? false
           : null;
+
+      if (!anchorPerson) {
+        const created = await createPerson({
+          given_name: givenName.trim(),
+          patronymic: patronymic.trim() || null,
+          surname: surname.trim() || null,
+          sex,
+          living_override: livingOverride,
+        });
+        addToast({
+          type: 'success',
+          title: t('person.quickAdd.addedToast'),
+        });
+        onRelativeAdded?.(created);
+        onOpenChange(false);
+        return;
+      }
 
       const res = await quickAddRelative(
         anchorPerson.id,
@@ -231,23 +252,25 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
       description={t('person.quickAdd.subtitle')}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <SegmentedControl
-          ariaLabel={t('person.quickAdd.subtitle')}
-          value={mode}
-          onChange={(val) => setMode(val as 'create' | 'link')}
-          options={[
-            {
-              value: 'create',
-              label: t('person.quickAdd.modeCreateNew'),
-              icon: <UserPlus className="h-3.5 w-3.5" />,
-            },
-            {
-              value: 'link',
-              label: t('person.quickAdd.modeLinkExisting'),
-              icon: <Link2 className="h-3.5 w-3.5" />,
-            },
-          ]}
-        />
+        {anchorPerson && (
+          <SegmentedControl
+            ariaLabel={t('person.quickAdd.subtitle')}
+            value={mode}
+            onChange={(val) => setMode(val as 'create' | 'link')}
+            options={[
+              {
+                value: 'create',
+                label: t('person.quickAdd.modeCreateNew'),
+                icon: <UserPlus className="h-3.5 w-3.5" />,
+              },
+              {
+                value: 'link',
+                label: t('person.quickAdd.modeLinkExisting'),
+                icon: <Link2 className="h-3.5 w-3.5" />,
+              },
+            ]}
+          />
+        )}
 
         {errorMsg && <Alert variant="danger">{errorMsg}</Alert>}
 

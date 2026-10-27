@@ -20,9 +20,8 @@ import { LanguageToggleButton } from './language-toggle-button';
 import { ThemeToggleButton } from './theme-toggle-button';
 import { Drawer } from './drawer';
 import { BottomNav } from './bottom-nav';
-import { CommandPalette, CommandPaletteItem } from './command-palette';
 import { Breadcrumbs, BreadcrumbItem } from './breadcrumbs';
-import { SAMPLE_PEOPLE, SAMPLE_PLACES } from '../../lib/mock-data';
+import { OmniboxDialog } from '../search';
 
 export interface AppShellProps {
   currentPath?: string;
@@ -62,35 +61,6 @@ export const AppShell: React.FC<AppShellProps> = ({
     await logout();
     navigate('/login');
   };
-
-  const omniboxItems: CommandPaletteItem[] = [
-    ...SAMPLE_PEOPLE.filter((p) => !p.is_redacted).map((p) => ({
-      id: p.id,
-      group: 'people' as const,
-      title: `${p.surname ?? ''} ${p.given_name ?? ''} ${p.patronymic ?? ''}`.trim(),
-      subtitle: `${p.gid} · ${p.birth_place ?? ''}`,
-      onSelect: () => navigate(`/persons/${p.gid}`),
-    })),
-    ...SAMPLE_PLACES.map((pl) => ({
-      id: pl.id,
-      group: 'places' as const,
-      title: pl.name,
-      subtitle: pl.hierarchy_names?.join(', '),
-      onSelect: () => navigate(`/places/${pl.gid}`),
-    })),
-    {
-      id: 'act-tree',
-      group: 'actions',
-      title: t('nav.tree'),
-      onSelect: () => navigate('/tree'),
-    },
-    {
-      id: 'act-people',
-      group: 'actions',
-      title: t('nav.people'),
-      onSelect: () => navigate('/people'),
-    },
-  ];
 
   const userInitials = user
     ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() || 'U'
@@ -320,11 +290,11 @@ export const AppShell: React.FC<AppShellProps> = ({
         </div>
       </Drawer>
 
-      {/* Global Command Palette (Cmd+K) */}
-      <CommandPalette
+      {/* Global Omnibox (Cmd+K) */}
+      <OmniboxDialog
         open={omniboxOpen}
         onOpenChange={setOmniboxOpen}
-        items={omniboxItems}
+        onNavigate={navigate}
       />
 
       {/* Main Content Viewport */}

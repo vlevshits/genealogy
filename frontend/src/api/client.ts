@@ -808,12 +808,15 @@ import {
   CreatePlaceInput,
   DeleteImpactDto,
   FamilyDto,
+  GlobalSearchQuery,
   IndividualDto,
   LifeEventDto,
   MergePlaceResponse,
   NoteDto,
   OnboardingStatusResponse,
   PatronymicSuggestionDto,
+  PeopleDirectoryQuery,
+  PeopleDirectoryResponse,
   PersonDetailDto,
   PersonProfileResponseDto,
   PlaceDetailDto,
@@ -821,7 +824,10 @@ import {
   PlacesListResponse,
   QuickAddRelativeInput,
   QuickAddRelativeResponse,
+  SearchResultResponseDto,
   StartWithSelfInput,
+  SurnamesIndexQuery,
+  SurnamesIndexResponse,
   TreeViewQuery,
   TreeViewResponse,
   UpdateFamilyInput,
@@ -1117,6 +1123,63 @@ export async function deleteNote(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// =============================================================================
+// Phase 1.8 — Global Search (Omnibox), People Directory & Surnames Index
+// =============================================================================
+
+export async function fetchGlobalSearch(
+  params?: GlobalSearchQuery
+): Promise<SearchResultResponseDto> {
+  const search = new URLSearchParams();
+  if (params?.q !== undefined) search.set('q', params.q);
+  if (params?.types) search.set('types', params.types);
+  if (params?.limit !== undefined) search.set('limit', String(params.limit));
+  const qs = search.toString();
+  return apiFetch<SearchResultResponseDto>(`/search${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchPeopleDirectory(
+  params?: PeopleDirectoryQuery
+): Promise<PeopleDirectoryResponse> {
+  const search = new URLSearchParams();
+  if (params?.q) search.set('q', params.q);
+  if (params?.surname) search.set('surname', params.surname);
+  if (params?.born_from !== undefined) {
+    search.set('born_from', String(params.born_from));
+  }
+  if (params?.born_to !== undefined) {
+    search.set('born_to', String(params.born_to));
+  }
+  if (params?.sex) search.set('sex', params.sex);
+  if (params?.living) search.set('living', params.living);
+  if (params?.has_photo !== undefined) {
+    search.set('has_photo', String(params.has_photo));
+  }
+  if (params?.incomplete !== undefined) {
+    search.set('incomplete', String(params.incomplete));
+  }
+  if (params?.sort) search.set('sort', params.sort);
+  if (params?.cursor) search.set('cursor', params.cursor);
+  if (params?.limit !== undefined) search.set('limit', String(params.limit));
+  const qs = search.toString();
+  return apiFetch<PeopleDirectoryResponse>(`/people${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchSurnamesIndex(
+  params?: SurnamesIndexQuery
+): Promise<SurnamesIndexResponse> {
+  const search = new URLSearchParams();
+  if (params?.letter) search.set('letter', params.letter);
+  if (params?.min_count !== undefined) {
+    search.set('min_count', String(params.min_count));
+  }
+  const qs = search.toString();
+  return apiFetch<SurnamesIndexResponse>(
+    `/people/surnames${qs ? `?${qs}` : ''}`
+  );
+}
+
 
 
 

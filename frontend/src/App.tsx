@@ -13,6 +13,8 @@ import { EmptyTreeOnboardingCard } from './components/onboarding';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlacesPage } from './pages/PlacesPage';
 import { PersonProfilePage } from './pages/PersonProfilePage';
+import { PeoplePage } from './pages/PeoplePage';
+import { SurnamesPage } from './pages/SurnamesPage';
 import { AuthPages } from './pages/AuthPages';
 import {
   fetchOnboardingStatus,
@@ -292,7 +294,46 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     );
   }
 
-  // 5b. Places & Historical Jurisdictions route (/places)
+  // 5b. Surnames Index route (/people/surnames) — (13-search-people-directory.md §4.3)
+  if (path.startsWith('/people/surnames')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          {
+            id: 'people',
+            label: t('nav.people'),
+            onClick: () => navigate('/people'),
+          },
+          { id: 'surnames', label: t('surnames.title') },
+        ]}
+      >
+        <SurnamesPage onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
+  // 5c. People Directory route (/people) — (13-search-people-directory.md §4)
+  if (path === '/people' || (path.startsWith('/people') && !path.startsWith('/people/merge'))) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'people', label: t('nav.people') },
+        ]}
+      >
+        <PeoplePage initialSearch={search} onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
+  // 5d. Places & Historical Jurisdictions route (/places)
   if (path.startsWith('/places')) {
     return (
       <AppShell

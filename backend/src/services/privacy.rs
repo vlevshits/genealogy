@@ -183,21 +183,99 @@ pub fn suggest_slavic_patronymic(father_given_name: &str, child_sex: &str) -> Op
     })
 }
 
-/// Normalizes Cyrillic and Latin text into a common lowercase Latin representation for
-/// cross-script search (`"Тверь"` <-> `"tver"`, `"Калинин"` <-> `"kalinin"`).
-pub fn normalize_search_tokens(input: &str) -> String {
+/// Normalizes pre-1918 Russian orthography (`ѣ -> е`, `і -> и`, `ѳ -> ф`, `ѵ -> и`, trailing `ъ`)
+/// and `ё -> е` on a single word token before script conversion or gender folding (`13 §2.2`).
+pub fn normalize_russian_orthography_word(word: &str) -> String {
+    let mut mapped = String::with_capacity(word.len());
+    for ch in word.trim().to_lowercase().chars() {
+        match ch {
+            'ё' | 'ѣ' | 'э' => mapped.push('е'),
+            'і' | 'ѵ' => mapped.push('и'),
+            'ѳ' => mapped.push('ф'),
+            other => mapped.push(other),
+        }
+    }
+    // Strip trailing hard sign `ъ` at word boundary (e.g. "Левшицъ" -> "левшиц", "Петровъ" -> "петров")
+    while mapped.ends_with('ъ') && mapped.chars().count() > 1 {
+        mapped.pop();
+    }
+    mapped
+}
+
+/// Folds Slavic feminine surname endings to their masculine/stem form in both Cyrillic and Latin
+/// (`-ова -> -ов`, `-ева -> -ев`, `-ина -> -ин`, `-ская -> -ский`, `-цкая -> -цкий`,
+/// `-ova -> -ov`, `-eva -> -ev`, `-ina -> -in`, `-skaya -> -sky`, `-tskaya -> -tsky`) (`13 §2.2, §4.3`).
+pub fn fold_slavic_surname_stem(word: &str) -> String {
+    let ortho = normalize_russian_orthography_word(word);
+    let char_count = ortho.chars().count();
+    if char_count <= 3 {
+        return ortho;
+    }
+
+    // Cyrillic feminine endings
+    for (fem, masc) in [
+        ("цкая", "цкий"),
+        ("ская", "ский"),
+        ("ова", "ов"),
+        ("ева", "ев"),
+        ("ина", "ин"),
+    ] {
+        if let Some(stem) = ortho.strip_suffix(fem) {
+            if stem.chars().count() >= 2 {
+                return format!("{stem}{masc}");
+            }
+        }
+    }
+
+    // Latin feminine endings
+    for (fem, masc) in [
+        ("tskaya", "tsky"),
+        ("skaya", "sky"),
+        ("ova", "ov"),
+        ("eva", "ev"),
+        ("ina", "in"),
+    ] {
+        if let Some(stem) = ortho.strip_suffix(fem) {
+            if stem.chars().count() >= 2 {
+                return format!("{stem}{masc}");
+            }
+        }
+    }
+
+    ortho
+}
+
+/// Produces a display-cased canonical surname (e.g. `"Петрова"` -> `"Петров"`, `"Левшицъ"` -> `"Левшиц"`).
+pub fn canonicalize_surname_display(surname: &str) -> String {
+    let trimmed = surname.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let folded = fold_slavic_surname_stem(trimmed);
+    let mut chars = folded.chars();
+    match chars.next() {
+        Some(first) => {
+            let upper: String = first.to_uppercase().collect();
+            format!("{upper}{}", chars.as_str())
+        }
+        None => String::new(),
+    }
+}
+
+/// Transliterates a single normalized token into a canonical Latin representation (`13 §2.2`).
+pub fn transliterate_to_latin(input: &str) -> String {
     let mut out = String::with_capacity(input.len() * 2);
-    for ch in input.trim().to_lowercase().chars() {
+    for ch in input.chars() {
         match ch {
             'а' => out.push('a'),
             'б' => out.push('b'),
             'в' => out.push('v'),
             'г' => out.push('g'),
             'д' => out.push('d'),
-            'е' | 'ё' | 'э' => out.push('e'),
+            'е' | 'ё' | 'ѣ' | 'э' => out.push('e'),
             'ж' => out.push_str("zh"),
             'з' => out.push('z'),
-            'и' | 'й' | 'ы' => out.push('i'),
+            'и' | 'й' | 'ы' | 'і' | 'ѵ' => out.push('i'),
             'к' => out.push('k'),
             'л' => out.push('l'),
             'м' => out.push('m'),
@@ -208,7 +286,7 @@ pub fn normalize_search_tokens(input: &str) -> String {
             'с' => out.push('s'),
             'т' => out.push('t'),
             'у' => out.push('u'),
-            'ф' => out.push('f'),
+            'ф' | 'ѳ' => out.push('f'),
             'х' => out.push_str("kh"),
             'ц' => out.push_str("ts"),
             'ч' => out.push_str("ch"),
@@ -221,7 +299,91 @@ pub fn normalize_search_tokens(input: &str) -> String {
             other => out.push(other),
         }
     }
+    // Canonicalize Latin y/i variations at endings (e.g. "sky" / "skiy" / "skii" -> "ski")
+    if out.len() > 4 {
+        if let Some(stem) = out
+            .strip_suffix("skiy")
+            .or_else(|| out.strip_suffix("skii"))
+            .or_else(|| out.strip_suffix("sky"))
+        {
+            return format!("{stem}ski");
+        }
+    }
     out
+}
+
+/// Normalizes Cyrillic and Latin text into a space-separated token stream containing:
+/// 1. Pre-1918 Russian orthography normalized tokens (`ѣ->е`, `і->и`, `ѳ->ф`, `ѵ->и`, trailing `ъ` stripped, `ё->е`),
+/// 2. Slavic surname gender-folded stem tokens (`Петрова -> петров`, `Petrova -> petrov`), and
+/// 3. Bidirectional cross-script Latin transliteration tokens (`Щеглов <-> shcheglov`, `Тверь <-> tver`).
+pub fn normalize_search_tokens(input: &str) -> String {
+    let mut tokens: Vec<String> = Vec::new();
+    for raw_word in input
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+    {
+        let ortho = normalize_russian_orthography_word(raw_word);
+        let folded = fold_slavic_surname_stem(&ortho);
+        let latin_ortho = transliterate_to_latin(&ortho);
+        let latin_folded = transliterate_to_latin(&folded);
+
+        for candidate in [ortho, folded, latin_ortho, latin_folded] {
+            if !candidate.is_empty() && !tokens.contains(&candidate) {
+                tokens.push(candidate);
+            }
+        }
+    }
+    tokens.join(" ")
+}
+
+/// Parsed search query separating free-text name tokens from an optional 4-digit birth year hint (`13 §2.3`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedSearchQuery {
+    pub raw: String,
+    pub text_tokens: Vec<String>,
+    pub year_hint: Option<i32>,
+    pub exact_gid: Option<String>,
+}
+
+pub fn parse_search_query(q: &str) -> ParsedSearchQuery {
+    let trimmed = q.trim();
+    let raw_parts: Vec<&str> = trimmed.split_whitespace().collect();
+
+    let mut year_hint: Option<i32> = None;
+    let mut text_tokens: Vec<String> = Vec::new();
+    let mut exact_gid: Option<String> = None;
+
+    if raw_parts.len() == 1 {
+        let single = raw_parts[0].trim_matches('@').to_ascii_uppercase();
+        if single.len() >= 2
+            && matches!(single.chars().next(), Some('I' | 'F' | 'E' | 'P' | 'M'))
+            && single[1..].chars().all(|c| c.is_ascii_digit())
+        {
+            exact_gid = Some(single);
+        }
+    }
+
+    for part in &raw_parts {
+        if year_hint.is_none() && part.len() == 4 && part.chars().all(|c| c.is_ascii_digit()) {
+            if let Ok(yr) = part.parse::<i32>() {
+                if (1000..=2100).contains(&yr) {
+                    year_hint = Some(yr);
+                    continue;
+                }
+            }
+        }
+        let cleaned = normalize_russian_orthography_word(part);
+        if !cleaned.is_empty() {
+            text_tokens.push(cleaned);
+        }
+    }
+
+    ParsedSearchQuery {
+        raw: trimmed.to_string(),
+        text_tokens,
+        year_hint,
+        exact_gid,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
