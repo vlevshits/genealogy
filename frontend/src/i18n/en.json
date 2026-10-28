@@ -118,7 +118,10 @@
     "removeChip": "Remove {label}",
     "expand": "Expand section",
     "collapse": "Collapse section",
-    "actions": "Actions"
+    "actions": "Actions",
+    "somethingWentWrong": "Something went wrong",
+    "errorBoundaryDescription": "An unexpected error occurred while rendering the page.",
+    "reloadPage": "Reload page"
   },
   "gendate": {
     "placeholder": "e.g. 14 Jul 1923, abt 1890, до мая 1860…",

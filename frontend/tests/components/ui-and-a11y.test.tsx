@@ -14,6 +14,7 @@ import {
   DataTable,
   BulkActionBar,
   Button,
+  ErrorBoundary,
 } from '../../src/components/ui';
 import { GenDateInput, Form, FormField, useForm } from '../../src/components/form';
 import { DevUiWorkbench } from '../../src/pages/DevUiWorkbench';
@@ -281,6 +282,33 @@ describe('Component Library, Accessibility & Design Token Verification', () => {
     );
     expect(htmlShell).toContain('env(safe-area-inset-top,0px)');
     expect(htmlShell).toContain('⌘K');
+  });
+
+  it('renders localized ErrorBoundary recovery card on uncaught component errors in EN and RU', () => {
+    const errorState = ErrorBoundary.getDerivedStateFromError(new Error('Test crash'));
+    expect(errorState.hasError).toBe(true);
+    expect(errorState.error?.message).toBe('Test crash');
+
+    const enHtml = renderWithProviders(
+      <ErrorBoundary initialError={new Error('Test crash')}>
+        <div>Normal content</div>
+      </ErrorBoundary>,
+      'en'
+    );
+    expect(enHtml).toContain('Something went wrong');
+    expect(enHtml).toContain('An unexpected error occurred while rendering the page.');
+    expect(enHtml).toContain('Reload page');
+    expect(enHtml).toContain('role="alert"');
+
+    const ruHtml = renderWithProviders(
+      <ErrorBoundary initialError={new Error('Test crash')}>
+        <div>Normal content</div>
+      </ErrorBoundary>,
+      'ru'
+    );
+    expect(ruHtml).toContain('Что-то пошло не так');
+    expect(ruHtml).toContain('Произошла непредвиденная ошибка при отображении страницы.');
+    expect(ruHtml).toContain('Обновить страницу');
   });
 });
 

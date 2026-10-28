@@ -4,7 +4,7 @@ import App from './App';
 import { I18nProvider } from './i18n';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider } from './lib/auth-context';
-import { ToastProvider, ConfirmProvider } from './components/ui';
+import { ToastProvider, ConfirmProvider, ErrorBoundary } from './components/ui';
 import './index.css';
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -22,7 +22,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <ToastProvider>
           <ConfirmProvider>
             <AuthProvider>
-              <App />
+              <ErrorBoundary>
+                <App />
+              </ErrorBoundary>
             </AuthProvider>
           </ConfirmProvider>
         </ToastProvider>

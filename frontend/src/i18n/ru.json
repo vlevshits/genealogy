@@ -118,7 +118,10 @@
     "removeChip": "Удалить {label}",
     "expand": "Развернуть секцию",
     "collapse": "Свернуть секцию",
-    "actions": "Действия"
+    "actions": "Действия",
+    "somethingWentWrong": "Что-то пошло не так",
+    "errorBoundaryDescription": "Произошла непредвиденная ошибка при отображении страницы.",
+    "reloadPage": "Обновить страницу"
   },
   "gendate": {
     "placeholder": "напр. 14.07.1923, ок. 1890, до мая 1860…",

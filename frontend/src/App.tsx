@@ -79,12 +79,13 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
 
   const loadOnboardingStatus = useCallback(() => {
     if (initialOnboardingStatus) return;
+    if (!isAuthenticated) return;
     fetchOnboardingStatus()
       .then((status) => {
         setOnboardingStatus(status);
       })
       .catch(() => {});
-  }, [initialOnboardingStatus]);
+  }, [initialOnboardingStatus, isAuthenticated]);
 
   useEffect(() => {
     if (initialOnboardingStatus) {
@@ -94,7 +95,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     loadOnboardingStatus();
   }, [initialOnboardingStatus, loadOnboardingStatus, isAuthenticated]);
 
-  const navigate = (nextPath: string) => {
+  const navigate = useCallback((nextPath: string) => {
     const baseOrigin =
       typeof window !== 'undefined'
         ? window.location.origin
@@ -105,7 +106,97 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     }
     setPath(parsed.pathname);
     setSearch(parsed.search);
-  };
+  }, []);
+
+  // Determine whether this route is restricted for unauthenticated visitors in public mode (02 §3.2)
+  const isRestrictedUnauthenticatedRoute =
+    !isAuthenticated &&
+    Boolean(setupStatus?.enable_public_access) &&
+    (path.startsWith('/people') ||
+      path.startsWith('/media') ||
+      path.startsWith('/places') ||
+      path.startsWith('/settings') ||
+      path.startsWith('/history') ||
+      path.startsWith('/quality') ||
+      path.startsWith('/export') ||
+      (path !== '/' &&
+        !path.startsWith('/tree') &&
+        !path.startsWith('/persons/') &&
+        !path.startsWith('/login') &&
+        !path.startsWith('/register') &&
+        !path.startsWith('/setup') &&
+        !path.startsWith('/magic-link/verify') &&
+        !path.startsWith('/dev/ui')));
+
+  // In public tree mode: redirect restricted auxiliary routes to /login with returnUrl
+  useEffect(() => {
+    if (
+      !isLoading &&
+      !isAuthenticated &&
+      setupStatus?.enable_public_access &&
+      isRestrictedUnauthenticatedRoute &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login')
+    ) {
+      const returnUrl = `${path}${search}`;
+      window.history.replaceState(
+        {},
+        '',
+        `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+      );
+    }
+  }, [
+    isLoading,
+    isAuthenticated,
+    setupStatus?.enable_public_access,
+    isRestrictedUnauthenticatedRoute,
+    path,
+    search,
+  ]);
+
+  // In default private archive mode: update address bar cleanly to /login when unauthenticated
+  useEffect(() => {
+    if (
+      !isLoading &&
+      backendReachable &&
+      setupStatus?.is_initialized &&
+      !setupStatus.enable_public_access &&
+      !isAuthenticated &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login') &&
+      !window.location.pathname.startsWith('/register') &&
+      !window.location.pathname.startsWith('/setup') &&
+      !window.location.pathname.startsWith('/magic-link/verify') &&
+      !window.location.pathname.startsWith('/dev/ui')
+    ) {
+      const returnUrl = path !== '/' ? `${path}${search}` : '';
+      const targetUrl = returnUrl
+        ? `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+        : '/login';
+      if (window.location.pathname + window.location.search !== targetUrl) {
+        window.history.replaceState({}, '', targetUrl);
+      }
+    }
+  }, [
+    isLoading,
+    backendReachable,
+    setupStatus?.is_initialized,
+    setupStatus?.enable_public_access,
+    isAuthenticated,
+    path,
+    search,
+  ]);
+
+  // Render loading state while authenticating or fetching instance setup status
+  if (isLoading && !initialOnboardingStatus) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-surface gap-3 text-secondary">
+        <BrandLogoIcon className="h-8 w-8 text-brand animate-pulse" />
+        <Spinner size="lg" />
+        <span className="text-sm font-medium">{t('common.loading')}</span>
+      </div>
+    );
+  }
 
   // 1. Dev UI Workbench route
   if (path.startsWith('/dev/ui')) {
@@ -135,12 +226,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   }
 
   // 2. First-run uninitialized instance guard -> /setup (01 §2.1)
-  if (
-    !isLoading &&
-    backendReachable &&
-    setupStatus &&
-    !setupStatus.is_initialized
-  ) {
+  if (backendReachable && setupStatus && !setupStatus.is_initialized) {
     return (
       <AuthPages
         currentPath="/setup"
@@ -182,16 +268,20 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   // 4. Default Private Landing Guard (01-auth-pages.md §1, §4 DoD #1):
   // When instance is initialized, private (enable_public_access === false), and visitor is unauthenticated
   if (
-    !isLoading &&
     backendReachable &&
     setupStatus &&
     setupStatus.is_initialized &&
     !setupStatus.enable_public_access &&
     !isAuthenticated
   ) {
+    const returnUrl = path !== '/' ? `${path}${search}` : '';
+    const loginSearch = returnUrl
+      ? `?returnUrl=${encodeURIComponent(returnUrl)}`
+      : '';
     return (
       <AuthPages
         currentPath="/login"
+        search={loginSearch}
         instanceTitle={instanceTitle || setupStatus.tree_title}
         onNavigate={navigate}
       />
@@ -201,41 +291,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   // 4b. Public Tree Mode Guard (02-rbac-access-control.md §3.2):
   // When visitor is unauthenticated, permitted surface is ONLY: /, /tree, /persons/:id, /login, /register (and /setup, /magic-link/verify).
   // Auxiliary routes (/people*, /media*, /places*, /settings*, /history*, /quality*, /people/merge*, /export*) redirect to /login with returnUrl.
-  const isRestrictedUnauthenticatedRoute =
-    path.startsWith('/people') ||
-    path.startsWith('/media') ||
-    path.startsWith('/places') ||
-    path.startsWith('/settings') ||
-    path.startsWith('/history') ||
-    path.startsWith('/quality') ||
-    path.startsWith('/export') ||
-    (path !== '/' &&
-      !path.startsWith('/tree') &&
-      !path.startsWith('/persons/') &&
-      !path.startsWith('/login') &&
-      !path.startsWith('/register') &&
-      !path.startsWith('/setup') &&
-      !path.startsWith('/magic-link/verify') &&
-      !path.startsWith('/dev/ui'));
-
-  useEffect(() => {
-    if (
-      !isLoading &&
-      !isAuthenticated &&
-      isRestrictedUnauthenticatedRoute &&
-      typeof window !== 'undefined' &&
-      !window.location.pathname.startsWith('/login')
-    ) {
-      const returnUrl = `${path}${search}`;
-      window.history.replaceState(
-        {},
-        '',
-        `/login?returnUrl=${encodeURIComponent(returnUrl)}`
-      );
-    }
-  }, [isLoading, isAuthenticated, isRestrictedUnauthenticatedRoute, path, search]);
-
-  if (!isLoading && !isAuthenticated && isRestrictedUnauthenticatedRoute) {
+  if (!isAuthenticated && isRestrictedUnauthenticatedRoute) {
     const returnUrl = `${path}${search}`;
     return (
       <AuthPages

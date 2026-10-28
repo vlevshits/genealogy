@@ -60,3 +60,4 @@ export * from './markdown-view';
 export * from './image';
 export * from './comparison-table';
 export * from './data-table';
+export * from './error-boundary';

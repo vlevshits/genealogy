@@ -205,7 +205,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onSignIn,
 }) => {
   const { t } = useI18n();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, setupStatus } = useAuth();
   const { addToast } = useToast();
 
   const effectiveTier =
@@ -241,6 +241,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const loadDashboard = useCallback(
     (targetScope: 'all' | 'close') => {
       if (initialDashboard) return;
+      if (!isAuthenticated && !setupStatus?.enable_public_access) return;
       dashboardApi
         .getDashboard(targetScope)
         .then((res) => {
@@ -258,7 +259,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         })
         .catch(() => {});
     },
-    [initialDashboard]
+    [initialDashboard, isAuthenticated, setupStatus?.enable_public_access]
   );
 
   useEffect(() => {
