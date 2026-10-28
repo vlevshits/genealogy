@@ -17,6 +17,7 @@ import {
 import {
   PersonBottomSheet,
   PersonDrawer,
+  PersonNodeCard,
   TreeCanvas,
 } from '../../src/components/tree';
 
@@ -248,5 +249,191 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
     expect(quickAddSrc).toContain("setBirthDate('')");
     expect(quickAddSrc).toContain('setParsedBirthDate(null)');
     expect(quickAddSrc).toContain("setBirthPlace('')");
+  });
+
+  it('excludes unconnected orphan collateral nodes from hourglass layout projection', () => {
+    const sample = buildDefaultTreeViewData('admin', 'hourglass');
+    // Default sample includes 'node-private-1' with no family/edge connection to focal person
+    expect(sample.nodes.some((n) => n.id === 'node-private-1')).toBe(true);
+
+    const layout = computeHourglassLayout(sample, 4);
+    // Direct focal, spouse and child are placed
+    expect(layout.nodes.some((n) => n.id === 'node-deceased-1')).toBe(true);
+    expect(layout.nodes.some((n) => n.id === 'node-deceased-2')).toBe(true);
+    expect(layout.nodes.some((n) => n.id === 'node-living-1')).toBe(true);
+    // Collateral orphan node is excluded from hourglass layout
+    expect(layout.nodes.some((n) => n.id === 'node-private-1')).toBe(false);
+  });
+
+  it('renders ancestor couples with spouse edges and unified lineage stems, and routes single ancestors cleanly', () => {
+    // Elena ('node-living-1') is focal with both parents Alexander ('node-deceased-1') and Sofia ('node-deceased-2')
+    const sample = {
+      ...buildDefaultTreeViewData('admin', 'hourglass'),
+      focal_id: 'node-living-1',
+    };
+
+    const layout = computeHourglassLayout(sample, 4);
+    const focalNode = layout.nodes.find((n) => n.id === 'node-living-1')!;
+    const fatherNode = layout.nodes.find((n) => n.id === 'node-deceased-1')!;
+    const motherNode = layout.nodes.find((n) => n.id === 'node-deceased-2')!;
+
+    expect(focalNode).toBeDefined();
+    expect(fatherNode).toBeDefined();
+    expect(motherNode).toBeDefined();
+    expect(fatherNode.generation).toBe(-1);
+    expect(motherNode.generation).toBe(-1);
+
+    // 1. Ancestor couple has horizontal spouse edge
+    const ancestorSpouseEdge = layout.edges.find(
+      (e) =>
+        e.kind === 'spouse' &&
+        e.sourceId === fatherNode.id &&
+        e.targetId === motherNode.id
+    );
+    expect(ancestorSpouseEdge).toBeDefined();
+    expect(ancestorSpouseEdge!.sourceX).toBe(fatherNode.x + fatherNode.width);
+    expect(ancestorSpouseEdge!.targetX).toBe(motherNode.x);
+
+    // 2. Exactly ONE unified lineage stem drops from the couple down to the child
+    const lineageEdges = layout.edges.filter(
+      (e) => e.kind === 'parent_child' && e.targetId === focalNode.id
+    );
+    expect(lineageEdges).toHaveLength(1);
+    const stem = lineageEdges[0];
+    const expectedUnionCenterX =
+      (fatherNode.x + fatherNode.width + motherNode.x) / 2;
+    const expectedChildCenterX = focalNode.x + focalNode.width / 2;
+    expect(stem.sourceX).toBe(expectedUnionCenterX);
+    expect(stem.targetX).toBe(expectedChildCenterX);
+    expect(stem.sourceY).toBe(fatherNode.y + fatherNode.height / 2);
+    expect(stem.targetY).toBe(focalNode.y);
+    expect(stem.isDirectLineage).toBe(true);
+
+    // 3. Single ancestor routing (e.g. only mother Sofia known, no father)
+    const singleMotherSample = {
+      ...sample,
+      families: [
+        {
+          ...sample.families[0],
+          partner1_id: 'node-deceased-2',
+          partner2_id: null,
+          children: [
+            {
+              child_id: 'node-living-1',
+              rel_to_partner1: 'birth',
+              rel_to_partner2: null,
+              sort_order: 0,
+            },
+          ],
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-pc-2',
+          source: 'node-deceased-2',
+          target: 'node-living-1',
+          kind: 'parent_child' as const,
+          family_id: 'fam-1',
+        },
+      ],
+    };
+    const singleLayout = computeHourglassLayout(singleMotherSample, 4);
+    const singleMother = singleLayout.nodes.find(
+      (n) => n.id === 'node-deceased-2'
+    )!;
+    expect(singleMother).toBeDefined();
+    // No ancestor spouse edge exists
+    expect(
+      singleLayout.edges.some(
+        (e) => e.kind === 'spouse' && e.sourceId === 'node-deceased-2'
+      )
+    ).toBe(false);
+    // Direct clean route from mother to child without stray line
+    const motherLineage = singleLayout.edges.find(
+      (e) =>
+        e.kind === 'parent_child' &&
+        e.sourceId === singleMother.id &&
+        e.targetId === focalNode.id
+    );
+    expect(motherLineage).toBeDefined();
+    expect(motherLineage!.sourceX).toBe(singleMother.x + singleMother.width / 2);
+    expect(motherLineage!.targetX).toBe(expectedChildCenterX);
+  });
+
+  it('supports left-click and keyboard navigation (Enter and Space) on PersonNodeCard and exempts cards from canvas pointer capture (UX-029)', () => {
+    const sample = buildDefaultTreeViewData('admin', 'hourglass');
+    const person = sample.nodes[0];
+
+    let selectedNode: unknown = null;
+    const handleSelect = (n: unknown) => {
+      selectedNode = n;
+    };
+
+    // Render PersonNodeCard to check accessibility attributes (role="treeitem", tabIndex=0, data-node-id, focus ring)
+    const html = renderWithProviders(
+      <PersonNodeCard node={person} onSelect={handleSelect} />
+    );
+    expect(html).toContain('role="treeitem"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain(`data-node-id="${person.id}"`);
+    expect(html).toContain('focus-visible:ring-2');
+
+    // Verify keyboard handlers (Enter and Space) and click handler via React rendering harness
+    let capturedElement: React.ReactElement<{
+      tabIndex: number;
+      onKeyDown: (e: { key: string; preventDefault: () => void }) => void;
+      onClick: (e: { stopPropagation: () => void }) => void;
+    }> | null = null;
+
+    function TestHarness() {
+      capturedElement = PersonNodeCard({
+        node: person,
+        onSelect: handleSelect,
+      }) as React.ReactElement<{
+        tabIndex: number;
+        onKeyDown: (e: { key: string; preventDefault: () => void }) => void;
+        onClick: (e: { stopPropagation: () => void }) => void;
+      }>;
+      return null;
+    }
+
+    renderWithProviders(<TestHarness />);
+    expect(capturedElement).not.toBeNull();
+    const cardEl = capturedElement!;
+    expect(cardEl.props.tabIndex).toBe(0);
+
+    let prevented = false;
+    const mockPreventDefault = () => {
+      prevented = true;
+    };
+    const mockStopPropagation = () => {};
+
+    // Test Enter key
+    selectedNode = null;
+    prevented = false;
+    cardEl.props.onKeyDown({ key: 'Enter', preventDefault: mockPreventDefault });
+    expect(prevented).toBe(true);
+    expect(selectedNode).toBe(person);
+
+    // Test Space key
+    selectedNode = null;
+    prevented = false;
+    cardEl.props.onKeyDown({ key: ' ', preventDefault: mockPreventDefault });
+    expect(prevented).toBe(true);
+    expect(selectedNode).toBe(person);
+
+    // Test single left-click
+    selectedNode = null;
+    cardEl.props.onClick({ stopPropagation: mockStopPropagation });
+    expect(selectedNode).toBe(person);
+
+    // Verify TreeCanvas source code contains [role="treeitem"] and [data-node-id] in pointerdown exemption
+    const treeCanvasPath = path.resolve(
+      __dirname,
+      '../../src/components/tree/TreeCanvas.tsx'
+    );
+    const treeCanvasSrc = fs.readFileSync(treeCanvasPath, 'utf-8');
+    expect(treeCanvasSrc).toContain('[role="treeitem"]');
+    expect(treeCanvasSrc).toContain('[data-node-id]');
   });
 });

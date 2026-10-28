@@ -59,7 +59,18 @@ The Media Archive is a visual gallery celebrating family history through photogr
   - **Untagged Filter:** Shows photos where faces have not yet been identified.
 - **Upload Action (`+ Upload Media`):**
   - Visible and active exclusively for **Editors and Admins** (hidden for Viewers).
-  - Supports drag-and-drop batch upload of up to 50 photos/documents with progress indicators.
+  - Clicking opens the **Media Upload Dialog** and also accepts drag-and-drop directly onto the gallery view.
+  - **Supported Ingestion Modes:**
+    - **Individual Files:** Up to 50 photos/documents simultaneously (JPEG, PNG, WebP, AVIF, TIFF, PDF).
+    - **Batch ZIP Media Archive:** A single `.zip` archive bundle up to 500MB (such as a Gramps Web media export).
+  - **Upload Dialog Dropzone Copy:** *"Drag photos or a media ZIP archive here, or browse files (up to 500MB)"*.
+  - **Multi-Stage Progress Display:**
+    1. `Stage 1: Uploading...` [===>    ] 45% (23 MB / 51.5 MB)
+    2. `Stage 2: Decompressing & matching...` (e.g. `Checking 129 files against missing stubs`)
+    3. `Stage 3: Generating thumbnails...` (e.g. `Optimizing 129 WebP variants`)
+  - **Batch Ingestion Result Modal:**
+    - Detailed summary: `129 files processed` (e.g., `129 missing stubs reconciled`, `0 new photos added`, `0 skipped`).
+    - Masonry gallery automatically re-queries and displays newly available photo cards immediately.
 
 ### 3.2 Responsive Media Wall
 - Masonry / Virtualized Grid displaying thumbnails with lazy loading.
@@ -88,6 +99,8 @@ When a photo is clicked, a full-screen dual-pane modal opens:
 - [ ] **Authenticated-Only Route:** Unauthenticated visitors attempting to access `/media` are redirected to `/login`; media assets tagged to living persons return 404 for unauthenticated requests.
 - [ ] **Viewer Read-Only Experience:** Authenticated Viewers can search, filter, view full-resolution photos, examine face tags, and download individual photos, but cannot upload media or alter face coordinates.
 - [ ] **Editor & Admin Media Management:** Editors and Admins can batch-upload media, draw/resize/delete rectangular face boxes, and designate primary profile avatars.
+- [ ] **Batch ZIP Archive Ingestion:** Uploading a `.zip` file up to 500MB via the upload modal or gallery drag-and-drop displays live 3-stage progress (uploading, extracting/matching, thumbnailing) and updates the gallery upon completion.
+- [ ] **Dual Ingestion Feedback:** The batch completion modal distinctly shows the number of existing missing stubs reconciled vs newly ingested photos.
 - [ ] **Fluid Masonry Layout:** Images of varying aspect ratios arrange seamlessly without awkward whitespace.
 - [ ] **Interactive Face Bounding Boxes:** Drawing, resizing, and deleting face boxes updates coordinates in real-time.
 - [ ] **Instant Avatar Crop:** Designating a tagged face as primary avatar crops and refreshes avatar images across tree cards immediately.

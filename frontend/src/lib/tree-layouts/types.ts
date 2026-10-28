@@ -152,11 +152,15 @@ export function buildTreeGraphIndex(data: TreeViewResponse): TreeGraphIndex {
       childRel.parentIds.push(parentId);
     }
 
+    if (childRel.fatherId === parentId || childRel.motherId === parentId) {
+      return;
+    }
+
     if (parentNode.sex === 'M' && !childRel.fatherId) {
       childRel.fatherId = parentId;
     } else if (parentNode.sex === 'F' && !childRel.motherId) {
       childRel.motherId = parentId;
-    } else if (!childRel.fatherId) {
+    } else if (!childRel.fatherId && childRel.motherId !== parentId) {
       childRel.fatherId = parentId;
     } else if (!childRel.motherId && childRel.fatherId !== parentId) {
       childRel.motherId = parentId;

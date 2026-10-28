@@ -127,16 +127,100 @@ export function computeHourglassLayout(
     const rel = relativesMap.get(childId);
     const parentY = -gen * ROW_STEP;
 
-    // Father (left slot: 2 * slotIdx)
     const fatherSlotIdx = slotIdx * 2;
     const fatherX = ancestorSlotX(gen, fatherSlotIdx);
-    const fatherId = rel?.fatherId ?? null;
+    let fatherId = rel?.fatherId ?? null;
 
-    if (fatherId && nodeMap.has(fatherId) && !placedIds.has(fatherId)) {
-      placedIds.add(fatherId);
+    const motherSlotIdx = slotIdx * 2 + 1;
+    const motherX = ancestorSlotX(gen, motherSlotIdx);
+    let motherId = rel?.motherId ?? null;
+
+    if (fatherId && motherId && fatherId === motherId) {
+      const pNode = nodeMap.get(fatherId);
+      if (pNode?.sex === 'F') {
+        fatherId = null;
+      } else {
+        motherId = null;
+      }
+    }
+
+    const fatherNode = fatherId ? nodeMap.get(fatherId) : undefined;
+    const hasFather = Boolean(fatherId && fatherNode && !placedIds.has(fatherId));
+
+    const motherNode = motherId ? nodeMap.get(motherId) : undefined;
+    const hasMother = Boolean(motherId && motherNode && !placedIds.has(motherId));
+
+    const childCenterX = childX + CARD_WIDTH / 2;
+
+    if (hasFather && hasMother) {
+      placedIds.add(fatherId!);
+      placedIds.add(motherId!);
       nodes.push({
-        id: fatherId,
-        node: nodeMap.get(fatherId)!,
+        id: fatherId!,
+        node: fatherNode!,
+        x: fatherX,
+        y: parentY,
+        width: CARD_WIDTH,
+        height: CARD_HEIGHT,
+        generation: -gen,
+        isFocal: false,
+      });
+      nodes.push({
+        id: motherId!,
+        node: motherNode!,
+        x: motherX,
+        y: parentY,
+        width: CARD_WIDTH,
+        height: CARD_HEIGHT,
+        generation: -gen,
+        isFocal: false,
+      });
+
+      // Horizontal spouse connector between father and mother
+      edges.push({
+        id: `hg-anc-spouse-${fatherId}-${motherId}`,
+        sourceId: fatherId!,
+        targetId: motherId!,
+        kind: 'spouse',
+        sourceX: fatherX + CARD_WIDTH,
+        sourceY: parentY + CARD_HEIGHT / 2,
+        targetX: motherX,
+        targetY: parentY + CARD_HEIGHT / 2,
+        pathD: buildSpouseConnectorPath(
+          fatherX + CARD_WIDTH,
+          parentY + CARD_HEIGHT / 2,
+          motherX,
+          parentY + CARD_HEIGHT / 2
+        ),
+      });
+
+      // Single direct lineage connector dropping from center of the couple's union down to child's top center
+      const unionCenterX = (fatherX + CARD_WIDTH + motherX) / 2;
+      edges.push({
+        id: `hg-anc-${fatherId}-${childId}`,
+        sourceId: fatherId!,
+        targetId: childId,
+        kind: 'parent_child',
+        sourceX: unionCenterX,
+        sourceY: parentY + CARD_HEIGHT / 2,
+        targetX: childCenterX,
+        targetY: childY,
+        pathD: buildVerticalBusPath(
+          unionCenterX,
+          parentY + CARD_HEIGHT / 2,
+          childCenterX,
+          childY
+        ),
+        isDirectLineage: true,
+      });
+
+      placeAncestorBranch(fatherId!, fatherX, parentY, gen + 1, fatherSlotIdx);
+      placeAncestorBranch(motherId!, motherX, parentY, gen + 1, motherSlotIdx);
+    } else if (hasFather) {
+      placedIds.add(fatherId!);
+      nodes.push({
+        id: fatherId!,
+        node: fatherNode!,
         x: fatherX,
         y: parentY,
         width: CARD_WIDTH,
@@ -146,62 +230,57 @@ export function computeHourglassLayout(
       });
       edges.push({
         id: `hg-anc-${fatherId}-${childId}`,
-        sourceId: fatherId,
+        sourceId: fatherId!,
         targetId: childId,
         kind: 'parent_child',
         sourceX: fatherX + CARD_WIDTH / 2,
         sourceY: parentY + CARD_HEIGHT,
-        targetX: childX + CARD_WIDTH / 2,
+        targetX: childCenterX,
         targetY: childY,
         pathD: buildVerticalBusPath(
           fatherX + CARD_WIDTH / 2,
           parentY + CARD_HEIGHT,
-          childX + CARD_WIDTH / 2,
+          childCenterX,
           childY
         ),
         isDirectLineage: true,
       });
-      placeAncestorBranch(fatherId, fatherX, parentY, gen + 1, fatherSlotIdx);
-    } else if (gen === 1) {
-      const phId = `hg-ph-father-${childId}`;
-      placeholders.push({
-        id: phId,
-        anchorId: childId,
-        relation: 'father',
-        x: fatherX,
-        y: parentY,
-        width: CARD_WIDTH,
-        height: CARD_HEIGHT,
-        generation: -gen,
-      });
-      edges.push({
-        id: `hg-ph-edge-${phId}`,
-        sourceId: phId,
-        targetId: childId,
-        kind: 'placeholder',
-        sourceX: fatherX + CARD_WIDTH / 2,
-        sourceY: parentY + CARD_HEIGHT,
-        targetX: childX + CARD_WIDTH / 2,
-        targetY: childY,
-        pathD: buildVerticalBusPath(
-          fatherX + CARD_WIDTH / 2,
-          parentY + CARD_HEIGHT,
-          childX + CARD_WIDTH / 2,
-          childY
-        ),
-      });
-    }
+      placeAncestorBranch(fatherId!, fatherX, parentY, gen + 1, fatherSlotIdx);
 
-    // Mother (right slot: 2 * slotIdx + 1)
-    const motherSlotIdx = slotIdx * 2 + 1;
-    const motherX = ancestorSlotX(gen, motherSlotIdx);
-    const motherId = rel?.motherId ?? null;
-
-    if (motherId && nodeMap.has(motherId) && !placedIds.has(motherId)) {
-      placedIds.add(motherId);
+      if (gen === 1) {
+        const phId = `hg-ph-mother-${childId}`;
+        placeholders.push({
+          id: phId,
+          anchorId: childId,
+          relation: 'mother',
+          x: motherX,
+          y: parentY,
+          width: CARD_WIDTH,
+          height: CARD_HEIGHT,
+          generation: -gen,
+        });
+        edges.push({
+          id: `hg-ph-edge-${phId}`,
+          sourceId: phId,
+          targetId: childId,
+          kind: 'placeholder',
+          sourceX: motherX + CARD_WIDTH / 2,
+          sourceY: parentY + CARD_HEIGHT,
+          targetX: childCenterX,
+          targetY: childY,
+          pathD: buildVerticalBusPath(
+            motherX + CARD_WIDTH / 2,
+            parentY + CARD_HEIGHT,
+            childCenterX,
+            childY
+          ),
+        });
+      }
+    } else if (hasMother) {
+      placedIds.add(motherId!);
       nodes.push({
-        id: motherId,
-        node: nodeMap.get(motherId)!,
+        id: motherId!,
+        node: motherNode!,
         x: motherX,
         y: parentY,
         width: CARD_WIDTH,
@@ -211,26 +290,84 @@ export function computeHourglassLayout(
       });
       edges.push({
         id: `hg-anc-${motherId}-${childId}`,
-        sourceId: motherId,
+        sourceId: motherId!,
         targetId: childId,
         kind: 'parent_child',
         sourceX: motherX + CARD_WIDTH / 2,
         sourceY: parentY + CARD_HEIGHT,
-        targetX: childX + CARD_WIDTH / 2,
+        targetX: childCenterX,
         targetY: childY,
         pathD: buildVerticalBusPath(
           motherX + CARD_WIDTH / 2,
           parentY + CARD_HEIGHT,
-          childX + CARD_WIDTH / 2,
+          childCenterX,
           childY
         ),
         isDirectLineage: true,
       });
-      placeAncestorBranch(motherId, motherX, parentY, gen + 1, motherSlotIdx);
+      placeAncestorBranch(motherId!, motherX, parentY, gen + 1, motherSlotIdx);
+
+      if (gen === 1) {
+        const phId = `hg-ph-father-${childId}`;
+        placeholders.push({
+          id: phId,
+          anchorId: childId,
+          relation: 'father',
+          x: fatherX,
+          y: parentY,
+          width: CARD_WIDTH,
+          height: CARD_HEIGHT,
+          generation: -gen,
+        });
+        edges.push({
+          id: `hg-ph-edge-${phId}`,
+          sourceId: phId,
+          targetId: childId,
+          kind: 'placeholder',
+          sourceX: fatherX + CARD_WIDTH / 2,
+          sourceY: parentY + CARD_HEIGHT,
+          targetX: childCenterX,
+          targetY: childY,
+          pathD: buildVerticalBusPath(
+            fatherX + CARD_WIDTH / 2,
+            parentY + CARD_HEIGHT,
+            childCenterX,
+            childY
+          ),
+        });
+      }
     } else if (gen === 1) {
-      const phId = `hg-ph-mother-${childId}`;
+      const phFatherId = `hg-ph-father-${childId}`;
       placeholders.push({
-        id: phId,
+        id: phFatherId,
+        anchorId: childId,
+        relation: 'father',
+        x: fatherX,
+        y: parentY,
+        width: CARD_WIDTH,
+        height: CARD_HEIGHT,
+        generation: -gen,
+      });
+      edges.push({
+        id: `hg-ph-edge-${phFatherId}`,
+        sourceId: phFatherId,
+        targetId: childId,
+        kind: 'placeholder',
+        sourceX: fatherX + CARD_WIDTH / 2,
+        sourceY: parentY + CARD_HEIGHT,
+        targetX: childCenterX,
+        targetY: childY,
+        pathD: buildVerticalBusPath(
+          fatherX + CARD_WIDTH / 2,
+          parentY + CARD_HEIGHT,
+          childCenterX,
+          childY
+        ),
+      });
+
+      const phMotherId = `hg-ph-mother-${childId}`;
+      placeholders.push({
+        id: phMotherId,
         anchorId: childId,
         relation: 'mother',
         x: motherX,
@@ -240,18 +377,18 @@ export function computeHourglassLayout(
         generation: -gen,
       });
       edges.push({
-        id: `hg-ph-edge-${phId}`,
-        sourceId: phId,
+        id: `hg-ph-edge-${phMotherId}`,
+        sourceId: phMotherId,
         targetId: childId,
         kind: 'placeholder',
         sourceX: motherX + CARD_WIDTH / 2,
         sourceY: parentY + CARD_HEIGHT,
-        targetX: childX + CARD_WIDTH / 2,
+        targetX: childCenterX,
         targetY: childY,
         pathD: buildVerticalBusPath(
           motherX + CARD_WIDTH / 2,
           parentY + CARD_HEIGHT,
-          childX + CARD_WIDTH / 2,
+          childCenterX,
           childY
         ),
       });
@@ -436,25 +573,6 @@ export function computeHourglassLayout(
         isDirectLineage: true,
       });
       cursorX += cp.subtreeWidth + H_GAP;
-    }
-  }
-
-  // Place any remaining unplaced nodes neatly to the right of generation 0
-  let unplacedIdx = 0;
-  for (const n of data.nodes) {
-    if (!placedIds.has(n.id)) {
-      placedIds.add(n.id);
-      nodes.push({
-        id: n.id,
-        node: n,
-        x: (unplacedIdx + 2) * (CARD_WIDTH + H_GAP),
-        y: 0,
-        width: CARD_WIDTH,
-        height: CARD_HEIGHT,
-        generation: 0,
-        isFocal: false,
-      });
-      unplacedIdx++;
     }
   }
 

@@ -286,7 +286,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
       targetEl &&
       typeof targetEl.closest === 'function' &&
       targetEl.closest(
-        'button, [role="button"], [role="radio"], select, input'
+        'button, [role="button"], [role="radio"], [role="treeitem"], [data-node-id], select, input'
       )
     ) {
       return;

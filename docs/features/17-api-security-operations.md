@@ -81,12 +81,24 @@ Therefore:
 
 ## 4. File Uploads & Media Delivery
 
-### 4.1 Upload Validation
-- Max size `MAX_UPLOAD_SIZE_MB`; streamed to a temp file, never buffered fully in RAM.
-- Type determined by **magic bytes**, not extension/`Content-Type`. Allowlist: JPEG, PNG, WebP, AVIF, HEIC (converted to JPEG on ingest), TIFF, GIF, PDF, MP3, M4A, WAV. Reject SVG and HTML (XSS vectors).
-- EXIF: original preserved on disk; **GPS tags stripped from derived thumbnails**; `DateTimeOriginal` offered as suggested "date taken".
-- Image decoding in a size-limited worker (max 100 megapixels) to prevent decompression bombs.
-- ZIP/GEDZIP extraction: reject absolute paths and `..` (zip-slip), cap total uncompressed size (`MAX_IMPORT_SIZE_MB`, default 2048) and file count.
+### 4.1 Request Body Limits & Upload Validation
+- **Infrastructure Body Size Limits (500MB Max):**
+  - **Nginx Ingress / Reverse Proxy:** Must explicitly declare `client_max_body_size 500M;` in `frontend/nginx.conf` (`location /api/` and `server` block). Without this directive, Nginx defaults to 1MB and terminates large GEDCOM imports and media ZIP archives prematurely with `413 Request Entity Too Large` before reaching the backend.
+  - **Axum Router Layer:** Axum enforces a default 2MB body limit. The Axum router must configure `DefaultBodyLimit::max(500 * 1024 * 1024)` (500MB) across the router (or applied specifically to streaming multipart upload routes: `POST /api/v1/gedcom/import`, `POST /api/v1/gedcom/media-bundle`, `POST /api/v1/media`, and `POST /api/v1/media/bundle`).
+- **Streaming Disk Spooling:** Uploaded files and archives are streamed chunk-by-chunk to a temporary spool file on disk (`/tmp/upload_*.tmp`) via Tokio asynchronous file I/O rather than buffering in heap memory. Memory footprint remains $< 64\text{ MB}$ even during 500MB uploads.
+- **Magic Bytes Type Validation:** File types are strictly determined by inspecting initial **magic bytes**, never relying on client-supplied file extensions or `Content-Type` headers:
+  - Allowed image/document types: JPEG (`FF D8 FF`), PNG (`89 50 4E 47`), WebP (`RIFF....WEBP`), AVIF (`....ftypavif`), HEIC (converted to JPEG on ingest), TIFF (`49 49 2A 00` / `4D 4D 00 2A`), GIF, PDF (`%PDF-`), MP3, M4A, WAV.
+  - Strictly rejected: SVG and HTML (XSS attack vectors).
+  - Ignored OS archive metadata: `__MACOSX/`, `.DS_Store`, `Thumbs.db`, `desktop.ini`.
+- **Zip Decompression Safety & Resource Constraints:**
+  - **Strict Zip-Slip Prevention:** Archive extraction via the `zip` crate examines every entry path. Any entry containing directory traversal sequences (`..`), leading slashes (`/`, `\`), drive letters (`C:\`), or null bytes (`\0`) is rejected with `400 Bad Request` (`zip_slip_detected`). Extraction uses only the sanitized base filename (`entry.mangled_name()` / `Path::file_name()`).
+  - **Decompression Bomb Protection:**
+    - Maximum total uncompressed archive size: 2,048 MB (2 GB).
+    - Maximum total file count: 2,000 files per archive.
+    - Compression ratio cap: reject entries where `uncompressed_size / compressed_size > 100` (for entries $> 1\text{ KB}$) with `400 Bad Request` (`decompression_limit_exceeded`).
+  - **Cleanup Guarantee:** Spool files and extraction directories are managed via RAII drop guards, guaranteeing file deletion upon success, validation error, panic, or client abort.
+- **EXIF & Image Pipeline:** Original files are preserved intact on disk; **GPS geolocation tags are stripped from derived WebP thumbnails**; `DateTimeOriginal` is parsed as a suggested "date taken".
+- **Image Decoding Worker Limit:** Decoding is executed in size-limited worker tasks (max 100 megapixels) to prevent decompression bombs.
 
 ### 4.2 Storage Layout
 ```
@@ -140,7 +152,8 @@ Therefore:
 - [ ] **CSRF Protection:** State-changing requests without the custom header or with a foreign `Origin` are rejected.
 - [ ] **LAN Login Works:** On `http://<LAN-IP>` without SMTP, a family member can register via invite and sign in with a password.
 - [ ] **Secure Media:** No media file is reachable without passing the privacy check; direct paths under `/app/data/media` are not web-exposed.
-- [ ] **Upload Safety:** SVG/HTML uploads are rejected; zip-slip and decompression-bomb test files are rejected.
+- [ ] **Upload Safety & 500MB Limit:** SVG/HTML uploads are rejected; payloads up to 500MB are accepted by Nginx (`client_max_body_size 500M;`) and Axum (`DefaultBodyLimit::max(500 * 1024 * 1024)`); payloads $> 500\text{ MB}$ return `413 Payload Too Large`.
+- [ ] **Archive Decompression Safety:** Zip-slip attempts (`../`, absolute paths), decompression bombs ($> 100:1$ ratio), and archives $> 2\text{ GB}$ uncompressed are safely rejected with `400 Bad Request`; temporary spool files are guaranteed cleaned up via RAII drop guards.
 - [ ] **Postgres Job Queue:** Imports, exports, PDFs, and backups run via the Postgres job queue and survive a backend restart.
 - [ ] **Auto Pre-Upgrade Backup:** Starting a new version with pending migrations creates a backup first.
 - [ ] **OpenAPI:** `/api/v1/openapi.json` is generated and the frontend client is built from it.

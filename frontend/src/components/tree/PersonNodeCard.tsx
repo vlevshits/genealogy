@@ -170,6 +170,7 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
   return (
     <div
       role="treeitem"
+      tabIndex={0}
       aria-selected={isSelected || isFocal}
       aria-label={`${displayName} (${node.gid})`}
       data-node-id={node.id}
@@ -180,6 +181,12 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
       onPointerLeave={handlePointerEnd}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect?.(node);
+        }
+      }}
       onClick={(e) => {
         e.stopPropagation();
         if (wasDraggedRef.current) {
@@ -189,7 +196,7 @@ export const PersonNodeCard: React.FC<PersonNodeCardProps> = ({
         onSelect?.(node);
       }}
       className={cn(
-        'group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-surface p-2.5 text-left shadow-xs transition-all cursor-pointer select-none',
+        'group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-surface p-2.5 text-left shadow-xs transition-all cursor-pointer select-none focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand',
         isFocal || isSelected
           ? 'border-brand ring-2 ring-brand/30 shadow-md'
           : 'border-border hover:border-brand/60 hover:shadow-sm',

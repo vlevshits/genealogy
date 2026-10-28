@@ -14,16 +14,25 @@ Photographs and historical documents (scanned birth certificates, census records
   - Audio (optional): MP3/WAV oral history recordings.
 - **Metadata Fields:** Title, Description, Date Taken (supports fuzzy genealogy dates, e.g. `abt 1935`), Place Taken, Associated Individuals, and Notes. A scan can also be attached directly to an event as its documentary evidence.
 - **Storage Architecture:** Stored locally in a dedicated persistent Docker volume (e.g. `/data/media`) with hashed filenames; configurable S3-compatible backend for cloud deployments.
-- **GEDCOM Stubs & External Reconciliation:** When importing a standalone `.ged` file whose media binaries were not bundled, stub entries are created with `is_missing = TRUE`, recording the original filename and external path (e.g. `/root/gramps/000085_*.jpg`). Uploading a matching photos folder or archive later reconciles the assets by base filename, clearing `is_missing` and linking thumbnails ([03 §3.5](03-gedcom-import-export.md#35-step-5-import-report--post-import-media-reconciliation)).
+- **GEDCOM Stubs & External Reconciliation:** When importing a standalone `.ged` file whose media binaries were not bundled, stub entries are created with `is_missing = TRUE`, recording the original filename and external path (e.g. `/root/gramps/000085_*.jpg`). Uploading a matching photos folder or archive later reconciles the assets by base filename, clearing `is_missing` and linking thumbnails ([03 §3.5](03-gedcom-import-export.md#35-step-5-import-report--post-import-media-reconciliation-prompt)).
 
-### 2.2 Interactive Face Tagging
+### 2.2 Batch Archive Upload (.zip) & Media Reconciliation
+In addition to selecting or dragging individual files, Editors and Admins can ingest photo collections in bulk using standard ZIP archives:
+- **Archive Ingestion:** Accepts `.zip` bundles up to 500MB via drag-and-drop in the Media Gallery or via the `POST /api/v1/media/bundle` endpoint.
+- **Safe Streaming Extraction:** Extracts files on the fly via temporary disk spooling. Automatically skips macOS and Windows archive artifacts (`__MACOSX/`, `.DS_Store`, `Thumbs.db`). Enforces strict zip-slip rejection and decompression size limits.
+- **Unified Dual Ingestion & Reconciliation:**
+  1. **GEDCOM Stub Matching:** For each extracted photo/document, checks if an existing `media_assets` stub has `is_missing = TRUE` with a matching base filename (`original_file_name`, case-insensitive). If matched, it reconciles the stub in place: stores the original binary, generates responsive WebP thumbnails (256w, 768w, 1600w), and clears `is_missing = FALSE` while keeping all existing person associations and face tags intact.
+  2. **Fresh Asset Creation:** For files that do not match any existing stub, creates a new `media_assets` record with `is_missing = FALSE`, adding the photo to the general media library.
+- **Result Summary:** Returns total extracted count, number of reconciled stubs, newly created assets, and any skipped unsupported files.
+
+### 2.3 Interactive Face Tagging
 1. In the photo detail viewer, an Editor or Admin clicks **"Tag Faces"**.
 2. **Drawing Tag Boxes:** The user clicks and drags a rectangular bounding box around a person's face.
 3. **Linking Individual:** A searchable dropdown auto-completes names from the family tree.
 4. **Primary Avatar Assignment:** A checkbox offers *"Set as primary profile avatar for [Person]"*. When checked, the system crops and caches a high-res thumbnail used across tree cards and profile headers.
 5. **Hover Interactions:** When viewing the photo, hovering over any face displays an elegant tooltip card with the person's name and life dates. Clicking navigates directly to their profile.
 
-### 2.3 Media Privacy & Living Person Shield (Public Site Mode)
+### 2.4 Media Privacy & Living Person Shield (Public Site Mode)
 When the instance is exposed publicly to anonymous visitors:
 - **Profile Avatars of Living Persons:** Replaced with generic placeholder silhouettes on all tree cards and profile endpoints.
 - **Solely-Living Media Files:** Any photo or document where *all* linked/tagged persons are living is completely omitted from the public media gallery and returns `404 / 403` on direct asset URL requests.
@@ -76,9 +85,41 @@ CREATE TABLE media_links (
 
 ---
 
-## 4. Definition of Done (DoD)
+## 4. API Endpoints
+
+### 4.1 Single Media Upload
+- **`POST /api/v1/media`**
+  - **Auth:** Editor or Admin (`RequireRole::<Editor>`).
+  - **Body:** `multipart/form-data`, file field `file`, optional fields: `title`, `description`, `date_taken`, `place_id`.
+  - **Behavior:** Reconciles matching `is_missing = TRUE` stub if base filename matches; otherwise creates new asset.
+
+### 4.2 Batch Media Archive Upload & Reconciliation
+- **`POST /api/v1/media/bundle`**
+  - **Auth:** Editor or Admin (`RequireRole::<Editor>`).
+  - **Body:** `multipart/form-data`, file field `file` (`.zip`, up to 500MB).
+  - **Query Parameters:** `ingest_unmatched=true|false` (default `true` for gallery uploads: unmatched media files are imported as new assets).
+  - **Decompression Safety:** Spools stream to temporary file, strictly rejects zip-slip (`..`, absolute paths), limits uncompressed output to 2GB and entry count to 2,000.
+  - **Response (`200 OK`):**
+    ```json
+    {
+      "total_extracted": 129,
+      "reconciled_stubs": 129,
+      "newly_created": 0,
+      "skipped_files": 0,
+      "errors": []
+    }
+    ```
+  - **Error Codes:** `400 invalid_archive`, `400 zip_slip_detected`, `400 decompression_limit_exceeded`, `413 upload_too_large`, `415 unsupported_archive_format`.
+
+---
+
+## 5. Definition of Done (DoD)
 
 - [ ] **Drag & Drop Upload:** Multiple photos can be uploaded simultaneously with real-time thumbnail generation.
+- [ ] **Batch ZIP Archive Upload:** Editors and Admins can upload `.zip` archives up to 500MB; files are extracted using streaming disk spooling and imported into the library without memory spikes.
+- [ ] **Stub Reconciliation during Batch Upload:** ZIP entries matching `is_missing = TRUE` stubs by case-insensitive base filename automatically populate binaries, generate WebP thumbnails, and clear the missing flag while preserving all tree links.
+- [ ] **Ingestion of Unmatched Media:** Extracted archive files that do not match existing missing stubs are ingested as new `media_assets` with `is_missing = FALSE` when `ingest_unmatched = TRUE`.
+- [ ] **Decompression & Zip-Slip Protection:** Path traversal attempts (`../`) and decompression bomb archives (>100:1 ratio) are rejected with `400 Bad Request`.
 - [ ] **Bounding Box Editor:** Users can draw, resize, move, and delete face boxes on photos.
 - [ ] **Autocomplete Association:** Tagged boxes quickly search and link to existing tree members.
 - [ ] **Avatar Synchronization:** Tagging a face and checking "Set as primary avatar" immediately updates the individual's profile and tree card avatar.

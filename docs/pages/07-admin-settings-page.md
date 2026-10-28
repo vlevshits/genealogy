@@ -75,6 +75,51 @@ The Settings page manages instance configuration, user invitations, security pas
 - **Snapshots** list (merge / clean-slate import / manual) with *Rollback* (typed confirmation) — [14](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md).
 - Nightly backup status (last run, size, success/failure) and list of available backup archives with *Download*.
 
+#### Panel 4: GEDCOM Data Portability & Media Archive Reconciliation (`/settings/gedcom`)
+```
++------------------------------------------------------------------------------------+
+| GEDCOM DATA PORTABILITY                                                            |
+|                                                                                    |
+| EXPORT TREE:                                                                       |
+| Format: (•) GEDCOM 5.5.1   ( ) GEDCOM 7.0                                          |
+| Media:  (•) Standalone .ged  ( ) Full Package (.zip bundle)                        |
+| [✓] Redact living individuals (single initial mask)                                |
+| [ Export Tree ]                                                                    |
+|                                                                                    |
+| IMPORT TREE (CLEAN SLATE):                                                         |
+| +--------------------------------------------------------------------------------+ |
+| | Drag and drop tree file (.ged, .zip, .gdz) here, or browse files               | |
+| +--------------------------------------------------------------------------------+ |
+|                                                                                    |
+| MEDIA ARCHIVE RECONCILIATION:                                                      |
+| ⚠️ Missing Media References: 129 media items in your tree are missing images.      |
+|    Original source paths: /root/gramps/000085_*.jpg                                |
+|                                                                                    |
+| +--------------------------------------------------------------------------------+ |
+| | [Upload Media Archive (.zip)]                                                  | |
+| | Drop your Gramps Web media export ZIP (up to 500MB) here to link photos         | |
+| +--------------------------------------------------------------------------------+ |
+| Upload Progress: [====================================] 100% (51.5 MB / 51.5 MB)   |
+|                                                                                    |
+| RECONCILIATION REPORT:                                                             |
+| ✓ 129 of 129 missing media files reconciled successfully                           |
+| Total archive files: 129 | Unmatched: 0 | Remaining missing stubs: 0               |
+| [ View in Media Gallery → ]                                                        |
++------------------------------------------------------------------------------------+
+```
+- **Export Section:** Select GEDCOM 5.5.1 or 7.0, toggle standalone vs full archive with media, living person privacy redaction checkbox, and `Export Tree` trigger.
+- **Clean Slate Import Section:** Dropzone for `.ged` text files or `.zip` archives. Spools file, runs pre-import validation, and prompts with summary modal before applying changes.
+- **Media Archive Reconciliation Dropzone:**
+  - **Missing Stubs Status Alert:** Displayed when `media_assets` records exist with `is_missing = TRUE`. Shows exact count (e.g. `129 media items missing`) and sample missing paths (`/root/gramps/...`).
+  - **Dropzone Target:** Accepts `.zip` archives up to 500MB (specifically tested with Gramps Web `gramps-web-media-export-*.zip`).
+  - **Live Progress Feedback:** Real-time upload progress bar (streaming bytes and percentage) followed by extraction and thumbnail generation status.
+  - **Reconciliation Statistics Card:**
+    - Reconciled stubs count (matched against `original_file_name` case-insensitively).
+    - Unmatched files count (if any).
+    - Remaining missing stubs counter (updates reactively).
+    - Link to view newly linked images in `/media`.
+  - **Strict i18n & Icon Decoupling:** All UI text is localized in `en.json` and `ru.json` without embedded emoji or unicode symbols; status badges and icons use React components (`CheckCircle2`, `AlertTriangle`, `UploadCloud`) per [UI & i18n rules](file:///Users/levshitsvv/Projects/Personal/genealogy/.agents/rules/ui-and-i18n-conventions.md).
+
 ---
 
 ## 4. Definition of Done (DoD)
@@ -84,4 +129,8 @@ The Settings page manages instance configuration, user invitations, security pas
 - [ ] **Default Private vs. Public Posture:** Toggling "Enable Public Site" properly flips instance posture between default private (unauthenticated redirected to `/login`) and public tree mode (masked living data on `/tree`).
 - [ ] **Role Protection:** Prevents an administrator from demoting or deleting their own account if they are the sole admin.
 - [ ] **One-Click Backup Generation:** Generates and downloads a valid full archive containing database and media files.
+- [ ] **Media Archive Reconciliation Dropzone:** `/settings/gedcom` displays a dedicated dropzone accepting `.zip` archives up to 500MB when missing stubs exist, with live streaming progress.
+- [ ] **Missing Media Count & Sample Paths:** Prominently displays the exact count of missing media references (`is_missing = TRUE`) and original external source paths (e.g. `/root/gramps/...`) to guide the administrator.
+- [ ] **Reconciliation Report Card:** Displays immediate post-upload reconciliation statistics (total in archive, reconciled stubs, remaining missing) and updates the missing media banner dynamically upon completion.
+- [ ] **UI i18n & Icon Compliance:** All translation keys in `en.json` and `ru.json` for the reconciliation interface strictly omit leading/trailing icon glyphs and emojis per project UI conventions; icons are rendered via React components.
 - [ ] **Operational Plain Language:** System status indicators, backup actions, and settings descriptions display in clean, functional terminology with zero tech-stack bragging or promotional jargon.

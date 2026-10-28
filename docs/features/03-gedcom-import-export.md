@@ -66,7 +66,7 @@ Real-world exports from platforms like Gramps Web 6.0.1 (identified via `1 SOUR 
    ```
    - **Bundled Archive / GEDZIP:** The importer strips absolute directory prefixes (`/root/gramps/`, `C:\...`) and matches media entries by base filename (`000085_971532825e5c5dtfb56015_Y.jpg`) within the uploaded archive.
    - **Standalone `.ged` Import:** When media files are not uploaded with the text file, the parser creates media stubs in `media_assets` with `original_file_name` = base filename, `external_path` = raw path, `title` = `TITL`, `mime_type` inferred from `FORM`, and `is_missing = TRUE`, linking them to the appropriate individuals via `media_links`.
-   - **Post-Import Media Reconciliation:** Administrators can upload a ZIP or folder of photos at any later time; the system reconciles incoming files by base filename, populates binaries, clears `is_missing`, and generates WebP thumbnails without breaking links.
+   - **Post-Import Media Reconciliation (Batch ZIP Archive Upload):** Gramps Web users frequently export their tree as a `.ged` text file and media assets as a separate ZIP archive (e.g. `gramps-web-media-export-*.zip`). Administrators can upload this media ZIP bundle at any later time via `POST /api/v1/gedcom/media-bundle` (or in Media Gallery via `POST /api/v1/media/bundle`). The system streams and uncompresses the archive (up to 500MB), matches media files against `is_missing = TRUE` stubs using case-insensitive base filename matching, persists the original binaries to content-addressed storage, regenerates WebP thumbnails, and clears `is_missing = FALSE` without breaking any existing links or face tags.
 
 5. **External Provenance Identifiers (`_UID`, `RIN`):**
    Gramps and MyHeritage attach persistent identifiers:
@@ -144,10 +144,74 @@ Before modifying the database, the UI displays a detailed breakdown:
   - `Completed in 4.2 seconds.`
 - Jobs run on the Postgres-backed job queue ([17 §5](17-api-security-operations.md#5-background-jobs)); the user can leave the page and return.
 
-### 3.5 Step 5: Import Report & Post-Import Media Reconciliation
+### 3.5 Step 5: Import Report & Post-Import Media Reconciliation Prompt
 - Final summary: counts imported, warnings (unparseable dates kept as phrases, unknown tags skipped, missing media), downloadable as a text log.
 - On first import into an empty tree, prompt the admin to pick their own person → sets `person_id` and `home_person_id` ([16 §3](16-dashboard-home.md#3-empty-tree-onboarding-first-run-after-setup)).
-- **Post-Import Media Upload:** If the import referenced media files that were missing from the upload (e.g. standalone `.ged` with external server paths), the UI presents a reconciliation prompt: *"129 media files referenced in this tree are missing images. Upload your photos folder or ZIP archive to link them."* Uploading the folder or archive triggers automatic reconciliation matching incoming filenames to `media_assets.original_file_name`, storing the binaries in persistent storage, clearing `is_missing = FALSE`, and generating WebP thumbnails without breaking any existing links.
+- **Post-Import Missing Media Banner:** When an import contains media stubs with `is_missing = TRUE` (such as the 129 stubs from Gramps Web export `gramps-web-export-20261026130902.ged`), the import completion view and `/settings/gedcom` display a dedicated reconciliation banner:
+  *"129 media files referenced in this tree are missing images. Upload your Gramps Web media export ZIP archive (or a photos folder) to link them."*
+  Uploading the archive triggers the Media Archive Reconciliation Pipeline (§3.6).
+
+### 3.6 Media Archive Reconciliation Pipeline (`POST /api/v1/gedcom/media-bundle`)
+A dedicated, high-performance streaming endpoint engineered for vendor media archives (e.g. Gramps Web `gramps-web-media-export-*.zip` up to 500MB):
+
+1. **Endpoint Specifications:**
+   - **Method / Path:** `POST /api/v1/gedcom/media-bundle`
+   - **Authorization:** Administrator only (`RequireRole::<Admin>`, returns `403 Forbidden` for Viewers and Editors).
+   - **Content-Type:** `multipart/form-data` with file field `file` (accepts `.zip`, `.gdz`).
+   - **Payload Limits:** Maximum archive file size of 500MB (`MAX_MEDIA_BUNDLE_SIZE_MB = 500`). Streams directly to a temporary spool file on disk (`/tmp/media_bundle_*.zip`) without buffering into server RAM.
+   - **Security Controls:**
+     - **Zip-Slip Protection:** Validates every entry header; rejects any entry containing directory traversal elements (`..`), absolute prefixes (`/`, `\`, `C:\`), or null bytes (`\0`). Uses only the clean base filename (`Path::file_name`).
+     - **Decompression Bomb Guard:** Caps total uncompressed extraction at 2,048MB (2GB), caps entry count at 2,000 files, and rejects files with compression ratio $> 100:1$ (for entries $> 1\text{ KB}$).
+     - **Magic Bytes Validation:** Inspects binary headers of each entry to verify authentic image/document content (JPEG, PNG, WebP, AVIF, TIFF, PDF) and silently skips OS metadata artifacts (`__MACOSX/`, `.DS_Store`, `Thumbs.db`).
+     - **Cleanup Guarantee:** RAII drop guard guarantees deletion of temporary spool files upon request completion, error, or client abort.
+
+2. **Reconciliation & Matching Logic:**
+   - Iterates through archive entries using streaming zip reader (`zip` crate).
+   - For each valid media entry:
+     - Extracts base filename: `entry_basename = Path::new(entry_name).file_name()`.
+     - Normalizes for case-insensitive and Unicode NFC comparison.
+     - Queries `media_assets` for missing stubs:
+       ```sql
+       SELECT id, file_name, original_file_name, external_path
+       FROM media_assets
+       WHERE is_missing = TRUE
+         AND (
+           LOWER(original_file_name) = LOWER($1)
+           OR LOWER(file_name) = LOWER($1)
+           OR LOWER(REGEXP_REPLACE(external_path, '^.*[/\\]', '')) = LOWER($1)
+         )
+       LIMIT 1;
+       ```
+     - **Stub Matched:**
+       - Computes SHA-256 hash of extracted binary and stores in `/app/data/media/originals/ab/cd/<sha256>.<ext>`.
+       - Generates WebP thumbnail variants (256w, 768w, 1600w).
+       - Updates stub row: sets `file_name = '<sha256>.<ext>'`, `file_size_bytes`, `mime_type`, `width`, `height`, clears `is_missing = FALSE`. All existing `media_links` (to individuals, events, families) and face tags remain preserved.
+       - Increments `reconciled_stubs`.
+     - **Unmatched File:**
+       - Optional query parameter `ingest_unmatched=true|false` (default `false` for GEDCOM reconciliation, `true` for gallery bundle):
+         - If `false`: records `entry_basename` in `unmatched_filenames` list.
+         - If `true`: imports as a newly created `media_assets` record with `is_missing = FALSE`.
+
+3. **Response Schema (`200 OK`):**
+   ```json
+   {
+     "total_archive_files": 129,
+     "reconciled_stubs": 129,
+     "unmatched_files": 0,
+     "unmatched_filenames": [],
+     "remaining_missing_stubs": 0,
+     "skipped_invalid_files": 0,
+     "total_bytes_extracted": 53990655,
+     "duration_ms": 3840
+   }
+   ```
+
+4. **Error Handling & Codes:**
+   - `400 Bad Request`: `invalid_archive` (corrupted ZIP), `archive_empty`, `zip_slip_detected`, `decompression_limit_exceeded`.
+   - `401 Unauthorized`: `not_authenticated`.
+   - `403 Forbidden`: `forbidden` (non-Admin role).
+   - `413 Payload Too Large`: `upload_too_large` (exceeds 500MB).
+   - `415 Unsupported Media Type`: `unsupported_archive_format` (not a valid ZIP archive).
 
 ---
 
@@ -215,10 +279,14 @@ When an **Administrator** triggers **"Export Tree"** (restricted exclusively to 
 - [ ] **Vendor Event Filtering:** Filters `1 EVEN ... 2 TYPE _UPD` timestamps out of the biographical life events timeline.
 - [ ] **Deceased Status Integrity:** `1 DEAT Y` records without explicit date or place correctly set `has_death_event = TRUE` and `living_override = FALSE`.
 - [ ] **Media Bundle Handling & Server Path Stripping:** Uploading a `.zip` or `.gdz` extracts images and matches files by base filename, stripping external server prefixes (e.g. `/root/gramps/`).
-- [ ] **Post-Import Media Reconciliation:** Standalone `.ged` imports create media asset stubs (`is_missing = TRUE`); subsequent bulk photo upload automatically reconciles assets by base filename, stores files, and clears missing flags.
+- [ ] **Gramps Web Media ZIP Test Fixture Validation:** Successfully uploads and reconciles real-world fixture `test-data/gramps-web-media-export-20261026130904.zip` (51MB, 129 JPEG files) following import of `gramps-web-export-20261026130902.ged`: all 129 `is_missing = TRUE` stubs are matched by case-insensitive base filename, binaries are persisted to content-addressed storage, `is_missing` is set to `FALSE`, and WebP thumbnails (small, medium, large) are generated without orphan records or broken person links.
+- [ ] **Streaming Multipart Ingestion up to 500MB:** `POST /api/v1/gedcom/media-bundle` accepts multipart ZIP uploads up to 500MB using streaming disk spooling with peak memory footprint under 64MB RAM.
+- [ ] **Zip-Slip & Decompression Safety Defense:** Rejects archives containing directory traversal (`../`), absolute paths, or compression ratios $> 100:1$ with `400 Bad Request` (`zip_slip_detected` / `decompression_limit_exceeded`).
+- [ ] **Reconciliation Audit Report:** Media archive reconciliation returns a comprehensive JSON response reporting `total_archive_files`, `reconciled_stubs`, `unmatched_files`, `remaining_missing_stubs`, and `duration_ms`.
+- [ ] **Post-Import Media Reconciliation:** Standalone `.ged` imports create media asset stubs (`is_missing = TRUE`); subsequent bulk photo or ZIP upload automatically reconciles assets by base filename, stores files, and clears missing flags.
 - [ ] **Text Concatenation (`CONC`/`CONT`):** Assembles multi-line notes without breaking words on `CONC` lines, and preserves newlines on `CONT` lines.
 - [ ] **Pre-Import Review Screen:** Displays accurate counts and warning highlights before writing changes to the database.
 - [ ] **Progress Streaming:** Long imports display a responsive, live progress bar with percentage and step descriptions.
 - [ ] **Round-Trip Fidelity:** Exporting a tree to GEDCOM and re-importing it into a clean instance yields identical counts of individuals, parent-child relationships, dates, places, and media links.
 - [ ] **Privacy Filter Enforcement:** Exporting with "Redact Living Individuals" produces a file free of sensitive birthdates, surnames, or personal notes of living persons, masking names as single initials (e.g. `И.` / `J.`).
-- [ ] **Admin-Only Isolation:** GEDCOM import and export endpoints reject non-Admin requests with 403 Forbidden.
+- [ ] **Admin-Only Isolation:** GEDCOM import, export, and media bundle reconciliation endpoints (`/api/v1/gedcom/*`) reject non-Admin requests with 403 Forbidden.
