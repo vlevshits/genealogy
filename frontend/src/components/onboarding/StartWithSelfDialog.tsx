@@ -16,6 +16,7 @@ import {
   UserDto,
 } from '../../api/client';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { parseGenDate } from '../../lib/gendate-parser';
 import { GenDate } from '../../types/gendate';
@@ -92,9 +93,7 @@ export const StartWithSelfDialog: React.FC<StartWithSelfDialogProps> = ({
       onCompleted?.(res.individual, res.user);
       onOpenChange(false);
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setSaving(false);
     }

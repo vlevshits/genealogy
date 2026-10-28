@@ -22,6 +22,7 @@ import {
   undoTransaction,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
+import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export interface DashboardPageProps {
@@ -285,7 +286,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };

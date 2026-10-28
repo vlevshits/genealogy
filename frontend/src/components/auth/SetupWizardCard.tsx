@@ -17,6 +17,7 @@ import {
   isSecureContextAvailable,
 } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { RecoveryCodesCard } from './RecoveryCodesCard';
 
@@ -76,7 +77,7 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
       establishSession(res.user, res.session_token, false);
       setRecoveryCodes(res.recovery_codes);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setError(getLocalizedErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

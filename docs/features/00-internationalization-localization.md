@@ -96,6 +96,58 @@ Transactional emails (invitations, magic links) are rendered bilingual based on 
 
 ---
 
+### 2.7 Error Code Localization Architecture (API & Network Failures)
+All error messages presented to the user—whether arising from browser network drops, HTTP error responses, or structured backend API failures—must be fully localized into the active interface language (`en` or `ru`).
+
+#### Core Zero-Raw-Error Principle:
+The application must **never** display raw unlocalized English strings (e.g. `"Failed to fetch"`, `"CSRF or Origin header validation failed"`, `"Not authenticated"`, or backend developer messages) when running in Russian or non-English locales.
+
+#### Error Resolution Architecture:
+1. **Network & Connection Failures:**
+   - Network drops, offline states, DNS failures, or browser `fetch()` rejections (`TypeError: Failed to fetch`) map to `errors.network_error`:
+     - English: *"Unable to connect to the server. Please check your network connection and try again."*
+     - Russian: *"Не удалось связаться с сервером. Пожалуйста, проверьте подключение к сети и попробуйте снова."*
+2. **Structured Backend Errors (`{ error: { code, message, details, field_errors } }`):**
+   - The backend `message` property is strictly for developer logs and telemetry; the frontend must never render it directly in localized UI.
+   - The frontend translates the error by resolving `errors.<code_in_snake_case>` from the active translation dictionary.
+3. **HTTP Status Fallback:**
+   - If an error lacks a recognized machine code, the client resolves the HTTP status code (e.g. `errors.401`, `errors.403`, `errors.404`, `errors.409`, `errors.422`, `errors.429`, `errors.500`).
+4. **Generic Fallback:**
+   - If neither code nor status resolves to a known translation key, the client renders `errors.unknown` (English: *"An unexpected error occurred. Please try again."* / Russian: *"Произошла непредвиденная ошибка. Пожалуйста, попробуйте снова."*).
+
+#### Standard Error Catalog (`errors.*` Dictionary):
+
+| Error Code Key | HTTP | Meaning / Trigger Scenario | English UI Translation | Russian UI Translation |
+| :--- | :---: | :--- | :--- | :--- |
+| `network_error` | — | Connection drop, backend unreachable, `Failed to fetch` | Unable to connect to the server. Please check your network connection. | Не удалось связаться с сервером. Пожалуйста, проверьте подключение к сети. |
+| `not_authenticated` | 401 | Unauthenticated access to protected endpoint | You need to sign in to perform this action. | Для выполнения этого действия необходимо войти в систему. |
+| `session_expired` | 401 | User session token expired or invalidated | Your session has expired. Please sign in again. | Срок действия сессии истёк. Пожалуйста, войдите снова. |
+| `invalid_credentials` | 401 | Incorrect password during sign-in | Invalid email or password. | Неверный адрес электронной почты или пароль. |
+| `passkey_replay_detected`| 401 | WebAuthn signature replay or counter regression | Authentication security check failed. Please try signing in again. | Проверка безопасности аутентификации не пройдена. Попробуйте войти снова. |
+| `invalid_or_expired_challenge` | 401 | WebAuthn challenge timeout or mismatch | Authentication challenge expired. Please try again. | Время ожидания подтверждения истекло. Пожалуйста, попробуйте снова. |
+| `invalid_or_expired_invite` | 400/404 | Invitation token invalid, revoked, or >7 days old | This invitation link is invalid or has expired. | Эта ссылка-приглашение недействительна или срок её действия истёк. |
+| `invalid_or_expired_token` | 400/404 | Magic link or recovery code expired or invalid | The link or code is invalid or has expired. | Ссылка или код недействительны или срок их действия истёк. |
+| `last_auth_method` | 400 | Attempted to delete only remaining sign-in method | Cannot remove your only sign-in method. | Нельзя удалить единственный способ входа в систему. |
+| `sole_admin_protected` | 403 | Attempted to demote or deactivate sole remaining Admin | Cannot deactivate or demote the only administrator. | Нельзя деактивировать или понизить единственного администратора. |
+| `password_auth_disabled` | 403 | Password login attempted when password auth is off | Password authentication is disabled on this instance. | Вход по паролю отключён в этой системе. |
+| `csrf_validation_failed` | 403 | Missing `X-Requested-With` header or invalid `Origin` | Security validation failed. Please refresh the page. | Проверка безопасности запроса не пройдена. Пожалуйста, обновите страницу. |
+| `forbidden` | 403 | Role lacks required permissions | You do not have permission to perform this action. | У вас недостаточно прав для выполнения этого действия. |
+| `settings_locked_from_env` | 403 | Attempt to modify setting locked by `.env` | This setting is managed by environment configuration and cannot be changed here. | Эта настройка заблокирована переменными окружения и не может быть изменена здесь. |
+| `not_found` | 404 | Generic resource not found | The requested item was not found. | Запрошенный объект не найден. |
+| `person_not_found` | 404 | Individual not found or deleted | Person not found or has been removed. | Запись о персоне не найдена или была удалена. |
+| `setup_already_completed` | 400 | Initial setup already executed | Instance setup has already been completed. | Первоначальная настройка системы уже завершена. |
+| `already_onboarded` | 400 | Empty tree onboarding already completed | Tree onboarding has already been completed. | Первоначальное заполнение древа уже завершено. |
+| `version_conflict` | 409 | Concurrent update collision (optimistic lock) | This record was modified by another user. Please refresh and review. | Эта запись была изменена другим пользователем. Пожалуйста, обновите страницу. |
+| `cycle_detected` | 409 | Relationship would form impossible ancestor loop | This relationship would create an impossible ancestor cycle. | Эта связь создаёт циклическую зависимость предков и потомков. |
+| `place_in_use` | 409 | Place cannot be deleted because events reference it | This place cannot be deleted because it is associated with life events. | Это место нельзя удалить, так как к нему привязаны исторические события. |
+| `rate_limited` | 429 | Rate limit exceeded | Too many requests. Please wait a moment and try again. | Слишком много запросов. Пожалуйста, подождите немного и повторите попытку. |
+| `account_locked` | 429 | 5 failed login attempts → 15-minute lockout | Account is temporarily locked due to failed attempts. Try again in 15 minutes. | Учётная запись временно заблокирована из-за частых попыток входа. Попробуйте через 15 минут. |
+| `database_error` | 500 | Database query or connection fault | A database error occurred. Please try again shortly. | Произошла ошибка базы данных. Пожалуйста, повторите попытку позже. |
+| `internal_error` | 500 | Unexpected server error | An internal server error occurred. | Произошла внутренняя ошибка сервера. |
+| `unknown` | — | Fallback for unmapped errors | An unexpected error occurred. Please try again. | Произошла непредвиденная ошибка. Пожалуйста, попробуйте снова. |
+
+---
+
 ## 3. UI Copywriting, Tone of Voice & Anti-Fluff Standards
 
 ### 3.1 Core Anti-Fluff Principle
@@ -183,3 +235,5 @@ backend/
 - [ ] **Cyrillic PDF Rendering:** Printable PDF posters and tiled sheets render Russian names and text cleanly without garbled characters or missing glyphs.
 - [ ] **Localized Kinship Engine:** Relationship calculator displays accurate, natural Russian kinship terms (e.g., *"Двоюродный брат"*, *"Троюродная сестра"*).
 - [ ] **Localized Emails:** Magic link and invitation emails are delivered in the selected recipient language.
+- [ ] **Complete Error Code Localization:** All standard error codes (`network_error`, `not_authenticated`, `session_expired`, `invalid_credentials`, `passkey_replay_detected`, `csrf_validation_failed`, `version_conflict`, `rate_limited`, `account_locked`, `database_error`, `internal_error`, `unknown`, etc.) are defined with 100% key parity under `errors.*` in both `en.json` and `ru.json`.
+- [ ] **Zero Raw Unlocalized Errors in UI:** Error toasts, inline form banners, and modal dialogs never display raw unlocalized English strings (e.g. "Failed to fetch", "Not authenticated", "CSRF or Origin header validation failed") when the user is in Russian locale.

@@ -20,6 +20,7 @@ import {
   isSecureContextAvailable,
 } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { RecoveryCodesCard } from './RecoveryCodesCard';
 
@@ -80,11 +81,7 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
       })
       .catch((err) => {
         if (!cancelled) {
-          setInviteError(
-            err instanceof Error
-              ? err.message
-              : t('auth.register.invalidInviteDesc')
-          );
+          setInviteError(getLocalizedErrorMessage(err, t));
         }
       })
       .finally(() => {
@@ -152,7 +149,7 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
       establishSession(res.user, res.session_token, false);
       setRecoveryCodes(res.recovery_codes);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setSubmitError(getLocalizedErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

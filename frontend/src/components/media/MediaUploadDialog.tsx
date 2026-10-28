@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Upload } from 'lucide-react';
 import {
-  ApiError,
   createMediaAsset,
   MediaAssetSummaryDto,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import {
   Alert,
   Button,
@@ -113,13 +113,7 @@ export const MediaUploadDialog: React.FC<MediaUploadDialogProps> = ({
       handleReset();
       onOpenChange(false);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg(
-          err instanceof Error ? err.message : t('common.errorLoading')
-        );
-      }
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setUploading(false);
     }

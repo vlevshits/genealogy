@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Server, Database, ShieldCheck, Activity } from 'lucide-react';
 import { fetchHealth, HealthResponse } from '../api/client';
+import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export const SystemStatusCard: React.FC = () => {
@@ -16,7 +17,7 @@ export const SystemStatusCard: React.FC = () => {
         setError(null);
       })
       .catch((err) => {
-        setError(err.message || t('status.degraded'));
+        setError(getLocalizedErrorMessage(err, t));
       })
       .finally(() => {
         setLoading(false);

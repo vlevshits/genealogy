@@ -9,6 +9,7 @@ import {
 } from '../ui';
 import { FormField } from '../form';
 import { mergePlace, PlaceDto } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface PlaceMergeDialogProps {
@@ -76,9 +77,7 @@ export const PlaceMergeDialog: React.FC<PlaceMergeDialogProps> = ({
       }
       onOpenChange(false);
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setMerging(false);
     }

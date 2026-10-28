@@ -14,6 +14,7 @@ import {
   ApiError,
   updateAdminUser,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface RoleChangeDialogProps {
@@ -86,9 +87,7 @@ export const RoleChangeDialog: React.FC<RoleChangeDialogProps> = ({
       if (err instanceof ApiError && err.code === 'sole_admin_protected') {
         setErrorMsg(t('rbac.soleAdminError'));
       } else {
-        setErrorMsg(
-          err instanceof Error ? err.message : t('common.errorLoading')
-        );
+        setErrorMsg(getLocalizedErrorMessage(err, t));
       }
     } finally {
       setSaving(false);

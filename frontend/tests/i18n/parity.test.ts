@@ -8,6 +8,9 @@ import {
   formatPersonName,
   formatVitalEventLabel,
 } from '../../src/lib/formatters';
+import { ApiError } from '../../src/api/client';
+import { getLocalizedErrorMessage } from '../../src/lib/error-formatter';
+import { translate } from '../../src/i18n';
 
 function collectKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = [];
@@ -197,5 +200,44 @@ describe('i18n Key Parity & Localization Helpers', () => {
         locale: 'en',
       })
     ).toBe('');
+  });
+
+  it('localizes server ApiError codes, HTTP status fallbacks, and browser network errors in en and ru', () => {
+    const tRu = (path: string, params?: Record<string, string | number>) =>
+      translate('ru', path, params);
+    const tEn = (path: string, params?: Record<string, string | number>) =>
+      translate('en', path, params);
+
+    const netErr = new ApiError(0, {
+      code: 'network_error',
+      message: 'Network request failed',
+    });
+    expect(getLocalizedErrorMessage(netErr, tRu)).toBe(
+      'Не удалось связаться с сервером. Проверьте сетевое подключение.'
+    );
+    expect(getLocalizedErrorMessage(netErr, tEn)).toBe(
+      'Failed to connect to server. Check your network connection.'
+    );
+
+    const rawFetchError = new TypeError('Failed to fetch');
+    expect(getLocalizedErrorMessage(rawFetchError, tRu)).toBe(
+      'Не удалось связаться с сервером. Проверьте сетевое подключение.'
+    );
+
+    const invalidCredsErr = new ApiError(401, {
+      code: 'invalid_credentials',
+      message: 'Invalid credentials',
+    });
+    expect(getLocalizedErrorMessage(invalidCredsErr, tRu)).toBe(
+      'Неверный адрес электронной почты или пароль.'
+    );
+
+    const unmapped403 = new ApiError(403, {
+      code: 'custom_unmapped_code',
+      message: 'Forbidden: viewer cannot edit',
+    });
+    expect(getLocalizedErrorMessage(unmapped403, tRu)).toBe(
+      'У вас нет прав для выполнения этого действия.'
+    );
   });
 });

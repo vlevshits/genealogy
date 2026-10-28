@@ -34,6 +34,7 @@ import {
   revokeAdminInvite,
   revokeAdminUserSessions,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { RoleChangeDialog } from './RoleChangeDialog';
 import { UserDeactivateDialog } from './UserDeactivateDialog';
@@ -131,7 +132,7 @@ export const FamilyMembersInvitesPanel: React.FC<
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setCreatingInvite(false);
@@ -150,7 +151,7 @@ export const FamilyMembersInvitesPanel: React.FC<
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -166,7 +167,7 @@ export const FamilyMembersInvitesPanel: React.FC<
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -183,7 +184,7 @@ export const FamilyMembersInvitesPanel: React.FC<
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };

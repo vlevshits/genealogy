@@ -39,6 +39,7 @@ import {
   UpdatePersonInput,
 } from '../../api/client';
 import { formatTreeCardName } from '../tree/PersonNodeCard';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface ProfileHeroHeaderProps {
@@ -132,9 +133,7 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
       });
       setInlineEditing(false);
     } catch (err) {
-      setInlineError(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setInlineError(getLocalizedErrorMessage(err, t));
     } finally {
       setSavingInline(false);
     }

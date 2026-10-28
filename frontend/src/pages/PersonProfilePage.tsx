@@ -45,6 +45,7 @@ import {
   updatePerson,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
+import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export type ProfileTabKey = 'chronology' | 'family' | 'media' | 'notes';
@@ -628,7 +629,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -670,7 +671,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -704,7 +705,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -739,7 +740,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };

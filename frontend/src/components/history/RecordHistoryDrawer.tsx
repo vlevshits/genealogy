@@ -23,6 +23,7 @@ import {
   getEntityHistory,
   restoreChange,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface RecordHistoryDrawerProps {
@@ -250,9 +251,7 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
       onRestored?.(restoredId);
       loadHistory();
     } catch (err) {
-      setRestoreError(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setRestoreError(getLocalizedErrorMessage(err, t));
     } finally {
       setRestoring(false);
     }

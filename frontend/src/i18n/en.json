@@ -1658,5 +1658,36 @@
       "deathDate": "Death Date",
       "biography": "Biographical Narrative"
     }
+  },
+  "errors": {
+    "network_error": "Failed to connect to server. Check your network connection.",
+    "not_authenticated": "You must be signed in to perform this action.",
+    "session_expired": "Your session has expired. Please sign in again.",
+    "invalid_credentials": "Invalid email or password.",
+    "passkey_replay_detected": "Passkey replay detected. Please try again.",
+    "invalid_or_expired_challenge": "Authentication challenge expired. Please retry.",
+    "invalid_or_expired_invite": "Invitation link is invalid or has expired.",
+    "invalid_or_expired_token": "Authentication token is invalid or has expired.",
+    "last_auth_method": "Cannot remove your only authentication method.",
+    "sole_admin_protected": "Cannot demote or deactivate the sole remaining active administrator.",
+    "password_auth_disabled": "Password authentication is disabled on this instance.",
+    "csrf_validation_failed": "Security check failed (CSRF or Origin validation). Please refresh the page.",
+    "forbidden": "You do not have permission to perform this action.",
+    "settings_locked_from_env": "Settings are locked by server environment configuration.",
+    "not_found": "Requested resource was not found.",
+    "person_not_found": "Person not found.",
+    "setup_already_completed": "First-time instance setup has already been completed.",
+    "already_onboarded": "Family tree has already been onboarded.",
+    "version_conflict": "Record was modified by another user. Please reload and review changes.",
+    "cycle_detected": "Cannot create relationship: ancestor-descendant loop detected.",
+    "place_in_use": "Place is currently referenced by events or sub-places and cannot be deleted.",
+    "rate_limited": "Too many requests. Please wait a moment and try again.",
+    "account_locked": "Account is temporarily locked due to repeated failed sign-in attempts.",
+    "validation_failed": "Please check the entered fields and try again.",
+    "checksum_mismatch": "Backup archive checksum verification failed.",
+    "incompatible_schema": "Backup archive schema version is incompatible.",
+    "database_error": "A database error occurred. Please try again later.",
+    "internal_error": "An internal server error occurred. Please try again later.",
+    "unknown": "An unexpected error occurred."
   }
 }

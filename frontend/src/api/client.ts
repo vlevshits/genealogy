@@ -463,11 +463,19 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    credentials: 'include',
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      credentials: 'include',
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new ApiError(0, {
+      code: 'network_error',
+      message: 'Network request failed',
+    });
+  }
 
   if (!response.ok) {
     let errData: ApiErrorResponse;
@@ -1394,12 +1402,20 @@ export async function exportGedcom(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}/gedcom/export`, {
-    method: 'POST',
-    credentials: 'include',
-    headers,
-    body: JSON.stringify(options),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/gedcom/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify(options),
+    });
+  } catch {
+    throw new ApiError(0, {
+      code: 'network_error',
+      message: 'Network request failed',
+    });
+  }
 
   if (!response.ok) {
     let errData: ApiErrorResponse;

@@ -23,6 +23,7 @@ import {
 import { ConflictResolutionModal } from '../history';
 import { useLiveVersion } from '../../hooks/useLiveVersion';
 import { useUndoToast } from '../../hooks/useUndoToast';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface PersonEditDialogProps {
@@ -259,9 +260,7 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
               : undefined),
         });
       } else {
-        setErrorMsg(
-          err instanceof Error ? err.message : t('common.errorLoading')
-        );
+        setErrorMsg(getLocalizedErrorMessage(err, t));
       }
     } finally {
       setSaving(false);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Check, ChevronDown, Plus, RotateCcw, Search, X } from 'lucide-react';
 import { cn, matchesCrossScript } from '../../lib/utils';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { Spinner } from './spinner';
 import { useI18n } from '../../i18n';
 
@@ -115,7 +116,7 @@ export function Combobox<T = unknown>({
         }
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : t('common.errorLoading'));
+          setError(getLocalizedErrorMessage(err, t));
           setLoading(false);
         }
       }

@@ -11,7 +11,6 @@ import {
 } from '../ui';
 import { FormField, GenDateInput } from '../form';
 import {
-  ApiError,
   createPerson,
   PersonDetailDto,
   QuickAddRelation,
@@ -19,6 +18,7 @@ import {
   SexCode,
   TreePersonNodeDto,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { computeSlavicPatronymic } from '../../lib/patronymic';
 import { QuickAddDuplicateHint } from '../quality/QuickAddDuplicateHint';
 import { useI18n } from '../../i18n';
@@ -218,13 +218,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
       onRelativeAdded?.(res.person);
       onOpenChange(false);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg(
-          err instanceof Error ? err.message : t('common.errorLoading')
-        );
-      }
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

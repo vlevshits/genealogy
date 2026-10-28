@@ -12,6 +12,7 @@ import {
   ApiError,
   updateAdminUser,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface UserDeactivateDialogProps {
@@ -61,9 +62,7 @@ export const UserDeactivateDialog: React.FC<UserDeactivateDialogProps> = ({
       if (err instanceof ApiError && err.code === 'sole_admin_protected') {
         setErrorMsg(t('rbac.soleAdminError'));
       } else {
-        setErrorMsg(
-          err instanceof Error ? err.message : t('common.errorLoading')
-        );
+        setErrorMsg(getLocalizedErrorMessage(err, t));
       }
     } finally {
       setSubmitting(false);

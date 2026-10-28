@@ -10,6 +10,7 @@ import {
 } from '../../api/client';
 import { createPasskeyCredential } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 // Module-level deduplication cache so <React.StrictMode> double-invocation of useEffect
@@ -66,7 +67,7 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : t('common.errorLoading'));
+          setError(getLocalizedErrorMessage(err, t));
         }
       })
       .finally(() => {

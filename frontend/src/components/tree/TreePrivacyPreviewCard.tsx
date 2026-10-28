@@ -36,6 +36,7 @@ import {
   TreePersonNodeDto,
 } from '../../api/client';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { PublicGuestBanner } from './PublicGuestBanner';
 
@@ -184,7 +185,7 @@ export const TreePrivacyPreviewCard: React.FC<TreePrivacyPreviewCardProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };

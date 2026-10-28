@@ -24,6 +24,7 @@ import {
   getBackupDownloadUrl,
   triggerBackup,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { formatBytes } from './SystemDiagnosticsCard';
 import { TreeSnapshotsCard } from './TreeSnapshotsCard';
@@ -91,7 +92,7 @@ export const BackupsSettingsPanel: React.FC<BackupsSettingsPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setCreatingBackup(false);

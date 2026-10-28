@@ -17,6 +17,7 @@ import {
   GedcomImportResult,
   importGedcom,
 } from '../../../api/client';
+import { getLocalizedErrorMessage } from '../../../lib/error-formatter';
 import { useI18n } from '../../../i18n';
 import { GedcomAnalysisModal } from './GedcomAnalysisModal';
 import { GedcomCleanSlateConfirm } from './GedcomCleanSlateConfirm';
@@ -125,7 +126,7 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
       setAnalysis(report);
     } catch (err) {
       if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
-        setErrorMsg(err.message);
+        setErrorMsg(getLocalizedErrorMessage(err, t));
       } else {
         setAnalysis({
           ...DEFAULT_GEDCOM_ANALYSIS_REPORT,
@@ -162,7 +163,7 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
       });
     } catch (err) {
       if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
-        setErrorMsg(err.message);
+        setErrorMsg(getLocalizedErrorMessage(err, t));
       } else {
         setImportProgress(100);
         setImportResult(DEFAULT_GEDCOM_IMPORT_RESULT);

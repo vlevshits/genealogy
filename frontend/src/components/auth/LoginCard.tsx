@@ -27,6 +27,7 @@ import {
   isSecureContextAvailable,
 } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export type LoginViewMode = 'default' | 'magic_sent' | 'recovery';
@@ -73,7 +74,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
       onSuccess?.(res.prompt_passkey_enrollment);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setError(getLocalizedErrorMessage(err, t));
     } finally {
       setLoadingPasskey(false);
     }
@@ -92,7 +93,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
       onSuccess?.(res.prompt_passkey_enrollment);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setError(getLocalizedErrorMessage(err, t));
     } finally {
       setLoadingPassword(false);
     }
@@ -107,7 +108,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       setMagicPreviewUrl(res.preview_url ?? null);
       setMode('magic_sent');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setError(getLocalizedErrorMessage(err, t));
     } finally {
       setLoadingMagic(false);
     }
@@ -126,7 +127,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
       onSuccess?.(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common.errorLoading'));
+      setError(getLocalizedErrorMessage(err, t));
     } finally {
       setLoadingRecovery(false);
     }

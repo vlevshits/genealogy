@@ -34,6 +34,9 @@ Cross-cutting rules every endpoint and background task must follow. Other specs 
 | 413 | `upload_too_large` |
 | 429 | `rate_limited` |
 
+> [!IMPORTANT] Client-Side Error Localization:
+> The `message` field is intended strictly for backend server logs and debugging. The frontend client must **never** display `error.message` directly in non-English locales; it must resolve `error.code` (or HTTP status) via the localized dictionary under `errors.<code_or_status>` per [00 §2.7](00-internationalization-localization.md#27-error-code-localization-architecture-api--network-failures). Browser fetch failures (e.g. `TypeError: Failed to fetch`) must similarly map to `errors.network_error`.
+
 ### 2.3 Pagination, Sorting, Filtering
 - Cursor-based: `?limit=100&cursor=<opaque>` → `{ "items": [...], "next_cursor": "...", "total": 1420 }`. `total` is cheap-count or omitted for expensive queries.
 - `?sort=birth,-surname` (prefix `-` = desc).

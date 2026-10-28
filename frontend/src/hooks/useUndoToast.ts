@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { undoTransaction } from '../api/client';
 import { useToast } from '../components/ui';
+import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export interface TriggerUndoToastOptions {
@@ -43,7 +44,7 @@ export function useUndoToast() {
               addToast({
                 type: 'error',
                 title: t('common.errorLoading'),
-                description: err instanceof Error ? err.message : undefined,
+                description: getLocalizedErrorMessage(err, t),
               });
             }
           };

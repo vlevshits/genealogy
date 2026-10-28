@@ -18,6 +18,7 @@ import {
   TreePersonNodeDto,
   updateAdminSettings,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { SystemDiagnosticsCard } from './SystemDiagnosticsCard';
 
@@ -107,7 +108,7 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
       addToast({
         type: 'error',
         title: t('settings.general.saveError'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setSaving(false);

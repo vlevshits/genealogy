@@ -36,6 +36,7 @@ import {
 } from '../../api/client';
 import { createPasskeyCredential } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { RecoveryCodesCard } from '../auth/RecoveryCodesCard';
 
@@ -135,7 +136,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setAddingPasskey(false);
@@ -160,7 +161,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -177,7 +178,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -197,7 +198,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setRegeneratingCodes(false);
@@ -223,7 +224,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setSavingPassword(false);
@@ -242,7 +243,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };
@@ -261,7 +262,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     }
   };

@@ -14,6 +14,7 @@ import {
   TreePersonNodeDto,
 } from '../../api/client';
 import { useUndoToast } from '../../hooks/useUndoToast';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface DeleteImpactDialogProps {
@@ -102,9 +103,7 @@ export const DeleteImpactDialog: React.FC<DeleteImpactDialogProps> = ({
       onPersonDeleted?.(person.id);
       onOpenChange(false);
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setDeleting(false);
     }

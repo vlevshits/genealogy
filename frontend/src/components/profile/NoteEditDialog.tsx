@@ -15,6 +15,7 @@ import {
   NoteDto,
   updateNote,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 
 export interface NoteEditDialogProps {
@@ -78,9 +79,7 @@ export const NoteEditDialog: React.FC<NoteEditDialogProps> = ({
       onNoteSaved?.(saved);
       onOpenChange(false);
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setErrorMsg(getLocalizedErrorMessage(err, t));
     } finally {
       setSaving(false);
     }

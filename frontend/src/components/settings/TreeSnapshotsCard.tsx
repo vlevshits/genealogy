@@ -26,6 +26,7 @@ import {
   rollbackSnapshot,
   TreeSnapshotDto,
 } from '../../api/client';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { formatBytes } from './SystemDiagnosticsCard';
 
@@ -185,7 +186,7 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
       addToast({
         type: 'error',
         title: t('common.errorLoading'),
-        description: err instanceof Error ? err.message : undefined,
+        description: getLocalizedErrorMessage(err, t),
       });
     } finally {
       setCreating(false);
@@ -216,9 +217,7 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
       onRollbackCompleted?.(targetId);
       loadSnapshots();
     } catch (err) {
-      setRollbackError(
-        err instanceof Error ? err.message : t('common.errorLoading')
-      );
+      setRollbackError(getLocalizedErrorMessage(err, t));
     } finally {
       setRollingBack(false);
     }
