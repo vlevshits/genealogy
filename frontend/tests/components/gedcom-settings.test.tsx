@@ -10,9 +10,11 @@ import { SettingsPage } from '../../src/pages/SettingsPage';
 import {
   DEFAULT_GEDCOM_ANALYSIS_REPORT,
   DEFAULT_GEDCOM_IMPORT_RESULT,
+  DEFAULT_RECONCILE_REPORT,
   GedcomAnalysisModal,
   GedcomCleanSlateConfirm,
   GedcomExportCard,
+  GedcomMediaReconcileCard,
   GedcomPostImportReport,
   GedcomSettingsPanel,
   isCleanSlateConfirmed,
@@ -153,6 +155,66 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     );
   });
 
+  it('renders GedcomMediaReconcileCard with missing media stubs alert, dropzone, and post-upload statistics card in EN and RU', () => {
+    // 1. Missing stubs alert state in EN
+    const htmlMissingEn = renderWithProviders(
+      <GedcomMediaReconcileCard
+        initialMissingStubs={{
+          total: 129,
+          samplePaths: ['/root/gramps/000085_mikhail.jpg', '/root/gramps/000086_elena.jpg'],
+        }}
+      />,
+      'en'
+    );
+    expect(htmlMissingEn).toContain('Media Archive Reconciliation');
+    expect(htmlMissingEn).toContain('129 media items in your tree are missing images');
+    expect(htmlMissingEn).toContain('/root/gramps/000085_mikhail.jpg, /root/gramps/000086_elena.jpg');
+    expect(htmlMissingEn).toContain('ZIP / GDZ bundle (≤ 500 MB)');
+
+    // 2. Missing stubs alert state in RU
+    const htmlMissingRu = renderWithProviders(
+      <GedcomMediaReconcileCard
+        initialMissingStubs={{
+          total: 129,
+          samplePaths: ['/root/gramps/000085_mikhail.jpg'],
+        }}
+      />,
+      'ru'
+    );
+    expect(htmlMissingRu).toContain('Согласование медиаархива');
+    expect(htmlMissingRu).toContain('Медиафайлы без прикреплённых изображений: 129');
+    expect(htmlMissingRu).toContain('Исходные пути к файлам:');
+
+    // 3. Post-upload completed statistics report card in EN
+    const htmlReportEn = renderWithProviders(
+      <GedcomMediaReconcileCard
+        initialMissingStubs={{ total: 0, samplePaths: [] }}
+        initialReport={DEFAULT_RECONCILE_REPORT}
+      />,
+      'en'
+    );
+    expect(htmlReportEn).toContain('129 of 129 missing media files reconciled successfully');
+    expect(htmlReportEn).toContain('Total Archive Files');
+    expect(htmlReportEn).toContain('Reconciled Stubs');
+    expect(htmlReportEn).toContain('Remaining Missing Stubs');
+    expect(htmlReportEn).toContain('View in Media Gallery');
+    expect(htmlReportEn).toContain('Upload Another Archive');
+
+    // 4. Post-upload completed statistics report card in RU
+    const htmlReportRu = renderWithProviders(
+      <GedcomMediaReconcileCard
+        initialMissingStubs={{ total: 0, samplePaths: [] }}
+        initialReport={DEFAULT_RECONCILE_REPORT}
+      />,
+      'ru'
+    );
+    expect(htmlReportRu).toContain('Успешно согласовано 129 из 129 отсутствующих медиафайлов');
+    expect(htmlReportRu).toContain('Всего файлов в архиве');
+    expect(htmlReportRu).toContain('Согласовано записей');
+    expect(htmlReportRu).toContain('Осталось отсутствующих');
+    expect(htmlReportRu).toContain('Перейти в медиагалерею');
+  });
+
   it('uses zero raw <button>, <input>, <select>, or <textarea> HTML elements in GEDCOM settings components', () => {
     const filesToCheck = [
       path.resolve(
@@ -170,6 +232,10 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       path.resolve(
         __dirname,
         '../../src/components/settings/gedcom/GedcomImportCard.tsx'
+      ),
+      path.resolve(
+        __dirname,
+        '../../src/components/settings/gedcom/GedcomMediaReconcileCard.tsx'
       ),
       path.resolve(
         __dirname,

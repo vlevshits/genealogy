@@ -443,6 +443,22 @@ export interface MediaAssetSummaryDto {
   face_tags: FaceTagDto[];
   links?: MediaLinkDto[];
   version?: number;
+  is_missing?: boolean;
+}
+
+export interface MediaBundleReconciliationReport {
+  total_archive_files: number;
+  total_extracted?: number;
+  reconciled_stubs: number;
+  newly_created: number;
+  unmatched_files: number;
+  unmatched_filenames: string[];
+  remaining_missing_stubs: number;
+  skipped_invalid_files: number;
+  skipped_files?: number;
+  total_bytes_extracted: number;
+  duration_ms: number;
+  errors?: string[];
 }
 
 export interface MediaArchiveResponse {
@@ -458,6 +474,7 @@ export interface MediaFilterQuery {
   decade?: string;
   type?: string;
   untagged?: boolean;
+  is_missing?: boolean;
   cursor?: string;
   limit?: number;
 }

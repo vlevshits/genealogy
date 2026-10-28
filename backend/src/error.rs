@@ -104,6 +104,21 @@ pub enum AppError {
     #[error("Backup archive schema version is incompatible: {0}")]
     IncompatibleSchema(String),
 
+    #[error("Invalid archive: {0}")]
+    InvalidArchive(String),
+
+    #[error("Zip slip path traversal detected: {0}")]
+    ZipSlipDetected(String),
+
+    #[error("Decompression limit exceeded: {0}")]
+    DecompressionLimitExceeded(String),
+
+    #[error("Payload too large: {0}")]
+    PayloadTooLarge(String),
+
+    #[error("Unsupported archive format: {0}")]
+    UnsupportedArchiveFormat(String),
+
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
 
@@ -139,6 +154,11 @@ impl AppError {
             Self::AccountLocked => "account_locked",
             Self::ChecksumMismatch(_) => "checksum_mismatch",
             Self::IncompatibleSchema(_) => "incompatible_schema",
+            Self::InvalidArchive(_) => "invalid_archive",
+            Self::ZipSlipDetected(_) => "zip_slip_detected",
+            Self::DecompressionLimitExceeded(_) => "decompression_limit_exceeded",
+            Self::PayloadTooLarge(_) => "upload_too_large",
+            Self::UnsupportedArchiveFormat(_) => "unsupported_archive_format",
             Self::DatabaseError(_) => "database_error",
             Self::Internal(_) => "internal_error",
         }
@@ -153,7 +173,12 @@ impl AppError {
             | Self::SoleAdminProtected
             | Self::CycleDetected(_)
             | Self::ChecksumMismatch(_)
-            | Self::IncompatibleSchema(_) => StatusCode::BAD_REQUEST,
+            | Self::IncompatibleSchema(_)
+            | Self::InvalidArchive(_)
+            | Self::ZipSlipDetected(_)
+            | Self::DecompressionLimitExceeded(_) => StatusCode::BAD_REQUEST,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnsupportedArchiveFormat(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::NotAuthenticated
             | Self::SessionExpired
             | Self::InvalidCredentials

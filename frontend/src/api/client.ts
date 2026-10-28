@@ -825,6 +825,7 @@ import {
   LifeEventDto,
   MediaArchiveResponse,
   MediaAssetSummaryDto,
+  MediaBundleReconciliationReport,
   MediaFilterQuery,
   MediaLinkDto,
   MergePlaceResponse,
@@ -1218,6 +1219,9 @@ export async function fetchMediaArchive(
   if (params?.untagged !== undefined) {
     search.set('untagged', String(params.untagged));
   }
+  if (params?.is_missing !== undefined) {
+    search.set('is_missing', String(params.is_missing));
+  }
   if (params?.cursor) search.set('cursor', params.cursor);
   if (params?.limit !== undefined) search.set('limit', String(params.limit));
   const qs = search.toString();
@@ -1333,6 +1337,180 @@ export async function deleteMediaLink(
     {
       method: 'DELETE',
     }
+  );
+}
+
+export type { MediaBundleReconciliationReport };
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
+export interface MediaBundleUploadOptions {
+  ingest_unmatched?: boolean;
+  onProgress?: (progress: UploadProgress) => void;
+  signal?: AbortSignal;
+}
+
+export function uploadFileWithProgress<T>(
+  endpoint: string,
+  formData: FormData,
+  options?: {
+    onProgress?: (progress: UploadProgress) => void;
+    signal?: AbortSignal;
+  }
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (typeof XMLHttpRequest === 'undefined') {
+      const headers = new Headers();
+      headers.set('X-Requested-With', 'genealogy');
+      const token = getAuthToken();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+        headers,
+        credentials: 'include',
+        signal: options?.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            let errData: ApiErrorResponse;
+            try {
+              errData = await res.json();
+            } catch {
+              errData = {
+                error: {
+                  code: 'network_error',
+                  message: res.statusText || 'Upload failed',
+                },
+              };
+            }
+            throw new ApiError(res.status, errData.error);
+          }
+          return res.json() as Promise<T>;
+        })
+        .then(resolve)
+        .catch((err) => {
+          if (err instanceof ApiError) {
+            reject(err);
+          } else {
+            reject(
+              new ApiError(0, {
+                code: 'network_error',
+                message: err instanceof Error ? err.message : 'Network request failed',
+              })
+            );
+          }
+        });
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}${endpoint}`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('X-Requested-With', 'genealogy');
+
+    const token = getAuthToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        xhr.abort();
+        reject(new ApiError(0, { code: 'aborted', message: 'Upload aborted' }));
+        return;
+      }
+      options.signal.addEventListener('abort', () => {
+        xhr.abort();
+        reject(new ApiError(0, { code: 'aborted', message: 'Upload aborted' }));
+      });
+    }
+
+    if (xhr.upload && options?.onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          options.onProgress?.({
+            loaded: event.loaded,
+            total: event.total,
+            percent,
+          });
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let responseData: (Record<string, unknown> & { error?: ApiErrorDetail; code?: string; message?: string; details?: Record<string, unknown>; field_errors?: Record<string, string> }) | null = null;
+      try {
+        responseData = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        responseData = null;
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(responseData as T);
+      } else {
+        const errorDetail: ApiErrorDetail = responseData?.error || {
+          code: responseData?.code || 'network_error',
+          message: responseData?.message || xhr.statusText || 'Upload failed',
+          details: responseData?.details,
+          field_errors: responseData?.field_errors,
+        };
+        reject(new ApiError(xhr.status, errorDetail));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(
+        new ApiError(0, {
+          code: 'network_error',
+          message: 'Network request failed',
+        })
+      );
+    };
+
+    xhr.ontimeout = () => {
+      reject(
+        new ApiError(0, {
+          code: 'timeout',
+          message: 'Upload timed out',
+        })
+      );
+    };
+
+    xhr.send(formData);
+  });
+}
+
+export async function uploadGedcomMediaBundle(
+  file: File,
+  options?: MediaBundleUploadOptions
+): Promise<MediaBundleReconciliationReport> {
+  const formData = new FormData();
+  formData.append('bundle', file, file.name);
+  const ingest = options?.ingest_unmatched ?? false;
+  return uploadFileWithProgress<MediaBundleReconciliationReport>(
+    `/gedcom/media-bundle?ingest_unmatched=${ingest}`,
+    formData,
+    options
+  );
+}
+
+export async function uploadMediaBundle(
+  file: File,
+  options?: MediaBundleUploadOptions
+): Promise<MediaBundleReconciliationReport> {
+  const formData = new FormData();
+  formData.append('bundle', file, file.name);
+  const ingest = options?.ingest_unmatched ?? true;
+  return uploadFileWithProgress<MediaBundleReconciliationReport>(
+    `/media/bundle?ingest_unmatched=${ingest}`,
+    formData,
+    options
   );
 }
 
@@ -1735,14 +1913,14 @@ export interface TreeGlanceStatsDto {
   earliest_birth_year?: number | null;
   oldest_person_name?: string | null;
   oldest_ancestor?:
-    | {
-        id?: string;
-        gid?: string;
-        display_name?: string;
-        birth_year?: number | null;
-      }
-    | string
-    | null;
+  | {
+    id?: string;
+    gid?: string;
+    display_name?: string;
+    birth_year?: number | null;
+  }
+  | string
+  | null;
   open_warnings_count?: number;
   missing_birth_dates_count?: number;
   missing_birth_count?: number;

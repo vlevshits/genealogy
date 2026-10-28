@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -42,6 +42,10 @@ use crate::{
             EntityVersionResponse, HistoryFeedQuery, HistoryFeedResponse, RecordHistoryResponse,
             RollbackSnapshotRequest, RollbackSnapshotResponse, SnapshotListResponse,
             UndoTransactionResponse,
+        },
+        media_bundle::{
+            process_media_bundle_archive, save_media_bytes_to_disk, spool_multipart_to_temp_file,
+            MediaBundleQuery, MediaBundleReconciliationReport,
         },
         privacy::{
             canonicalize_surname_display, evaluate_is_living, fold_slavic_surname_stem,
@@ -676,6 +680,7 @@ pub struct MediaFilterQuery {
     #[serde(rename = "type")]
     pub media_type: Option<String>,
     pub untagged: Option<bool>,
+    pub is_missing: Option<bool>,
     pub cursor: Option<String>,
     pub limit: Option<usize>,
 }
@@ -4586,17 +4591,6 @@ pub async fn delete_note(
 const DEFAULT_WEBP_BYTES: &[u8] =
     b"RIFF\x1a\x00\x00\x00WEBPVP8L\x0d\x00\x00\x00/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07\x00";
 
-fn save_media_bytes_to_disk(media_storage_path: &str, file_name: &str, bytes: &[u8]) {
-    let primary_dir = PathBuf::from(media_storage_path).join("originals");
-    if std::fs::create_dir_all(&primary_dir).is_ok() {
-        let _ = std::fs::write(primary_dir.join(file_name), bytes);
-    }
-    let fallback_dir = PathBuf::from("/tmp/genealogy-media/originals");
-    if std::fs::create_dir_all(&fallback_dir).is_ok() {
-        let _ = std::fs::write(fallback_dir.join(file_name), bytes);
-    }
-}
-
 fn read_media_bytes_from_disk(media_storage_path: &str, file_name: &str) -> Vec<u8> {
     if !file_name.is_empty() {
         let primary_path = PathBuf::from(media_storage_path)
@@ -6360,6 +6354,7 @@ fn clear_primary_avatar_for_person(store: &mut GenealogyPrivacyStore, person_id:
         ("decade" = Option<String>, Query, description = "Filter by decade (e.g. '1940s' or '1940')"),
         ("type" = Option<String>, Query, description = "Filter by media category ('photos', 'documents', 'audio')"),
         ("untagged" = Option<bool>, Query, description = "Filter untagged media (true = untagged only, false = tagged only)"),
+        ("is_missing" = Option<bool>, Query, description = "Filter by missing media stubs pending bundle upload"),
         ("cursor" = Option<String>, Query, description = "Pagination cursor"),
         ("limit" = Option<usize>, Query, description = "Max items per page (default 50, max 100)")
     ),
@@ -6420,6 +6415,12 @@ pub async fn list_media_archive(
     let filtered: Vec<MediaAssetSummaryDto> = unfiltered_items
         .into_iter()
         .filter(|m| {
+            if let Some(missing_filter) = query.is_missing {
+                if m.is_missing != missing_filter {
+                    return false;
+                }
+            }
+
             if let Some(ref target_pid) = resolved_person_filter {
                 let matches_person = m.linked_person_ids.iter().any(|id| id == target_pid)
                     || m.face_tags.iter().any(|t| &t.person_id == target_pid)
@@ -6930,6 +6931,60 @@ pub async fn create_media(
     );
 
     Ok((StatusCode::CREATED, Json(created)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/media/bundle",
+    params(
+        MediaBundleQuery
+    ),
+    responses(
+        (status = 200, description = "Media library archive bundle ingested and reconciled against stubs", body = MediaBundleReconciliationReport),
+        (status = 400, description = "Invalid archive, zip slip traversal or decompression limit exceeded", body = ErrorResponse),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse),
+        (status = 413, description = "Payload too large (> 500MB)", body = ErrorResponse),
+        (status = 415, description = "Unsupported archive format (not a ZIP archive)", body = ErrorResponse)
+    ),
+    tag = "Media & Avatars"
+)]
+pub async fn upload_media_bundle(
+    RequireEditor(editor): RequireEditor,
+    State(state): State<AppState>,
+    Query(query): Query<MediaBundleQuery>,
+    multipart: Multipart,
+) -> Result<Json<MediaBundleReconciliationReport>, AppError> {
+    let ingest_unmatched = query.ingest_unmatched.unwrap_or(true);
+    let temp_file = spool_multipart_to_temp_file(multipart).await?;
+    let mut store = state.privacy_store.write().await;
+    let report = process_media_bundle_archive(
+        temp_file,
+        &mut store,
+        &state.config.media_storage_path,
+        ingest_unmatched,
+    )?;
+
+    if report.reconciled_stubs > 0 || report.newly_created > 0 {
+        log_change(
+            &mut store,
+            None,
+            "media.bundle",
+            "media",
+            "bundle",
+            "update",
+            Some("Media Library Bundle".to_string()),
+            format!(
+                "Reconciled {} stubs and ingested {} new media assets from media bundle",
+                report.reconciled_stubs, report.newly_created
+            ),
+            None,
+            None,
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
+    }
+
+    Ok(Json(report))
 }
 
 #[utoipa::path(
@@ -7837,6 +7892,60 @@ pub async fn import_gedcom(
     )?;
 
     Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/gedcom/media-bundle",
+    params(
+        MediaBundleQuery
+    ),
+    responses(
+        (status = 200, description = "GEDCOM media archive bundle reconciled against missing stubs", body = MediaBundleReconciliationReport),
+        (status = 400, description = "Invalid archive, zip slip traversal or decompression limit exceeded", body = ErrorResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 413, description = "Payload too large (> 500MB)", body = ErrorResponse),
+        (status = 415, description = "Unsupported archive format (not a ZIP archive)", body = ErrorResponse)
+    ),
+    tag = "GEDCOM"
+)]
+pub async fn reconcile_gedcom_media_bundle(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    Query(query): Query<MediaBundleQuery>,
+    multipart: Multipart,
+) -> Result<Json<MediaBundleReconciliationReport>, AppError> {
+    let ingest_unmatched = query.ingest_unmatched.unwrap_or(false);
+    let temp_file = spool_multipart_to_temp_file(multipart).await?;
+    let mut store = state.privacy_store.write().await;
+    let report = process_media_bundle_archive(
+        temp_file,
+        &mut store,
+        &state.config.media_storage_path,
+        ingest_unmatched,
+    )?;
+
+    if report.reconciled_stubs > 0 || report.newly_created > 0 {
+        log_change(
+            &mut store,
+            None,
+            "gedcom.media_bundle",
+            "media",
+            "bundle",
+            "update",
+            Some("GEDCOM Media Bundle".to_string()),
+            format!(
+                "Reconciled {} stubs and ingested {} new media assets from GEDCOM bundle",
+                report.reconciled_stubs, report.newly_created
+            ),
+            None,
+            None,
+            Some(admin.user.id.to_string()),
+            Some(admin.user.display_name()),
+        );
+    }
+
+    Ok(Json(report))
 }
 
 #[utoipa::path(

@@ -4,6 +4,7 @@ pub mod rbac;
 pub mod system;
 
 use axum::{
+    extract::DefaultBodyLimit,
     http::{header, Method},
     middleware,
     routing::{delete, get, patch, post, put},
@@ -49,9 +50,10 @@ use crate::{
             list_people_directory, list_people_surnames, list_places_directory,
             list_quality_warnings, list_snapshots, mark_pair_not_duplicate,
             match_people_candidates, merge_duplicate_people, merge_place, preview_merge_people_get,
-            preview_merge_people_post, quick_add_relative, restore_deleted_person,
-            rollback_to_snapshot, start_with_self, undo_history_transaction, update_event,
-            update_face_tag, update_family, update_media, update_note, update_person, update_place,
+            preview_merge_people_post, quick_add_relative, reconcile_gedcom_media_bundle,
+            restore_deleted_person, rollback_to_snapshot, start_with_self,
+            undo_history_transaction, update_event, update_face_tag, update_family, update_media,
+            update_note, update_person, update_place, upload_media_bundle,
             AdminToolOperationResponse, CreateEventRequest, CreateFaceTagRequest,
             CreateFamilyRequest, CreateMediaLinkRequest, CreateMediaRequest, CreateNoteRequest,
             CreatePersonRequest, CreatePlaceRequest, DeleteImpactDto, EventFilterQuery,
@@ -113,6 +115,7 @@ use crate::{
             RecordHistoryResponse, RollbackSnapshotRequest, RollbackSnapshotResponse,
             SnapshotListResponse, UndoTransactionResponse,
         },
+        media_bundle::{MediaBundleQuery, MediaBundleReconciliationReport},
         privacy::{
             AvatarCropDto, ChangeLogEntryDto, DismissedWarningDto, FaceTagDto, FamilyChildDto,
             FamilyDto, IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, MediaLinkDto,
@@ -221,6 +224,7 @@ use crate::{
         rbac::merge_place,
         rbac::list_media_archive,
         rbac::create_media,
+        rbac::upload_media_bundle,
         rbac::get_media_detail,
         rbac::update_media,
         rbac::delete_media,
@@ -233,6 +237,7 @@ use crate::{
         rbac::export_gedcom,
         rbac::export_gedcom_post,
         rbac::import_gedcom,
+        rbac::reconcile_gedcom_media_bundle,
         rbac::export_printable_pdf,
         rbac::get_audit_history,
         rbac::get_record_history,
@@ -420,6 +425,8 @@ use crate::{
             UpdateFaceTagRequest,
             CreateMediaLinkRequest,
             MediaArchiveResponse,
+            MediaBundleQuery,
+            MediaBundleReconciliationReport,
             GedcomDialectSummary,
             GedcomAnalysisReport,
             GedcomAnalyzeRequest,
@@ -573,6 +580,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/notes/{id}", patch(update_note).delete(delete_note))
         .route("/media", get(list_media_archive).post(create_media))
         .route(
+            "/media/bundle",
+            post(upload_media_bundle).layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
+        )
+        .route(
             "/media/{id}",
             get(get_media_detail)
                 .patch(update_media)
@@ -606,12 +617,22 @@ pub fn create_router(state: AppState) -> Router {
                 .delete(delete_place),
         )
         .route("/places/{id}/merge", post(merge_place))
-        .route("/gedcom/analyze", post(analyze_gedcom))
+        .route(
+            "/gedcom/analyze",
+            post(analyze_gedcom).layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
+        )
         .route(
             "/gedcom/export",
             get(export_gedcom).post(export_gedcom_post),
         )
-        .route("/gedcom/import", post(import_gedcom))
+        .route(
+            "/gedcom/import",
+            post(import_gedcom).layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
+        )
+        .route(
+            "/gedcom/media-bundle",
+            post(reconcile_gedcom_media_bundle).layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
+        )
         .route("/export/pdf", post(export_printable_pdf))
         .route("/history", get(get_audit_history))
         .route(

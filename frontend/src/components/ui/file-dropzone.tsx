@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { UploadCloud, FileText, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './button';
+import { IconButton } from './icon-button';
 import { ProgressBar } from './progress-bar';
 import { useI18n } from '../../i18n';
 
@@ -170,14 +171,14 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                aria-label={t('dropzone.removeFile', { name: item.file.name })}
+              <IconButton
+                size="sm"
+                variant="ghost"
+                label={t('dropzone.removeFile', { name: item.file.name })}
                 onClick={() => setQueue((q) => q.filter((x) => x.id !== item.id))}
-                className="rounded p-1 text-tertiary hover:bg-surface-muted hover:text-primary cursor-pointer"
               >
                 <X className="h-4 w-4" />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

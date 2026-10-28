@@ -6,6 +6,7 @@ export interface ProgressBarProps extends React.HTMLAttributes<HTMLDivElement> {
   max?: number;
   indeterminate?: boolean;
   label?: string;
+  hideLabel?: boolean;
   stepText?: string;
   showPercentage?: boolean;
   variant?: 'brand' | 'success' | 'warning' | 'danger';
@@ -17,11 +18,13 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   max = 100,
   indeterminate = false,
   label,
+  hideLabel = false,
   stepText,
   showPercentage = true,
   variant = 'brand',
   className,
   ref,
+  'aria-label': ariaLabel,
   ...props
 }) => {
   const clamped = Math.min(max, Math.max(0, value));
@@ -36,7 +39,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   return (
     <div ref={ref} className={cn('w-full space-y-1.5', className)} {...props}>
-      {(label || showPercentage || stepText) && (
+      {!hideLabel && (label || showPercentage || stepText) && (
         <div className="flex items-center justify-between text-xs">
           <div className="font-medium text-primary">
             {label}
@@ -49,7 +52,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       )}
       <div
         role="progressbar"
-        aria-label={label || stepText || 'Progress'}
+        aria-label={ariaLabel || label || stepText || 'Progress'}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={indeterminate ? undefined : clamped}

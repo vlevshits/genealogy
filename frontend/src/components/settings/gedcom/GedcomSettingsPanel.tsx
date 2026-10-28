@@ -3,8 +3,13 @@ import {
   GedcomAnalysisReport,
   GedcomExportOptions,
   GedcomImportResult,
+  MediaBundleReconciliationReport,
 } from '../../../api/client';
 import { GedcomImportCard } from './GedcomImportCard';
+import {
+  GedcomMediaReconcileCard,
+  MissingStubsSummary,
+} from './GedcomMediaReconcileCard';
 import { GedcomExportCard } from './GedcomExportCard';
 
 export interface GedcomSettingsPanelProps {
@@ -12,6 +17,8 @@ export interface GedcomSettingsPanelProps {
   initialImportResult?: GedcomImportResult | null;
   initialConfirmOpen?: boolean;
   initialExportOptions?: Partial<GedcomExportOptions>;
+  initialReconcileReport?: MediaBundleReconciliationReport | null;
+  initialMissingStubs?: MissingStubsSummary | null;
   onNavigate?: (path: string) => void;
   onExportTriggered?: (options: GedcomExportOptions, url: string) => void;
 }
@@ -21,6 +28,8 @@ export const GedcomSettingsPanel: React.FC<GedcomSettingsPanelProps> = ({
   initialImportResult = null,
   initialConfirmOpen = false,
   initialExportOptions,
+  initialReconcileReport = null,
+  initialMissingStubs = null,
   onNavigate,
   onExportTriggered,
 }) => {
@@ -33,6 +42,12 @@ export const GedcomSettingsPanel: React.FC<GedcomSettingsPanelProps> = ({
         onNavigate={onNavigate}
       />
 
+      <GedcomMediaReconcileCard
+        initialReport={initialReconcileReport}
+        initialMissingStubs={initialMissingStubs}
+        onNavigate={onNavigate}
+      />
+
       <GedcomExportCard
         initialOptions={initialExportOptions}
         onExportTriggered={onExportTriggered}
@@ -40,3 +55,4 @@ export const GedcomSettingsPanel: React.FC<GedcomSettingsPanelProps> = ({
     </div>
   );
 };
+

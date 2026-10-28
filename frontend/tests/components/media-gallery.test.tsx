@@ -19,7 +19,10 @@ import {
   MediaUploadDialog,
   PersonFacePicker,
 } from '../../src/components/media';
-import { getMediaCropUrl } from '../../src/api/client';
+import {
+  getMediaCropUrl,
+  MediaBundleReconciliationReport,
+} from '../../src/api/client';
 
 function renderWithProviders(
   node: React.ReactNode,
@@ -180,6 +183,55 @@ describe('Phase 1.9 — Media Archive, Gallery, Face Tagging & Avatar Synchroniz
     );
     expect(htmlUploadEn).toContain('Upload Family Media &amp; Scans');
     expect(htmlUploadEn).toContain('Private family asset');
+  });
+
+  it('renders MediaUploadDialog with batch archive ingestion result summary in EN and RU', () => {
+    const sampleArchiveReport: MediaBundleReconciliationReport = {
+      total_archive_files: 129,
+      total_extracted: 129,
+      reconciled_stubs: 129,
+      newly_created: 0,
+      unmatched_files: 0,
+      unmatched_filenames: [],
+      remaining_missing_stubs: 0,
+      skipped_invalid_files: 0,
+      skipped_files: 0,
+      total_bytes_extracted: 54_000_000,
+      duration_ms: 850,
+      errors: [],
+    };
+
+    const htmlArchiveEn = renderWithProviders(
+      <MediaUploadDialog
+        open={true}
+        onOpenChange={() => {}}
+        initialArchiveReport={sampleArchiveReport}
+      />,
+      'en'
+    );
+    expect(htmlArchiveEn).toContain('Batch Ingestion Completed');
+    expect(htmlArchiveEn).toContain('Total Files Processed');
+    expect(htmlArchiveEn).toContain('Stubs Reconciled');
+    expect(htmlArchiveEn).toContain('New Photos Added');
+    expect(htmlArchiveEn).toContain('Skipped / Unmatched');
+    expect(htmlArchiveEn).toContain('129');
+    expect(htmlArchiveEn).toContain('Done');
+
+    const htmlArchiveRu = renderWithProviders(
+      <MediaUploadDialog
+        open={true}
+        onOpenChange={() => {}}
+        initialArchiveReport={sampleArchiveReport}
+      />,
+      'ru'
+    );
+    expect(htmlArchiveRu).toContain('Пакетный импорт завершён');
+    expect(htmlArchiveRu).toContain('Обработано файлов');
+    expect(htmlArchiveRu).toContain('Согласовано записей');
+    expect(htmlArchiveRu).toContain('Добавлено новых фото');
+    expect(htmlArchiveRu).toContain('Не сопоставлено');
+    expect(htmlArchiveRu).toContain('129');
+    expect(htmlArchiveRu).toContain('Готово');
   });
 
   it('uses zero raw <button>, <input>, <select>, or <textarea> HTML elements in media components and page', () => {
