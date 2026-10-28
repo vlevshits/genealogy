@@ -3,10 +3,10 @@
 **/.vscode
 **/.idea
 **/.DS_Store
-node_modules
-target
-dist
-build
+**/node_modules
+**/target
+**/dist
+**/build
 .env
 .env.*
 !.env.example

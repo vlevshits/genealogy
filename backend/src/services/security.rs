@@ -20,10 +20,91 @@ type HmacSha256 = Hmac<Sha256>;
 const PBKDF2_ITERATIONS: u32 = 15_000;
 const RECOVERY_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
+fn parse_host_port(authority: &str) -> Option<(&str, Option<u16>)> {
+    let trimmed = authority.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(rest) = trimmed.strip_prefix('[') {
+        let (ipv6, after) = rest.split_once(']')?;
+        if let Some(port_str) = after.strip_prefix(':') {
+            let port = port_str.parse::<u16>().ok()?;
+            return Some((ipv6, Some(port)));
+        } else if after.is_empty() {
+            return Some((ipv6, None));
+        } else {
+            return None;
+        }
+    }
+    if let Some((host, port_str)) = trimmed.rsplit_once(':') {
+        let port = port_str.parse::<u16>().ok()?;
+        if host.is_empty() {
+            return None;
+        }
+        Some((host, Some(port)))
+    } else {
+        Some((trimmed, None))
+    }
+}
+
+fn parse_origin_scheme_host_port(origin: &str) -> Option<(&str, &str, Option<u16>)> {
+    let (scheme, rest) = origin.trim().split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    let authority = rest.split('/').next().unwrap_or(rest);
+    let (host, port) = parse_host_port(authority)?;
+    Some((scheme, host, port))
+}
+
+fn is_same_origin_as_request(origin: &str, headers: &axum::http::HeaderMap) -> bool {
+    let Some((origin_scheme, origin_host, origin_port)) = parse_origin_scheme_host_port(origin)
+    else {
+        return false;
+    };
+
+    let raw_target_host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get("host"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .unwrap_or("");
+
+    let Some((req_host, req_port)) = parse_host_port(raw_target_host) else {
+        return false;
+    };
+
+    if !origin_host.eq_ignore_ascii_case(req_host) {
+        return false;
+    }
+
+    if let Some(fwd_proto) = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if !origin_scheme.eq_ignore_ascii_case(fwd_proto) {
+            return false;
+        }
+    }
+
+    if let (Some(op), Some(rp)) = (origin_port, req_port) {
+        if op != rp {
+            return false;
+        }
+    }
+
+    true
+}
+
 /// Enforces CSRF & Origin protection on all state-changing HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`)
 /// as specified in `17-api-security-operations.md §3.2` (resolves **TD-002**):
 /// 1. Requires `X-Requested-With: genealogy` header (case-insensitive value check).
-/// 2. When `Origin` header is present, it must match `state.config.app_origin` (or `http://localhost:*` in dev/test).
+/// 2. When `Origin` header is present, it must match one of the configured origins in `state.config.app_origin`,
+///    or match the request's `X-Forwarded-Host` / `Host` (and `X-Forwarded-Proto` if present), or `http://localhost:*` in dev/test.
 pub async fn csrf_protection_middleware(
     State(state): State<AppState>,
     req: Request,
@@ -47,14 +128,30 @@ pub async fn csrf_protection_middleware(
         }
 
         if let Some(origin_val) = req.headers().get("origin") {
-            let origin = origin_val.to_str().unwrap_or("").trim_end_matches('/');
-            let expected = state.config.app_origin.trim_end_matches('/');
-            let is_localhost_dev = state.config.app_env != "production"
-                && (origin.starts_with("http://localhost:")
-                    || origin.starts_with("http://127.0.0.1:"));
+            let origin = origin_val
+                .to_str()
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches('/');
+            if !origin.is_empty() {
+                let matches_configured = state
+                    .config
+                    .app_origin
+                    .split([',', ';'])
+                    .map(|s| s.trim().trim_end_matches('/'))
+                    .any(|exp| !exp.is_empty() && exp.eq_ignore_ascii_case(origin));
 
-            if !origin.is_empty() && origin != expected && !is_localhost_dev {
-                return Err(AppError::CsrfValidationFailed);
+                let is_localhost_dev = state.config.app_env != "production"
+                    && (origin.starts_with("http://localhost:")
+                        || origin.eq_ignore_ascii_case("http://localhost")
+                        || origin.starts_with("http://127.0.0.1:")
+                        || origin.eq_ignore_ascii_case("http://127.0.0.1"));
+
+                let matches_request_host = is_same_origin_as_request(origin, req.headers());
+
+                if !matches_configured && !is_localhost_dev && !matches_request_host {
+                    return Err(AppError::CsrfValidationFailed);
+                }
             }
         }
     }

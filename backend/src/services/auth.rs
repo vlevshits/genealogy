@@ -808,7 +808,13 @@ impl AuthService {
             .await;
         }
 
-        let origin = state.config.app_origin.trim_end_matches('/');
+        let origin = state
+            .config
+            .app_origin
+            .split([',', ';'])
+            .map(|s| s.trim().trim_end_matches('/'))
+            .find(|s| !s.is_empty())
+            .unwrap_or("http://localhost:8080");
         let invite_url = format!("{origin}/register?invite_token={raw_token}");
 
         Ok(InviteCreatedResponse {
@@ -1209,7 +1215,13 @@ impl AuthService {
         }
 
         let expose_preview = !state.config.smtp_enabled || state.config.app_env != "production";
-        let origin = state.config.app_origin.trim_end_matches('/');
+        let origin = state
+            .config
+            .app_origin
+            .split([',', ';'])
+            .map(|s| s.trim().trim_end_matches('/'))
+            .find(|s| !s.is_empty())
+            .unwrap_or("http://localhost:8080");
 
         Ok(MagicLinkRequestResponse {
             status: "sent".to_string(),
@@ -1320,7 +1332,13 @@ impl AuthService {
             .await;
         }
 
-        let origin = state.config.app_origin.trim_end_matches('/');
+        let origin = state
+            .config
+            .app_origin
+            .split([',', ';'])
+            .map(|s| s.trim().trim_end_matches('/'))
+            .find(|s| !s.is_empty())
+            .unwrap_or("http://localhost:8080");
         let sign_in_url = format!("{origin}/magic-link/verify?token={raw_token}");
 
         Ok(AdminSignInLinkResponse {
@@ -1681,7 +1699,12 @@ impl AuthService {
         }
 
         let max_age_secs = ttl_days * 86_400;
-        let secure_flag = if state.config.app_origin.starts_with("https://") {
+        let secure_flag = if state
+            .config
+            .app_origin
+            .split([',', ';'])
+            .any(|o| o.trim().starts_with("https://"))
+        {
             "; Secure"
         } else {
             ""
@@ -1691,6 +1714,22 @@ impl AuthService {
         );
 
         Ok((raw_token, cookie))
+    }
+
+    pub fn apply_forwarded_proto_secure_cookie(
+        cookie: String,
+        headers: &axum::http::HeaderMap,
+    ) -> String {
+        let is_forwarded_https = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next())
+            .is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"));
+        if is_forwarded_https && !cookie.contains("; Secure") {
+            format!("{cookie}; Secure")
+        } else {
+            cookie
+        }
     }
 
     pub async fn authenticate_session(

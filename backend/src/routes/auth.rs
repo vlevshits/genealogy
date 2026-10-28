@@ -126,6 +126,7 @@ pub async fn complete_initial_setup(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::setup_initial_admin(&state, req, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     {
         let mut store = state.privacy_store.write().await;
         if store.is_demo_seed {
@@ -181,6 +182,7 @@ pub async fn verify_invite_registration(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::register_with_invitation(&state, req, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((
         StatusCode::CREATED,
         [(header::SET_COOKIE, cookie)],
@@ -258,6 +260,7 @@ pub async fn verify_passkey_login(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::verify_passkey_login(&state, req, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -282,6 +285,7 @@ pub async fn login_with_password(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::password_login(&state, req, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -322,6 +326,7 @@ pub async fn verify_magic_link_get(
 ) -> Result<Response, AppError> {
     let (ua, ip) = extract_client_meta(&headers);
     let (resp, cookie) = AuthService::verify_magic_link(&state, &query.token, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -342,6 +347,7 @@ pub async fn verify_magic_link_post(
 ) -> Result<Response, AppError> {
     let (ua, ip) = extract_client_meta(&headers);
     let (resp, cookie) = AuthService::verify_magic_link(&state, &req.token, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -365,6 +371,7 @@ pub async fn login_with_recovery_code(
     state.rate_limiter.check_auth_ip(&ip).await?;
 
     let (resp, cookie) = AuthService::login_with_recovery_code(&state, req, ua, Some(ip)).await?;
+    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 

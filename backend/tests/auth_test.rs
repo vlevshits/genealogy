@@ -1002,3 +1002,165 @@ async fn test_passkey_login_client_data_json_direct_and_utf8_double_encoded_chal
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_reverse_proxy_forwarded_origin_multi_origin_and_csrf_rejection() {
+    // 1. Production instance with default app_origin ("http://localhost:8080") behind Caddy at https://genealogy.levshitsvv.pro
+    let config = AppConfig {
+        app_env: "production".to_string(),
+        app_origin: "http://localhost:8080".to_string(),
+        auth_password_enabled: "true".to_string(),
+        ..AppConfig::default()
+    };
+    let state = AppState::new(None, config);
+    let app = create_router(state);
+
+    let setup_payload = serde_json::json!({
+        "tree_title": "Production Reverse Proxy Tree",
+        "first_name": "Elena",
+        "last_name": "Levshits",
+        "email": "elena@levshitsvv.pro",
+        "password": "StrongProductionPass2026!"
+    });
+
+    // Mutating request with Origin: https://genealogy.levshitsvv.pro and matching X-Forwarded-Host + X-Forwarded-Proto succeeds!
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://genealogy.levshitsvv.pro")
+                .header("x-forwarded-host", "genealogy.levshitsvv.pro")
+                .header("x-forwarded-proto", "https")
+                .body(Body::from(setup_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let set_cookie = res
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        set_cookie.contains("; Secure"),
+        "Expected Secure flag when X-Forwarded-Proto: https is present, got: {set_cookie}"
+    );
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let setup_done: SetupCompleteResponse = serde_json::from_slice(&body).unwrap();
+    let token = setup_done.session_token;
+
+    // Foreign origin (https://attacker.example) even with X-Forwarded-Host: genealogy.levshitsvv.pro must be rejected with 403!
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/api/v1/auth/me")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://attacker.example")
+                .header("x-forwarded-host", "genealogy.levshitsvv.pro")
+                .header("x-forwarded-proto", "https")
+                .body(Body::from(r#"{"locale":"ru"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "csrf_validation_failed");
+
+    // Scheme downgrade (Origin: http://genealogy.levshitsvv.pro when X-Forwarded-Proto: https) must also be rejected!
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/api/v1/auth/me")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-requested-with", "genealogy")
+                .header("origin", "http://genealogy.levshitsvv.pro")
+                .header("x-forwarded-host", "genealogy.levshitsvv.pro")
+                .header("x-forwarded-proto", "https")
+                .body(Body::from(r#"{"locale":"ru"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 2. Multi-origin APP_ORIGIN list support ("https://domain1.com,https://domain2.com")
+    let multi_config = AppConfig {
+        app_env: "production".to_string(),
+        app_origin: "https://domain1.com, https://domain2.com".to_string(),
+        auth_password_enabled: "true".to_string(),
+        ..AppConfig::default()
+    };
+    let multi_state = AppState::new(None, multi_config);
+    let multi_app = create_router(multi_state);
+
+    let res_d2 = multi_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://domain2.com")
+                .body(Body::from(setup_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_d2.status(), StatusCode::CREATED);
+    let body = to_bytes(res_d2.into_body(), 64 * 1024).await.unwrap();
+    let d2_setup: SetupCompleteResponse = serde_json::from_slice(&body).unwrap();
+
+    let res_d1 = multi_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/api/v1/auth/me")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", d2_setup.session_token),
+                )
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://domain1.com")
+                .body(Body::from(r#"{"locale":"en"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_d1.status(), StatusCode::OK);
+
+    let res_evil = multi_app
+        .oneshot(
+            Request::builder()
+                .method(Method::PATCH)
+                .uri("/api/v1/auth/me")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", d2_setup.session_token),
+                )
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://attacker.example")
+                .body(Body::from(r#"{"locale":"en"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_evil.status(), StatusCode::FORBIDDEN);
+}
