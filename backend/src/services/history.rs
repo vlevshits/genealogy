@@ -796,6 +796,66 @@ fn revert_single_change_entry(
             }
             Ok(None)
         }
+        "merge" => {
+            let Some(ref before_val) = entry.before_json else {
+                return Ok(None);
+            };
+            if before_val.get("kind").and_then(|v| v.as_str()) == Some("person_merge_bundle") {
+                if let Some(keep_val) = before_val.get("keep_before") {
+                    if let Ok(mut keep_before) =
+                        serde_json::from_value::<TreePersonNodeDto>(keep_val.clone())
+                    {
+                        if let Some(cur) = store.persons.iter_mut().find(|p| p.id == keep_before.id)
+                        {
+                            keep_before.version = cur.version + 1;
+                            *cur = keep_before;
+                        } else {
+                            store.persons.push(keep_before);
+                        }
+                    }
+                }
+                if let Some(merge_val) = before_val.get("merge_person") {
+                    if let Ok(merge_person) =
+                        serde_json::from_value::<TreePersonNodeDto>(merge_val.clone())
+                    {
+                        if !store.persons.iter().any(|p| p.id == merge_person.id) {
+                            store.persons.push(merge_person);
+                        }
+                    }
+                }
+                if let Some(fams_val) = before_val.get("families_before") {
+                    if let Ok(fams) = serde_json::from_value::<Vec<FamilyDto>>(fams_val.clone()) {
+                        store.families = fams;
+                    }
+                }
+                if let Some(evs_val) = before_val.get("events_before") {
+                    if let Ok(evs) = serde_json::from_value::<Vec<LifeEventDto>>(evs_val.clone()) {
+                        store.events = evs;
+                    }
+                }
+                if let Some(notes_val) = before_val.get("notes_before") {
+                    if let Ok(notes) = serde_json::from_value::<Vec<NoteDto>>(notes_val.clone()) {
+                        store.notes = notes;
+                    }
+                }
+                if let Some(media_val) = before_val.get("media_before") {
+                    if let Ok(media) =
+                        serde_json::from_value::<Vec<MediaAssetSummaryDto>>(media_val.clone())
+                    {
+                        store.media = media;
+                    }
+                }
+                if let Some(aliases_val) = before_val.get("gid_aliases_before") {
+                    if let Ok(aliases) =
+                        serde_json::from_value::<HashMap<String, String>>(aliases_val.clone())
+                    {
+                        store.gid_aliases = aliases;
+                    }
+                }
+                return Ok(Some(entry.entity_id.clone()));
+            }
+            Ok(None)
+        }
         _ => Ok(None),
     }
 }

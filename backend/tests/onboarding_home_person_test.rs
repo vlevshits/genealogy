@@ -155,7 +155,7 @@ async fn test_onboarding_status_gatekeeper_and_role_permissions() {
     assert_eq!(body["can_onboard"], true);
     assert!(body["resolved_home_person_id"].is_null());
     assert!(body["default_home_person_id"].is_null());
-    assert_eq!(body["start_page"], "tree");
+    assert_eq!(body["start_page"], "dashboard");
 
     // 3. Editor on empty tree sees can_onboard: true
     let resp = app

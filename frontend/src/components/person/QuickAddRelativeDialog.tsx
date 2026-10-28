@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Link2, UserPlus } from 'lucide-react';
+import { Link2, UserPlus } from 'lucide-react';
 import {
   Alert,
   Button,
@@ -20,6 +20,7 @@ import {
   TreePersonNodeDto,
 } from '../../api/client';
 import { computeSlavicPatronymic } from '../../lib/patronymic';
+import { QuickAddDuplicateHint } from '../quality/QuickAddDuplicateHint';
 import { useI18n } from '../../i18n';
 
 export interface QuickAddRelativeDialogProps {
@@ -149,20 +150,6 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     }
   };
 
-  // Duplicate guard check (07 §3 #3)
-  const potentialDuplicate =
-    mode === 'create' && givenName.trim().length >= 2
-      ? existingPeople.find(
-          (p) =>
-            p.id !== anchorPerson?.id &&
-            p.primary_name.given_name.toLowerCase() ===
-              givenName.trim().toLowerCase() &&
-            (!surname.trim() ||
-              p.primary_name.surname.toLowerCase() ===
-                surname.trim().toLowerCase())
-        )
-      : undefined;
-
   const candidateOptions = existingPeople
     .filter((p) => p.id !== anchorPerson?.id)
     .map((p) => ({
@@ -290,38 +277,25 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
           </FormField>
         ) : (
           <div className="space-y-4">
-            {potentialDuplicate && (
-              <Alert
-                variant="warning"
-                icon={
-                  <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <QuickAddDuplicateHint
+              givenName={givenName}
+              surname={surname}
+              birthDate={birthDate}
+              sex={sex}
+              anchorPersonId={anchorPerson?.id}
+              existingPeople={existingPeople}
+              onUseExisting={(personId) => {
+                setMode('link');
+                setSelectedExistingId(personId);
+              }}
+              onOpenProfile={(personId) => {
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', `/persons/${personId}`);
+                  window.dispatchEvent(new PopStateEvent('popstate'));
                 }
-                title={t('person.quickAdd.duplicateGuardTitle')}
-                action={
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      setMode('link');
-                      setSelectedExistingId(potentialDuplicate.id);
-                    }}
-                  >
-                    {t('person.quickAdd.useExistingBtn')}
-                  </Button>
-                }
-              >
-                {t('person.quickAdd.duplicateGuardDesc', {
-                  name: [
-                    potentialDuplicate.primary_name.given_name,
-                    potentialDuplicate.primary_name.patronymic,
-                    potentialDuplicate.primary_name.surname,
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                  gid: potentialDuplicate.gid,
-                })}
-              </Alert>
-            )}
+                onOpenChange(false);
+              }}
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <FormField

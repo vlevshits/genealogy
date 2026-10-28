@@ -573,7 +573,61 @@
     "modes": {
       "hourglass": "Hourglass",
       "pedigree": "Pedigree",
-      "descendants": "Descendants"
+      "descendants": "Descendants",
+      "fan": "Fan Chart"
+    },
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fan": {
+      "angleSpanAria": "Select fan chart angle span",
+      "span180": "180 deg Semicircle",
+      "span360": "360 deg Full Wheel",
+      "depthSelectAria": "Select fan chart generations",
+      "quadrantPaternalGf": "Paternal Grandfather Line",
+      "quadrantPaternalGm": "Paternal Grandmother Line",
+      "quadrantMaternalGf": "Maternal Grandfather Line",
+      "quadrantMaternalGm": "Maternal Grandmother Line",
+      "svgAria": "Concentric ancestor fan chart",
+      "emptySlot": "Unknown ancestor",
+      "centerHint": "Click any ancestor arc to inspect or set as center",
+      "setCenterBtn": "Make Center"
+    },
+    "kinship": {
+      "openBtn": "Kinship Finder",
+      "title": "Kinship & Relationship Path Finder",
+      "subtitle": "Select any two relatives in the tree to compute their shortest genealogical connection and degree of relationship.",
+      "personALabel": "First Person (From)",
+      "personBLabel": "Second Person (To)",
+      "calculatedDegreeLabel": "Calculated Relationship",
+      "stepsCount": "{count} step(s) in path",
+      "pathChainHeading": "Relationship Step Chain",
+      "highlightPathBtn": "Highlight Path on Tree",
+      "notConnected": "No connected relationship path found between these two individuals.",
+      "samePerson": "Same Person (Self)",
+      "relativeTerm": "Relative ({count} degrees)",
+      "stepRelative": "Relative",
+      "stepFather": "Father",
+      "stepMother": "Mother",
+      "stepParent": "Parent",
+      "stepSon": "Son",
+      "stepDaughter": "Daughter",
+      "stepChild": "Child",
+      "stepSpouse": "Spouse",
+      "termSpouse": "Spouse / Partner",
+      "termFather": "Father",
+      "termMother": "Mother",
+      "termParent": "Parent",
+      "termSon": "Son",
+      "termDaughter": "Daughter",
+      "termChild": "Child",
+      "termGrandfather": "Grandfather",
+      "termGrandmother": "Grandmother",
+      "termGrandparent": "Grandparent",
+      "termBrother": "Brother",
+      "termSister": "Sister",
+      "termSibling": "Sibling",
+      "termGrandchild": "Grandchild",
+      "termFirstCousin": "First Cousin"
     },
     "toolbar": {
       "modeSwitcherAria": "Select tree projection mode",
@@ -814,8 +868,19 @@
     "savedToast": "Life event saved"
   },
   "places": {
+    "title": "Places & Historical Jurisdictions",
+    "subtitle": "Hierarchical gazetteer of countries, governorates, districts, cities, parishes, and cemeteries",
     "pageTitle": "Places & Historical Jurisdictions",
     "pageSubtitle": "Hierarchical gazetteer of countries, governorates, districts, cities, parishes, and cemeteries",
+    "viewModeAria": "Switch places view mode",
+    "viewList": "Hierarchy & List",
+    "viewMap": "Clustered Map",
+    "mapClusterTitle": "Geographic Places & Cluster Map",
+    "mapPlacesCount": "{count} place(s)",
+    "mapPersonsCount": "{count} person(s)",
+    "mapEventsCount": "{count} event(s)",
+    "mapSelectClusterHint": "Click any pin or cluster on the map to inspect places and event counts",
+    "mapInspectPlaceBtn": "Inspect Place",
     "addPlaceBtn": "Add Place",
     "viewTree": "Hierarchy Tree",
     "viewTable": "Flat Table",
@@ -852,6 +917,7 @@
       "coordinatesLabel": "Geographic Coordinates",
       "eventsHereTitle": "Events Recorded at This Place",
       "noEventsHere": "No life events linked to this place yet.",
+      "noCoordinates": "No geocoded places available to plot on the map.",
       "mapDisabledNotice": "External map tiles are disabled by instance privacy settings."
     },
     "form": {
@@ -1477,6 +1543,120 @@
       "rollbackSafetyNote": "An automatic pre-rollback snapshot of the current tree state will be saved first so you can undo this rollback if needed.",
       "typeRollbackLabel": "Type ROLLBACK to confirm full tree restoration",
       "confirmRollbackBtn": "Confirm Full Tree Rollback"
+    }
+  },
+  "dashboard": {
+    "anniversaries": {
+      "title": "Upcoming Anniversaries (Next 30 Days)",
+      "scopeAria": "Filter anniversaries scope",
+      "scopeAll": "All People",
+      "scopeClose": "Close Relatives",
+      "emptyTitle": "No upcoming anniversaries in the next 30 days",
+      "emptyDesc": "Add birth, marriage, or memorial dates to see upcoming family milestones here.",
+      "todayBadge": "Today",
+      "turnsYears": "{date} · Turns {years}",
+      "memorialYears": "{date} · {years} yrs since passing",
+      "weddingYears": "{date} · {years} yrs of marriage"
+    },
+    "recentActivity": {
+      "titleAdmin": "Recent Tree Changes",
+      "titleMember": "Recently Added People",
+      "allChangesBtn": "All Changes",
+      "emptyTitle": "No recent activity recorded",
+      "emptyDesc": "New individuals and edits across the family archive will appear here."
+    },
+    "glance": {
+      "title": "Tree at a Glance",
+      "warningsChip": "{count} warning(s)",
+      "personsLabel": "Individuals",
+      "generationsLabel": "Generations",
+      "photosLabel": "Photographs",
+      "placesLabel": "Places",
+      "oldestAncestor": "Oldest recorded ancestor: {name} ({year})",
+      "familiesCount": "{count} family unit(s)",
+      "missingBirthsChip": "{count} missing birth date(s)"
+    },
+    "latestPhotos": {
+      "title": "Latest Tagged Photographs",
+      "openGalleryBtn": "Open Gallery",
+      "emptyTitle": "No photographs in archive yet",
+      "emptyDesc": "Upload family portraits and tag relatives to showcase them here.",
+      "taggedCount": "{count} tagged"
+    }
+  },
+  "quality": {
+    "pageTitle": "Data Quality & Duplicate Detection",
+    "pageSubtitle": "Automated chronological consistency checks, age plausibility rules, and fuzzy duplicate candidate detection.",
+    "summaryWarnings": "Open Warnings: {count}",
+    "summaryDuplicates": "Duplicate Pairs: {count}",
+    "filterAria": "Filter data quality warnings by severity",
+    "emptyTitle": "No open data quality warnings in this view",
+    "emptyDesc": "All checked records satisfy chronological and structural plausibility rules.",
+    "dismissBtn": "This is correct",
+    "dismissedToast": "Warning dismissed as verified",
+    "tabs": {
+      "all": "All Warnings ({count})",
+      "critical": "Critical ({count})",
+      "warning": "Warnings ({count})",
+      "info": "Info ({count})",
+      "duplicates": "Duplicates ({count})"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "rules": {
+      "deathBeforeBirth": "Death Before Birth",
+      "tooOld": "Age Exceeds 110 Years",
+      "parentTooYoung": "Parent Younger Than 14 at Birth",
+      "motherTooOld": "Mother Older Than 55 at Birth",
+      "bornAfterParentDeath": "Born After Parent's Death",
+      "marriedTooYoung": "Married Younger Than 14",
+      "eventAfterDeath": "Life Event After Death",
+      "possibleDuplicate": "Possible Duplicate Record",
+      "missingBirth": "Missing Birth Date",
+      "unconnected": "Unconnected Individual (Island)"
+    },
+    "duplicates": {
+      "sectionTitle": "Candidate Duplicate Pairs",
+      "emptyTitle": "No duplicate candidates detected",
+      "emptyDesc": "Fuzzy name and birth year matching found no likely duplicate records.",
+      "matchScoreBadge": "{score}% Match",
+      "pairHint": "Matching surname/given name tokens and overlapping birth year window",
+      "notDuplicateBtn": "Not a Duplicate",
+      "compareMergeBtn": "Compare & Merge",
+      "markedNotDuplicateToast": "Pair marked as distinct individuals",
+      "viewProfileBtn": "View Profile"
+    }
+  },
+  "merge": {
+    "pageTitle": "Compare & Merge Duplicate Records",
+    "pageSubtitle": "Select which primary field values to keep. All events, relationships, media tags, alternate names, and notes from both records will be combined.",
+    "survivingIdBadge": "Surviving ID: {gid}",
+    "colField": "Scalar Field",
+    "colTarget": "Keep Primary Record",
+    "colSource": "Merge Candidate Record",
+    "colTargetShort": "Keep Primary",
+    "colSourceShort": "Merge Candidate",
+    "combinedPreviewHeading": "Combined Union Preview (Zero Data Loss)",
+    "combinedEvents": "Events: {count}",
+    "combinedMedia": "Media Tags: {count}",
+    "combinedFamilies": "Family Links: {count}",
+    "combinedNotes": "Research Notes: {count}",
+    "altNamePreservedHint": "Non-chosen name variants are automatically preserved as Alternate Names on the surviving profile.",
+    "confirmMergeBtn": "Confirm & Merge Records",
+    "confirmDialogTitle": "Confirm Person Merge",
+    "confirmDialogDesc": "Merging {source} into {target} will combine all events, family unions, media face tags, and notes under {target} ({gid}).",
+    "undoableNotice": "This merge is recorded as a single atomic transaction and can be undone from Change History.",
+    "successToast": "Records merged into {name}",
+    "fields": {
+      "name": "Full Name",
+      "sex": "Sex / Gender",
+      "birthDate": "Birth Date",
+      "birthPlace": "Birth Place",
+      "deathDate": "Death Date",
+      "biography": "Biographical Narrative"
     }
   }
 }

@@ -1,14 +1,11 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
-import { Home, MapPin, User } from 'lucide-react';
 import {
   AccessDeniedCard,
   AppShell,
   BrandLogoIcon,
-  Button,
-  Badge,
   Spinner,
 } from './components/ui';
-import { TreeCanvas, TreePrivacyPreviewCard } from './components/tree';
+import { TreeCanvas } from './components/tree';
 import { EmptyTreeOnboardingCard } from './components/onboarding';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlacesPage } from './pages/PlacesPage';
@@ -17,6 +14,9 @@ import { PeoplePage } from './pages/PeoplePage';
 import { SurnamesPage } from './pages/SurnamesPage';
 import { MediaPage } from './pages/MediaPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { DataQualityPage } from './pages/DataQualityPage';
+import { PersonMergePage } from './pages/PersonMergePage';
+import { DashboardPage } from './pages/DashboardPage';
 import { AuthPages } from './pages/AuthPages';
 import {
   fetchOnboardingStatus,
@@ -122,6 +122,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         <Suspense
           fallback={
             <div className="flex min-h-[50vh] items-center justify-center gap-2 text-sm text-secondary">
+              <BrandLogoIcon className="h-4 w-4 text-brand" />
               <Spinner size="md" />
               <span>{t('common.loading')}</span>
             </div>
@@ -271,6 +272,50 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     );
   }
 
+  // 4e. Data Quality & Duplicate Detection route (/quality) — Admin-only (15-data-quality-duplicates.md §4)
+  if (path.startsWith('/quality')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'quality', label: t('nav.quality') },
+        ]}
+      >
+        <DataQualityPage onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
+  // 4f. Person Merge Wizard route (/people/merge) — Admin-only (15-data-quality-duplicates.md §5)
+  if (path.startsWith('/people/merge')) {
+    const mergeParams = new URLSearchParams(search);
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          {
+            id: 'quality',
+            label: t('nav.quality'),
+            onClick: () => navigate('/quality?tab=duplicates'),
+          },
+          { id: 'merge', label: t('merge.pageTitle') },
+        ]}
+      >
+        <PersonMergePage
+          targetId={mergeParams.get('target') ?? undefined}
+          sourceId={mergeParams.get('source') ?? undefined}
+          onNavigate={navigate}
+        />
+      </AppShell>
+    );
+  }
+
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
     const focusParam = new URLSearchParams(search).get('focus');
@@ -376,6 +421,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
 
   // 5d. Places & Historical Jurisdictions route (/places)
   if (path.startsWith('/places')) {
+    const viewParam = new URLSearchParams(search).get('view');
     return (
       <AppShell
         currentPath={path}
@@ -386,7 +432,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
           { id: 'places', label: t('nav.places') },
         ]}
       >
-        <PlacesPage />
+        <PlacesPage initialView={viewParam === 'map' ? 'map' : 'list'} />
       </AppShell>
     );
   }
@@ -456,71 +502,12 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
             onNavigate={navigate}
           />
         ) : (
-          <>
-            {/* Calm Family Archive Overview Header */}
-            <section className="rounded-3xl border border-border bg-surface p-6 sm:p-10 shadow-xs">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="max-w-2xl space-y-2.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="brand">{t('app.badge')}</Badge>
-                    {resolvedHomePersonId && (
-                      <Badge
-                        variant="neutral"
-                        icon={<Home className="h-3 w-3" />}
-                      >
-                        {t('tree.homePersonBadge')}: {resolvedHomePersonId}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <h1 className="font-sans text-2xl sm:text-3xl font-semibold tracking-tight text-primary">
-                    {user?.first_name
-                      ? t('onboarding.dashboardGreeting', {
-                          name: user.first_name,
-                        })
-                      : instanceTitle || t('app.title')}
-                  </h1>
-
-                  <p className="text-sm sm:text-base text-secondary leading-relaxed">
-                    {t('app.subtitle')}. {t('app.heroDescription')}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    leftIcon={<BrandLogoIcon className="h-4 w-4" />}
-                    onClick={() => navigate('/tree')}
-                  >
-                    {t('app.openWorkbench')}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    leftIcon={<MapPin className="h-4 w-4" />}
-                    onClick={() => navigate('/places')}
-                  >
-                    {t('nav.places')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="md"
-                    leftIcon={<User className="h-4 w-4" />}
-                    onClick={() => navigate('/settings/profile')}
-                  >
-                    {t('nav.myProfile')}
-                  </Button>
-                </div>
-              </div>
-            </section>
-
-            {/* Family Tree Records & Home Person Preview */}
-            <TreePrivacyPreviewCard
-              onSignIn={() => navigate('/login')}
-              onNavigate={navigate}
-            />
-          </>
+          <DashboardPage
+            instanceTitle={instanceTitle}
+            resolvedHomePersonId={resolvedHomePersonId}
+            onNavigate={navigate}
+            onSignIn={() => navigate('/login')}
+          />
         )}
       </div>
     </AppShell>

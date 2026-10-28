@@ -924,3 +924,923 @@ pub fn calculate_kinship_relation(
 
     None
 }
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct KinshipQuery {
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+    #[serde(default)]
+    pub person_a: Option<String>,
+    #[serde(default)]
+    pub person_b: Option<String>,
+    #[serde(default)]
+    pub id1: Option<String>,
+    #[serde(default)]
+    pub id2: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct KinshipEdgeStepDto {
+    pub from_id: String,
+    pub to_id: String,
+    pub edge_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct KinshipResponse {
+    pub connected: bool,
+    pub from_id: String,
+    pub to_id: String,
+    pub relationship_key: String,
+    pub relation_key: String,
+    pub label_en: String,
+    pub label_ru: String,
+    pub degree_of_kinship: usize,
+    pub steps_count: usize,
+    pub up_steps: usize,
+    pub down_steps: usize,
+    pub is_blood_relation: bool,
+    pub common_ancestor_ids: Vec<String>,
+    pub path_person_ids: Vec<String>,
+    pub steps: Vec<KinshipEdgeStepDto>,
+    pub path_nodes: Vec<TreePersonNodeDto>,
+}
+
+/// Full Phase 2 Kinship Finder (`GET /api/v1/kinship?from={id1}&to={id2}`, `04-tree-visualizations.md §7.5`).
+/// Uses cycle-safe LCA + bidirectional BFS across parent, child, and spouse edges.
+pub fn compute_kinship_path(
+    from_id: &str,
+    to_id: &str,
+    persons: &[TreePersonNodeDto],
+    families: &[FamilyDto],
+) -> KinshipResponse {
+    let person_by_id: HashMap<&str, &TreePersonNodeDto> =
+        persons.iter().map(|p| (p.id.as_str(), p)).collect();
+
+    if from_id == to_id {
+        let node_vec = person_by_id
+            .get(from_id)
+            .map(|p| vec![(*p).clone()])
+            .unwrap_or_default();
+        return KinshipResponse {
+            connected: true,
+            from_id: from_id.to_string(),
+            to_id: to_id.to_string(),
+            relationship_key: "self".to_string(),
+            relation_key: "self".to_string(),
+            label_en: "Self".to_string(),
+            label_ru: "Сам(а) (исходная персона)".to_string(),
+            degree_of_kinship: 0,
+            steps_count: 0,
+            up_steps: 0,
+            down_steps: 0,
+            is_blood_relation: true,
+            common_ancestor_ids: vec![from_id.to_string()],
+            path_person_ids: vec![from_id.to_string()],
+            steps: vec![],
+            path_nodes: node_vec,
+        };
+    }
+
+    let mut parents_of: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut children_of: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut spouses_of: HashMap<&str, Vec<&str>> = HashMap::new();
+
+    for fam in families {
+        let p1 = fam
+            .partner1_id
+            .as_deref()
+            .filter(|id| person_by_id.contains_key(*id));
+        let p2 = fam
+            .partner2_id
+            .as_deref()
+            .filter(|id| person_by_id.contains_key(*id));
+
+        if let (Some(a), Some(b)) = (p1, p2) {
+            spouses_of.entry(a).or_default().push(b);
+            spouses_of.entry(b).or_default().push(a);
+        }
+
+        for ch in &fam.children {
+            let cid = ch.child_id.as_str();
+            if !person_by_id.contains_key(cid) {
+                continue;
+            }
+            for parent in [p1, p2].into_iter().flatten() {
+                parents_of.entry(cid).or_default().push(parent);
+                children_of.entry(parent).or_default().push(cid);
+            }
+        }
+    }
+
+    let target_sex = person_by_id
+        .get(to_id)
+        .map(|p| p.sex.trim().to_ascii_uppercase())
+        .unwrap_or_default();
+    let is_male = target_sex == "M";
+    let is_female = target_sex == "F";
+
+    // 1. Check blood relationship via Lowest Common Ancestor (LCA) up to 10 generations
+    let build_ancestors = |start_id: &str| -> HashMap<String, (usize, Vec<String>)> {
+        let mut result: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+        let mut queue: VecDeque<(String, usize, Vec<String>)> = VecDeque::new();
+        result.insert(start_id.to_string(), (0, vec![start_id.to_string()]));
+        queue.push_back((start_id.to_string(), 0, vec![start_id.to_string()]));
+
+        while let Some((curr, depth, path)) = queue.pop_front() {
+            if depth >= 10 {
+                continue;
+            }
+            if let Some(parents) = parents_of.get(curr.as_str()) {
+                for &p_id in parents {
+                    if !result.contains_key(p_id) {
+                        let mut next_path = path.clone();
+                        next_path.push(p_id.to_string());
+                        result.insert(p_id.to_string(), (depth + 1, next_path.clone()));
+                        queue.push_back((p_id.to_string(), depth + 1, next_path));
+                    }
+                }
+            }
+        }
+        result
+    };
+
+    let from_anc = build_ancestors(from_id);
+    let to_anc = build_ancestors(to_id);
+
+    let mut best_lca: Option<(usize, usize, String, Vec<String>)> = None;
+    for (anc_id, (u_steps, path_u)) in &from_anc {
+        if let Some((d_steps, path_d)) = to_anc.get(anc_id) {
+            let total = *u_steps + *d_steps;
+            let better = match &best_lca {
+                None => true,
+                Some((bu, bd, _, _)) => total < (*bu + *bd),
+            };
+            if better {
+                let mut combined = path_u.clone();
+                for node in path_d.iter().rev().skip(1) {
+                    combined.push(node.clone());
+                }
+                best_lca = Some((*u_steps, *d_steps, anc_id.clone(), combined));
+            }
+        }
+    }
+
+    if let Some((up, down, lca_id, path)) = best_lca {
+        let mut common_ancestors = vec![lca_id.clone()];
+        for (aid, (u, _)) in &from_anc {
+            if let Some((d, _)) = to_anc.get(aid) {
+                if *u == up && *d == down && !common_ancestors.contains(aid) {
+                    common_ancestors.push(aid.clone());
+                }
+            }
+        }
+
+        // Determine paternal vs maternal side from the first step upward (`path[1]`)
+        let first_up_sex = if up >= 1 && path.len() >= 2 {
+            person_by_id
+                .get(path[1].as_str())
+                .map(|p| p.sex.trim().to_ascii_uppercase())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let is_paternal = first_up_sex == "M";
+        let is_maternal = first_up_sex == "F";
+
+        let (rel_key, label_en, label_ru) = match (up, down) {
+            (1, 0) => (
+                if is_male {
+                    "father".to_string()
+                } else if is_female {
+                    "mother".to_string()
+                } else {
+                    "parent".to_string()
+                },
+                if is_male {
+                    "Father".to_string()
+                } else if is_female {
+                    "Mother".to_string()
+                } else {
+                    "Parent".to_string()
+                },
+                if is_male {
+                    "Отец".to_string()
+                } else if is_female {
+                    "Мать".to_string()
+                } else {
+                    "Родитель".to_string()
+                },
+            ),
+            (0, 1) => (
+                if is_male {
+                    "son".to_string()
+                } else if is_female {
+                    "daughter".to_string()
+                } else {
+                    "child".to_string()
+                },
+                if is_male {
+                    "Son".to_string()
+                } else if is_female {
+                    "Daughter".to_string()
+                } else {
+                    "Child".to_string()
+                },
+                if is_male {
+                    "Сын".to_string()
+                } else if is_female {
+                    "Дочь".to_string()
+                } else {
+                    "Ребёнок".to_string()
+                },
+            ),
+            (1, 1) => (
+                if is_male {
+                    "brother".to_string()
+                } else if is_female {
+                    "sister".to_string()
+                } else {
+                    "sibling".to_string()
+                },
+                if is_male {
+                    "Brother".to_string()
+                } else if is_female {
+                    "Sister".to_string()
+                } else {
+                    "Sibling".to_string()
+                },
+                if is_male {
+                    "Брат".to_string()
+                } else if is_female {
+                    "Сестра".to_string()
+                } else {
+                    "Брат / Сестра".to_string()
+                },
+            ),
+            (2, 0) => {
+                let side_prefix = if is_paternal {
+                    "paternal_"
+                } else if is_maternal {
+                    "maternal_"
+                } else {
+                    ""
+                };
+                let base = if is_male {
+                    "grandfather"
+                } else if is_female {
+                    "grandmother"
+                } else {
+                    "grandparent"
+                };
+                (
+                    format!("{side_prefix}{base}"),
+                    if is_male {
+                        "Grandfather".to_string()
+                    } else if is_female {
+                        "Grandmother".to_string()
+                    } else {
+                        "Grandparent".to_string()
+                    },
+                    if is_male {
+                        "Дедушка".to_string()
+                    } else if is_female {
+                        "Бабушка".to_string()
+                    } else {
+                        "Дедушка / Бабушка".to_string()
+                    },
+                )
+            }
+            (0, 2) => (
+                if is_male {
+                    "grandson".to_string()
+                } else if is_female {
+                    "granddaughter".to_string()
+                } else {
+                    "grandchild".to_string()
+                },
+                if is_male {
+                    "Grandson".to_string()
+                } else if is_female {
+                    "Granddaughter".to_string()
+                } else {
+                    "Grandchild".to_string()
+                },
+                if is_male {
+                    "Внук".to_string()
+                } else if is_female {
+                    "Внучка".to_string()
+                } else {
+                    "Внук / Внучка".to_string()
+                },
+            ),
+            (2, 1) => {
+                let side_prefix = if is_paternal {
+                    "paternal_"
+                } else if is_maternal {
+                    "maternal_"
+                } else {
+                    ""
+                };
+                let base = if is_male {
+                    "uncle"
+                } else if is_female {
+                    "aunt"
+                } else {
+                    "pibling"
+                };
+                (
+                    format!("{side_prefix}{base}"),
+                    if is_male {
+                        "Uncle".to_string()
+                    } else if is_female {
+                        "Aunt".to_string()
+                    } else {
+                        "Uncle / Aunt".to_string()
+                    },
+                    if is_male {
+                        "Дядя".to_string()
+                    } else if is_female {
+                        "Тётя".to_string()
+                    } else {
+                        "Дядя / Тётя".to_string()
+                    },
+                )
+            }
+            (1, 2) => (
+                if is_male {
+                    "nephew".to_string()
+                } else if is_female {
+                    "niece".to_string()
+                } else {
+                    "nibling".to_string()
+                },
+                if is_male {
+                    "Nephew".to_string()
+                } else if is_female {
+                    "Niece".to_string()
+                } else {
+                    "Nephew / Niece".to_string()
+                },
+                if is_male {
+                    "Племянник".to_string()
+                } else if is_female {
+                    "Племянница".to_string()
+                } else {
+                    "Племянник / Племянница".to_string()
+                },
+            ),
+            (u, 0) if u >= 3 => (
+                if is_male {
+                    "great_grandfather".to_string()
+                } else if is_female {
+                    "great_grandmother".to_string()
+                } else {
+                    "great_grandparent".to_string()
+                },
+                if is_male {
+                    "Great-grandfather".to_string()
+                } else if is_female {
+                    "Great-grandmother".to_string()
+                } else {
+                    "Great-grandparent".to_string()
+                },
+                if is_male {
+                    "Прадедушка".to_string()
+                } else if is_female {
+                    "Прабабушка".to_string()
+                } else {
+                    "Прародитель".to_string()
+                },
+            ),
+            (0, d) if d >= 3 => (
+                if is_male {
+                    "great_grandchild".to_string()
+                } else if is_female {
+                    "great_granddaughter".to_string()
+                } else {
+                    "great_grandchild".to_string()
+                },
+                "Great-grandchild".to_string(),
+                "Правнук / Правнучка".to_string(),
+            ),
+            (u, d) if u >= 2 && d >= 2 => {
+                let cousin_deg = u.min(d) - 1;
+                let removed = u.abs_diff(d);
+                let deg_word = match cousin_deg {
+                    1 => "first_cousin",
+                    2 => "second_cousin",
+                    3 => "third_cousin",
+                    _ => "cousin",
+                };
+                let key = match removed {
+                    0 => deg_word.to_string(),
+                    1 => format!("{deg_word}_once_removed"),
+                    2 => format!("{deg_word}_twice_removed"),
+                    r => format!("{deg_word}_{r}_times_removed"),
+                };
+                let label_en = if removed == 0 {
+                    format!(
+                        "{} cousin",
+                        match cousin_deg {
+                            1 => "First",
+                            2 => "Second",
+                            3 => "Third",
+                            _ => "Distant",
+                        }
+                    )
+                } else {
+                    format!("Cousin ({cousin_deg} degree, {removed}x removed)")
+                };
+                let label_ru = if cousin_deg == 1 && removed == 0 {
+                    if is_male {
+                        "Двоюродный брат".to_string()
+                    } else if is_female {
+                        "Двоюродная сестра".to_string()
+                    } else {
+                        "Двоюродный брат / сестра".to_string()
+                    }
+                } else {
+                    "Кровный родственник".to_string()
+                };
+                (key, label_en, label_ru)
+            }
+            _ => (
+                "blood_relative".to_string(),
+                "Blood relative".to_string(),
+                "Кровный родственник".to_string(),
+            ),
+        };
+
+        let mut steps_vec = Vec::new();
+        for idx in 0..(path.len().saturating_sub(1)) {
+            let edge_type = if idx < up { "parent" } else { "child" };
+            steps_vec.push(KinshipEdgeStepDto {
+                from_id: path[idx].clone(),
+                to_id: path[idx + 1].clone(),
+                edge_type: edge_type.to_string(),
+            });
+        }
+
+        let path_nodes: Vec<TreePersonNodeDto> = path
+            .iter()
+            .filter_map(|id| person_by_id.get(id.as_str()).map(|p| (*p).clone()))
+            .collect();
+
+        return KinshipResponse {
+            connected: true,
+            from_id: from_id.to_string(),
+            to_id: to_id.to_string(),
+            relationship_key: rel_key.clone(),
+            relation_key: rel_key,
+            label_en,
+            label_ru,
+            degree_of_kinship: up + down,
+            steps_count: steps_vec.len(),
+            up_steps: up,
+            down_steps: down,
+            is_blood_relation: true,
+            common_ancestor_ids: common_ancestors,
+            path_person_ids: path,
+            steps: steps_vec,
+            path_nodes,
+        };
+    }
+
+    // 2. Fallback: General shortest-path BFS across parent, child, and spouse edges (affinal / in-law relations)
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<(String, Vec<String>, Vec<KinshipEdgeStepDto>)> = VecDeque::new();
+    visited.insert(from_id.to_string());
+    queue.push_back((from_id.to_string(), vec![from_id.to_string()], vec![]));
+
+    while let Some((curr, path, edge_steps)) = queue.pop_front() {
+        if edge_steps.len() >= 12 {
+            continue;
+        }
+        if curr == to_id {
+            let (rel_key, label_en, label_ru) =
+                if edge_steps.len() == 1 && edge_steps[0].edge_type == "spouse" {
+                    (
+                        if is_male {
+                            "husband".to_string()
+                        } else if is_female {
+                            "wife".to_string()
+                        } else {
+                            "spouse".to_string()
+                        },
+                        if is_male {
+                            "Husband".to_string()
+                        } else if is_female {
+                            "Wife".to_string()
+                        } else {
+                            "Spouse".to_string()
+                        },
+                        if is_male {
+                            "Муж".to_string()
+                        } else if is_female {
+                            "Жена".to_string()
+                        } else {
+                            "Супруг(а)".to_string()
+                        },
+                    )
+                } else if edge_steps.len() == 2
+                    && edge_steps[0].edge_type == "spouse"
+                    && edge_steps[1].edge_type == "parent"
+                {
+                    (
+                        if is_male {
+                            "father_in_law".to_string()
+                        } else if is_female {
+                            "mother_in_law".to_string()
+                        } else {
+                            "parent_in_law".to_string()
+                        },
+                        if is_male {
+                            "Father-in-law".to_string()
+                        } else if is_female {
+                            "Mother-in-law".to_string()
+                        } else {
+                            "Parent-in-law".to_string()
+                        },
+                        if is_male {
+                            "Тесть / Свёкор".to_string()
+                        } else if is_female {
+                            "Тёща / Свекровь".to_string()
+                        } else {
+                            "Родитель супруга(и)".to_string()
+                        },
+                    )
+                } else {
+                    (
+                        "relative_by_marriage".to_string(),
+                        "Relative by marriage".to_string(),
+                        "Родственник по браку".to_string(),
+                    )
+                };
+
+            let path_nodes: Vec<TreePersonNodeDto> = path
+                .iter()
+                .filter_map(|id| person_by_id.get(id.as_str()).map(|p| (*p).clone()))
+                .collect();
+
+            return KinshipResponse {
+                connected: true,
+                from_id: from_id.to_string(),
+                to_id: to_id.to_string(),
+                relationship_key: rel_key.clone(),
+                relation_key: rel_key,
+                label_en,
+                label_ru,
+                degree_of_kinship: edge_steps.len(),
+                steps_count: edge_steps.len(),
+                up_steps: 0,
+                down_steps: 0,
+                is_blood_relation: false,
+                common_ancestor_ids: vec![],
+                path_person_ids: path,
+                steps: edge_steps,
+                path_nodes,
+            };
+        }
+
+        let mut neighbors: Vec<(&str, &str)> = Vec::new();
+        if let Some(ps) = parents_of.get(curr.as_str()) {
+            for &p in ps {
+                neighbors.push((p, "parent"));
+            }
+        }
+        if let Some(cs) = children_of.get(curr.as_str()) {
+            for &c in cs {
+                neighbors.push((c, "child"));
+            }
+        }
+        if let Some(ss) = spouses_of.get(curr.as_str()) {
+            for &s in ss {
+                neighbors.push((s, "spouse"));
+            }
+        }
+
+        for (next_id, edge_kind) in neighbors {
+            if visited.insert(next_id.to_string()) {
+                let mut next_path = path.clone();
+                next_path.push(next_id.to_string());
+                let mut next_edges = edge_steps.clone();
+                next_edges.push(KinshipEdgeStepDto {
+                    from_id: curr.clone(),
+                    to_id: next_id.to_string(),
+                    edge_type: edge_kind.to_string(),
+                });
+                queue.push_back((next_id.to_string(), next_path, next_edges));
+            }
+        }
+    }
+
+    KinshipResponse {
+        connected: false,
+        from_id: from_id.to_string(),
+        to_id: to_id.to_string(),
+        relationship_key: "unconnected".to_string(),
+        relation_key: "unconnected".to_string(),
+        label_en: "No known relationship".to_string(),
+        label_ru: "Родственная связь не найдена".to_string(),
+        degree_of_kinship: 0,
+        steps_count: 0,
+        up_steps: 0,
+        down_steps: 0,
+        is_blood_relation: false,
+        common_ancestor_ids: vec![],
+        path_person_ids: vec![],
+        steps: vec![],
+        path_nodes: vec![],
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct FanChartQuery {
+    #[serde(default)]
+    pub root: Option<String>,
+    #[serde(default)]
+    pub focal_id: Option<String>,
+    #[serde(default)]
+    pub generations: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct FanChartNodeDto {
+    pub ahnentafel: u32,
+    pub generation: u32,
+    pub quadrant: String,
+    pub person: TreePersonNodeDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub father_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mother_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct FanChartResponse {
+    pub root_id: String,
+    pub generations: u32,
+    pub total_nodes: usize,
+    pub nodes: Vec<FanChartNodeDto>,
+}
+
+fn ahnentafel_quadrant(n: u32) -> String {
+    if n == 1 {
+        return "root".to_string();
+    }
+    if n == 2 {
+        return "paternal".to_string();
+    }
+    if n == 3 {
+        return "maternal".to_string();
+    }
+    // Walk down to the Gen-3 ancestor (4..=7) by dividing by 2
+    let mut curr = n;
+    while curr > 7 {
+        curr /= 2;
+    }
+    match curr {
+        4 => "paternal_grandfather".to_string(),
+        5 => "paternal_grandmother".to_string(),
+        6 => "maternal_grandfather".to_string(),
+        7 => "maternal_grandmother".to_string(),
+        _ => "root".to_string(),
+    }
+}
+
+/// Computes the Ahnentafel-indexed Fan Chart hierarchy up to `generations` (4..=8, default 5) (`04-tree-visualizations.md §4.3`).
+pub fn compute_fan_chart(
+    root_id: &str,
+    generations: u32,
+    persons: &[TreePersonNodeDto],
+    families: &[FamilyDto],
+) -> FanChartResponse {
+    let generations = generations.clamp(1, 8);
+    let person_by_id: HashMap<&str, &TreePersonNodeDto> =
+        persons.iter().map(|p| (p.id.as_str(), p)).collect();
+
+    let mut nodes = Vec::new();
+    let mut visited_in_branch: HashSet<(u32, String)> = HashSet::new();
+    let mut queue: VecDeque<(u32, u32, String)> = VecDeque::new();
+
+    if person_by_id.contains_key(root_id) {
+        queue.push_back((1, 1, root_id.to_string()));
+        visited_in_branch.insert((1, root_id.to_string()));
+    }
+
+    while let Some((ahnentafel, gen_num, pid)) = queue.pop_front() {
+        let Some(&person) = person_by_id.get(pid.as_str()) else {
+            continue;
+        };
+
+        // Find parents of `pid`
+        let mut father_id: Option<String> = None;
+        let mut mother_id: Option<String> = None;
+
+        if let Some(parent_fam) = families
+            .iter()
+            .find(|f| f.children.iter().any(|c| c.child_id == pid))
+        {
+            let p1 = parent_fam
+                .partner1_id
+                .as_deref()
+                .and_then(|id| person_by_id.get(id).copied());
+            let p2 = parent_fam
+                .partner2_id
+                .as_deref()
+                .and_then(|id| person_by_id.get(id).copied());
+
+            match (p1, p2) {
+                (Some(a), Some(b)) => {
+                    if a.sex.eq_ignore_ascii_case("F") || b.sex.eq_ignore_ascii_case("M") {
+                        father_id = Some(b.id.clone());
+                        mother_id = Some(a.id.clone());
+                    } else {
+                        father_id = Some(a.id.clone());
+                        mother_id = Some(b.id.clone());
+                    }
+                }
+                (Some(only), None) | (None, Some(only)) => {
+                    if only.sex.eq_ignore_ascii_case("F") {
+                        mother_id = Some(only.id.clone());
+                    } else {
+                        father_id = Some(only.id.clone());
+                    }
+                }
+                (None, None) => {}
+            }
+        }
+
+        if gen_num < generations {
+            if let Some(ref fid) = father_id {
+                if fid != &pid {
+                    queue.push_back((ahnentafel * 2, gen_num + 1, fid.clone()));
+                }
+            }
+            if let Some(ref mid) = mother_id {
+                if mid != &pid {
+                    queue.push_back((ahnentafel * 2 + 1, gen_num + 1, mid.clone()));
+                }
+            }
+        }
+
+        nodes.push(FanChartNodeDto {
+            ahnentafel,
+            generation: gen_num,
+            quadrant: ahnentafel_quadrant(ahnentafel),
+            person: person.clone(),
+            father_id,
+            mother_id,
+        });
+    }
+
+    nodes.sort_by_key(|n| n.ahnentafel);
+    let total_nodes = nodes.len();
+
+    FanChartResponse {
+        root_id: root_id.to_string(),
+        generations,
+        total_nodes,
+        nodes,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct PlaceMapMarkerPersonDto {
+    pub id: String,
+    pub gid: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct PlaceMapMarkerDto {
+    pub id: String,
+    pub gid: String,
+    pub name: String,
+    pub full_name: String,
+    pub place_type: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub events_count: usize,
+    pub person_count: usize,
+    pub event_types: Vec<String>,
+    pub persons: Vec<PlaceMapMarkerPersonDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct PlacesMapResponse {
+    pub items: Vec<PlaceMapMarkerDto>,
+    pub total: usize,
+}
+
+/// Builds the clustered Places Map markers response (`GET /api/v1/places/map`, `12-places.md`).
+pub fn compute_places_map(
+    store: &GenealogyPrivacyStore,
+    visible_persons: &[TreePersonNodeDto],
+) -> PlacesMapResponse {
+    let visible_by_id: HashMap<&str, &TreePersonNodeDto> =
+        visible_persons.iter().map(|p| (p.id.as_str(), p)).collect();
+
+    let mut items = Vec::new();
+
+    for place in &store.places {
+        let (Some(lat), Some(lng)) = (place.latitude, place.longitude) else {
+            continue;
+        };
+
+        let mut person_ids: HashSet<String> = HashSet::new();
+        let mut event_types_set: HashSet<String> = HashSet::new();
+        let mut matched_events_count = 0usize;
+
+        for ev in &store.events {
+            let matches_place = ev.place_id.as_deref() == Some(place.id.as_str())
+                || ev
+                    .place_full_name
+                    .as_deref()
+                    .map(|pn| {
+                        pn.eq_ignore_ascii_case(&place.name)
+                            || pn.eq_ignore_ascii_case(&place.full_name)
+                    })
+                    .unwrap_or(false);
+            if matches_place {
+                matched_events_count += 1;
+                event_types_set.insert(ev.event_type.clone());
+                if let Some(pid) = ev.individual_id.as_deref() {
+                    if visible_by_id.contains_key(pid) {
+                        person_ids.insert(pid.to_string());
+                    }
+                }
+            }
+        }
+
+        // Also match person birth/death summary places by name/full_name
+        for vp in visible_persons {
+            if let Some(bp) = vp.birth.as_ref().and_then(|b| b.place.as_deref()) {
+                if bp.eq_ignore_ascii_case(&place.name)
+                    || bp.eq_ignore_ascii_case(&place.full_name)
+                    || bp.contains(&place.name)
+                {
+                    person_ids.insert(vp.id.clone());
+                    event_types_set.insert("birth".to_string());
+                }
+            }
+            if let Some(dp) = vp.death.as_ref().and_then(|d| d.place.as_deref()) {
+                if dp.eq_ignore_ascii_case(&place.name)
+                    || dp.eq_ignore_ascii_case(&place.full_name)
+                    || dp.contains(&place.name)
+                {
+                    person_ids.insert(vp.id.clone());
+                    event_types_set.insert("death".to_string());
+                }
+            }
+        }
+
+        let events_count = matched_events_count.max(place.events_count as usize);
+        let mut persons_list: Vec<PlaceMapMarkerPersonDto> = person_ids
+            .iter()
+            .filter_map(|pid| visible_by_id.get(pid.as_str()))
+            .map(|p| {
+                let display_name = [
+                    p.primary_name.given_name.trim(),
+                    p.primary_name.patronymic.as_deref().unwrap_or("").trim(),
+                    p.primary_name.surname.trim(),
+                ]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+                PlaceMapMarkerPersonDto {
+                    id: p.id.clone(),
+                    gid: p.gid.clone(),
+                    display_name,
+                }
+            })
+            .collect();
+        persons_list.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+        let person_count = persons_list.len();
+        persons_list.truncate(10);
+
+        let mut event_types: Vec<String> = event_types_set.into_iter().collect();
+        event_types.sort();
+
+        items.push(PlaceMapMarkerDto {
+            id: place.id.clone(),
+            gid: place.gid.clone(),
+            name: place.name.clone(),
+            full_name: place.full_name.clone(),
+            place_type: place.place_type.clone(),
+            latitude: lat,
+            longitude: lng,
+            events_count,
+            person_count,
+            event_types,
+            persons: persons_list,
+        });
+    }
+
+    let total = items.len();
+    PlacesMapResponse { items, total }
+}

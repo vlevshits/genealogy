@@ -1,11 +1,13 @@
 import React from 'react';
 import {
+  Disc,
   GitBranch,
   GitFork,
   Home,
   Maximize2,
   Minus,
   Plus,
+  Route,
   Workflow,
 } from 'lucide-react';
 import {
@@ -28,6 +30,7 @@ export interface TreeToolbarProps {
   onZoomReset: () => void;
   onCenterFocal: () => void;
   onFitToScreen: () => void;
+  onOpenKinshipFinder?: () => void;
 }
 
 export const TreeToolbar: React.FC<TreeToolbarProps> = ({
@@ -41,6 +44,7 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
   onZoomReset,
   onCenterFocal,
   onFitToScreen,
+  onOpenKinshipFinder,
 }) => {
   const { t } = useI18n();
 
@@ -82,6 +86,11 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
                 label: t('tree.modes.descendants'),
                 icon: <Workflow className="h-3.5 w-3.5" />,
               },
+              {
+                value: 'fan',
+                label: t('tree.modes.fan'),
+                icon: <Disc className="h-3.5 w-3.5" />,
+              },
             ]}
           />
         </div>
@@ -99,6 +108,18 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
               options={generationOptions}
             />
           </div>
+
+          {onOpenKinshipFinder && (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="tree-open-kinship-btn"
+              leftIcon={<Route className="h-3.5 w-3.5" />}
+              onClick={onOpenKinshipFinder}
+            >
+              {t('tree.kinship.openBtn')}
+            </Button>
+          )}
 
           <IconButton
             label={t('tree.toolbar.centerHomeAria')}

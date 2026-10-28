@@ -31,12 +31,12 @@
 12. EN + RU localization and anti-fluff copywriting from day 0 ([00](features/00-internationalization-localization.md)).
 13. **Progressive Web App (PWA) & Mobile/Tablet UX:** Web App Manifest, maskable and Apple touch icons, standalone launch, service worker static asset caching, mobile `BottomNav`, swipeable quick-view bottom sheets, and multi-touch tree gestures (pinch-to-zoom, pan) ([18](features/18-progressive-web-app-mobile.md)).
 
-### Phase 2 — "Delight"
-- Face tagging ([06](features/06-media-face-tagging.md)), fan chart, kinship finder ([04](features/04-tree-visualizations.md)).
-- Dashboard widgets & anniversaries ([16](features/16-dashboard-home.md) §4).
-- Data-quality warnings & duplicate person merge (Admin only) ([15](features/15-data-quality-duplicates.md)).
-- Life map, place map, geocoding ([12](features/12-places.md)).
-- Public guest mode ([02](features/02-rbac-access-control.md)).
+### Phase 2 — "Delight" (Completed)
+1. **Visualizations & Discovery:** Face tagging & primary avatar synchronization ([06](features/06-media-face-tagging.md)), fan chart (180°/360° concentric SVG, 4–8 generations, Ahnentafel indexing, quadrant colors), and Kinship Finder (LCA + bidirectional BFS, natural localized EN/RU kinship terms) ([04](features/04-tree-visualizations.md)).
+2. **Dashboard Widgets & Anniversaries:** 4 live widgets (`AnniversariesWidget` with Julian-to-Gregorian shift and round milestone badges, `RecentActivityWidget` with 1-click Undo, `TreeGlanceWidget`, `LatestPhotosWidget`), default user `start_page: "dashboard"` setting ([16 §4](features/16-dashboard-home.md#4-dashboard-widgets)).
+3. **Data Quality Warnings & Duplicate Person Merge (Admin only):** 10 soft validation rules with fuzzy-date windowing, warning dismissal memory (`dismissed_warnings`), Quick-Add duplicate detection guard, and 2-column side-by-side Person Merge wizard (`/people/merge`) with atomic transactions and GID aliases redirection ([15](features/15-data-quality-duplicates.md)).
+4. **Life Map & Clustered Places Map:** `/places?view=map` with distance-based spatial clustering, interactive marker pins, and chronological migration paths, geocoding ([12](features/12-places.md)).
+5. **Public Guest Mode:** Living person single-initial shielding (`И.` / `J.`) and private record redaction for unauthenticated and guest users ([02](features/02-rbac-access-control.md)).
 
 ### Phase 3 — "Power tools"
 - Printable PDF posters / tiles ([05](features/05-printable-tree-pdf.md)).

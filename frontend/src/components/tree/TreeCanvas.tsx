@@ -37,6 +37,8 @@ import { TreeToolbar } from './TreeToolbar';
 import { TreeMiniMap } from './TreeMiniMap';
 import { PersonDrawer, PersonImmediateFamily } from './PersonDrawer';
 import { PersonBottomSheet } from './PersonBottomSheet';
+import { FanChartCanvas } from './FanChartCanvas';
+import { KinshipFinderDialog } from './KinshipFinderDialog';
 
 export interface TreeCanvasProps {
   initialTreeView?: TreeViewResponse;
@@ -123,6 +125,8 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   const [deleteTarget, setDeleteTarget] = useState<TreePersonNodeDto | null>(
     null
   );
+  const [kinshipDialogOpen, setKinshipDialogOpen] = useState<boolean>(false);
+  const [highlightedPathIds, setHighlightedPathIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (isMobileViewport !== undefined) {
@@ -488,9 +492,29 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
             centerOnNode(resolvedHomePersonId ?? layout.focalId)
           }
           onFitToScreen={fitToScreen}
+          onOpenKinshipFinder={() => setKinshipDialogOpen(true)}
         />
 
-        {/* Hardware-Accelerated Transformed World Stage */}
+        {mode === 'fan' ? (
+          <FanChartCanvas
+            focalPersonId={focalId ?? layout.focalId}
+            nodes={treeView.nodes}
+            edges={treeView.edges}
+            generations={generations}
+            onGenerationsChange={setGenerations}
+            accessTier={
+              treeView.access_tier as
+                | 'public_anonymous'
+                | 'viewer'
+                | 'editor'
+                | 'admin'
+            }
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={(p) => setSelectedPersonId(p.id)}
+            onFocusPerson={(p) => setFocalId(p.id)}
+          />
+        ) : (
+        /* Hardware-Accelerated Transformed World Stage */
         <div
           style={{
             transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
@@ -509,17 +533,30 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
             width={1}
             height={1}
           >
-            {layout.edges.map((edge) => (
+            {layout.edges.map((edge) => {
+              const isKinshipHighlighted =
+                highlightedPathIds.length >= 2 &&
+                highlightedPathIds.includes(edge.sourceId) &&
+                highlightedPathIds.includes(edge.targetId);
+              return (
               <path
                 key={edge.id}
                 d={edge.pathD}
                 fill="none"
-                strokeWidth={edge.kind === 'spouse' ? 2.5 : 2}
+                strokeWidth={
+                  isKinshipHighlighted
+                    ? 3.5
+                    : edge.kind === 'spouse'
+                    ? 2.5
+                    : 2
+                }
                 strokeDasharray={
                   edge.kind === 'placeholder' ? '5 5' : undefined
                 }
                 className={
-                  edge.kind === 'spouse'
+                  isKinshipHighlighted
+                    ? 'stroke-brand'
+                    : edge.kind === 'spouse'
                     ? 'stroke-accent'
                     : edge.kind === 'placeholder'
                     ? 'stroke-border'
@@ -528,7 +565,8 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
                     : 'stroke-border'
                 }
               />
-            ))}
+              );
+            })}
           </svg>
 
           {/* Foreground HTML Layer for Person Node Cards */}
@@ -538,14 +576,17 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
                 (pn.id === resolvedHomePersonId ||
                   pn.node.gid === resolvedHomePersonId)
             );
+            const isHighlightedInPath = highlightedPathIds.includes(pn.id);
             return (
               <PersonNodeCard
                 key={pn.id}
                 node={pn.node}
                 x={pn.x}
                 y={pn.y}
-                isFocal={pn.isFocal}
-                isSelected={selectedPersonId === pn.id}
+                isFocal={pn.isFocal || isHighlightedInPath}
+                isSelected={
+                  selectedPersonId === pn.id || isHighlightedInPath
+                }
                 isHomePerson={isHome}
                 accessTier={treeView.access_tier}
                 canEdit={canEdit}
@@ -600,6 +641,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
               );
             })}
         </div>
+        )}
 
         {/* Collapsible Bottom-Right Mini-Map Radar */}
         <TreeMiniMap
@@ -745,6 +787,31 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
             total_visible: Math.max(0, prev.total_visible - 1),
           }));
           loadTreeView();
+        }}
+      />
+
+      <KinshipFinderDialog
+        open={kinshipDialogOpen}
+        onOpenChange={setKinshipDialogOpen}
+        people={treeView.nodes}
+        edges={treeView.edges}
+        initialPersonAId={resolvedHomePersonId ?? focalId ?? treeView.nodes[0]?.id}
+        initialPersonBId={selectedPersonId ?? treeView.nodes[1]?.id ?? treeView.nodes[0]?.id}
+        accessTier={
+          treeView.access_tier as
+            | 'public_anonymous'
+            | 'viewer'
+            | 'editor'
+            | 'admin'
+        }
+        onHighlightPath={(ids) => {
+          setHighlightedPathIds(ids);
+          if (mode === 'fan') {
+            setMode('hourglass');
+          }
+          if (ids[0]) {
+            centerOnNode(ids[0]);
+          }
         }}
       />
     </div>

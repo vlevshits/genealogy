@@ -19,15 +19,21 @@ use crate::{
     models::gendate::GenDate,
     services::{
         auth::{AuthService, UserDto},
+        dashboard::{
+            build_dashboard_response, compute_tree_stats, compute_upcoming_anniversaries,
+            AnniversariesListResponse, AnniversariesQuery, DashboardResponse, TreeStatsResponse,
+        },
         gedcom::{
             analyze_gedcom_payload, export_store_to_gedcom, import_gedcom_into_store,
             GedcomAnalysisReport, GedcomAnalyzeRequest, GedcomExportRequest, GedcomImportRequest,
             GedcomImportResult,
         },
         genealogy::{
-            allocate_gid, build_place_breadcrumbs, calculate_kinship_relation,
-            ensure_no_ancestor_cycle, ensure_no_place_cycle, recompute_all_individuals_vitals,
-            recompute_all_places_metadata, resolve_or_create_place_chain, ProfileKinshipDto,
+            allocate_gid, build_place_breadcrumbs, calculate_kinship_relation, compute_fan_chart,
+            compute_kinship_path, compute_places_map, ensure_no_ancestor_cycle,
+            ensure_no_place_cycle, recompute_all_individuals_vitals, recompute_all_places_metadata,
+            resolve_or_create_place_chain, FanChartQuery, FanChartResponse, KinshipQuery,
+            KinshipResponse, PlacesMapResponse, ProfileKinshipDto,
         },
         history::{
             create_snapshot, get_entity_version, log_change, parse_if_match_version,
@@ -46,6 +52,17 @@ use crate::{
             LifeEventDto, MediaAssetSummaryDto, MediaLinkDto, NoteDto, PersonLivingEvaluationInput,
             PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
             TreeSnapshotDto, VitalEventSummaryDto,
+        },
+        quality::{
+            build_quality_summary, compute_duplicate_candidates, compute_quality_warnings,
+            dismiss_warning_in_store, execute_person_merge, mark_not_duplicate_in_store,
+            match_prospective_person, preview_person_merge, DismissWarningRequest,
+            DismissWarningResponse, DuplicateCandidatesFilterQuery,
+            DuplicateCandidatesListResponse, MergePreviewQuery, MergePreviewResponse,
+            NotDuplicatePairRequest, NotDuplicatePairResponse, PersonMatchQuery,
+            PersonMatchResponse, PersonMergeRequest as QualityPersonMergeRequest,
+            PersonMergeResponse, QualitySummaryResponse, QualityWarningsFilterQuery,
+            QualityWarningsListResponse,
         },
         rbac::{CallerAccess, PublicOrAuth, RequireAdmin, RequireAuth, RequireEditor},
     },
@@ -347,6 +364,7 @@ pub struct CreateFamilyRequest {
     pub relationship_type: Option<String>,
     pub is_private: Option<bool>,
     pub children: Option<Vec<FamilyChildDto>>,
+    pub children_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -752,11 +770,7 @@ pub struct AdminToolOperationResponse {
     pub items: Vec<ChangeLogEntryDto>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
-pub struct PersonMergeRequest {
-    pub primary_person_id: Option<String>,
-    pub duplicate_person_id: Option<String>,
-}
+pub type PersonMergeRequest = QualityPersonMergeRequest;
 
 fn resolve_person_id_in_store(persons: &[TreePersonNodeDto], id_or_gid: &str) -> Option<String> {
     let target = id_or_gid.trim();
@@ -1654,10 +1668,11 @@ pub async fn get_person(
     let store = state.privacy_store.read().await;
     let target = id.trim();
 
+    let resolved_id = store.resolve_person_id(target).ok_or(AppError::NotFound)?;
     let person = store
         .persons
         .iter()
-        .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+        .find(|p| p.id == resolved_id)
         .ok_or(AppError::NotFound)?;
 
     let redacted = redact_person_for_caller(person, &access, &settings.default_locale)
@@ -1710,10 +1725,13 @@ pub async fn get_person_profile(
     let store = state.privacy_store.read().await;
     let target = id.trim();
 
+    let resolved_id = store
+        .resolve_person_id(target)
+        .ok_or(AppError::PersonNotFound)?;
     let raw_person = store
         .persons
         .iter()
-        .find(|p| p.id == target || p.gid.eq_ignore_ascii_case(target))
+        .find(|p| p.id == resolved_id)
         .ok_or(AppError::PersonNotFound)?;
 
     let redacted_person =
@@ -3592,7 +3610,18 @@ pub async fn create_family(
     }
 
     let mut resolved_children = Vec::new();
-    for (idx, mut ch) in req.children.unwrap_or_default().into_iter().enumerate() {
+    let mut input_children = req.children.unwrap_or_default();
+    for cid in req.children_ids.unwrap_or_default() {
+        if !input_children.iter().any(|c| c.child_id == cid) {
+            input_children.push(FamilyChildDto {
+                child_id: cid,
+                rel_to_partner1: "biological".to_string(),
+                rel_to_partner2: "biological".to_string(),
+                sort_order: 0,
+            });
+        }
+    }
+    for (idx, mut ch) in input_children.into_iter().enumerate() {
         let resolved_cid =
             resolve_person_id_in_store(&store.persons, &ch.child_id).ok_or(AppError::NotFound)?;
         for parent_id in [p1_id.as_deref(), p2_id.as_deref()].into_iter().flatten() {
@@ -8030,40 +8059,620 @@ pub async fn get_record_version(
     get,
     path = "/api/v1/quality",
     responses(
-        (status = 200, description = "Data quality warnings inspection (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "Data quality summary, open warnings, and duplicate candidates (Admin only)", body = QualitySummaryResponse),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn get_data_quality_warnings(
     RequireAdmin(_admin): RequireAdmin,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
-    Ok(Json(AdminToolOperationResponse {
-        status: "ok".to_string(),
-        operation: "data_quality".to_string(),
-        message: "Data quality warnings authorized for administrator".to_string(),
-        items: vec![],
+    State(state): State<AppState>,
+) -> Result<Json<QualitySummaryResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    Ok(Json(build_quality_summary(&store)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/quality/summary",
+    responses(
+        (status = 200, description = "Data quality summary and category counts (Admin only)", body = QualitySummaryResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn get_quality_summary(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+) -> Result<Json<QualitySummaryResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    Ok(Json(build_quality_summary(&store)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/quality/warnings",
+    params(
+        ("rule" = Option<String>, Query, description = "Filter by rule code (e.g. DEATH_BEFORE_BIRTH)"),
+        ("code" = Option<String>, Query, description = "Alias for rule code"),
+        ("category" = Option<String>, Query, description = "Filter by category ('chronology', 'family_age', 'completeness', 'duplicates')"),
+        ("severity" = Option<String>, Query, description = "Filter by severity ('warning' or 'info')"),
+        ("include_dismissed" = Option<bool>, Query, description = "Include dismissed warnings"),
+        ("limit" = Option<usize>, Query, description = "Page size (default 50)"),
+        ("cursor" = Option<String>, Query, description = "Pagination offset cursor")
+    ),
+    responses(
+        (status = 200, description = "Paginated list of data quality warnings (Admin only)", body = QualityWarningsListResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn list_quality_warnings(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Query(query): Query<QualityWarningsFilterQuery>,
+) -> Result<Json<QualityWarningsListResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let include_dismissed = query.include_dismissed.unwrap_or(false);
+    let mut warnings = compute_quality_warnings(&store, include_dismissed);
+
+    if let Some(rule_filter) = query
+        .rule
+        .as_deref()
+        .or(query.code.as_deref())
+        .or(query.rule_code.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        warnings.retain(|w| w.rule_code.eq_ignore_ascii_case(rule_filter));
+    }
+    if let Some(cat_filter) = query
+        .category
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        warnings.retain(|w| w.category.eq_ignore_ascii_case(cat_filter));
+    }
+    if let Some(sev_filter) = query
+        .severity
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        warnings.retain(|w| w.severity.eq_ignore_ascii_case(sev_filter));
+    }
+
+    let total = warnings.len();
+    let offset = query
+        .cursor
+        .as_deref()
+        .and_then(|c| c.parse::<usize>().ok())
+        .unwrap_or(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let page: Vec<_> = warnings.into_iter().skip(offset).take(limit).collect();
+    let next_cursor = if offset + page.len() < total {
+        Some((offset + page.len()).to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(QualityWarningsListResponse {
+        items: page,
+        next_cursor,
+        total,
     }))
 }
 
 #[utoipa::path(
     post,
-    path = "/api/v1/people/merge",
-    request_body(content = Option<PersonMergeRequest>, description = "Optional merge target IDs"),
+    path = "/api/v1/quality/warnings/{id}/dismiss",
+    params(
+        ("id" = String, Path, description = "Composite warning ID (e.g. DEATH_BEFORE_BIRTH:<entity_id>)")
+    ),
+    request_body(content = Option<DismissWarningRequest>, description = "Optional dismissal metadata"),
     responses(
-        (status = 200, description = "In-tree duplicate person merge (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "Warning dismissed and persisted in dismissal memory (Admin only)", body = DismissWarningResponse),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
-pub async fn merge_duplicate_people(
+pub async fn dismiss_quality_warning_by_id(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    payload: Option<Json<DismissWarningRequest>>,
+) -> Result<Json<DismissWarningResponse>, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let mut store = state.privacy_store.write().await;
+    let resp =
+        dismiss_warning_in_store(&mut store, Some(&id), req, Some(admin.user.id.to_string()))?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/quality/warnings/dismiss",
+    request_body = DismissWarningRequest,
+    responses(
+        (status = 200, description = "Warning dismissed by rule_code + entity_id (Admin only)", body = DismissWarningResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn dismiss_quality_warning(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    Json(req): Json<DismissWarningRequest>,
+) -> Result<Json<DismissWarningResponse>, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let resp = dismiss_warning_in_store(&mut store, None, req, Some(admin.user.id.to_string()))?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/quality/duplicates",
+    params(
+        ("min_score" = Option<i32>, Query, description = "Minimum similarity score (default 60)"),
+        ("limit" = Option<usize>, Query, description = "Page size (default 50)"),
+        ("cursor" = Option<String>, Query, description = "Pagination offset cursor")
+    ),
+    responses(
+        (status = 200, description = "Candidate duplicate pairs sorted by similarity score descending (Admin only)", body = DuplicateCandidatesListResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn list_duplicate_candidates(
     RequireAdmin(_admin): RequireAdmin,
-    _payload: Option<Json<PersonMergeRequest>>,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
-    Ok(Json(AdminToolOperationResponse {
-        status: "ok".to_string(),
-        operation: "person_merge".to_string(),
-        message: "Duplicate person merge authorized for administrator".to_string(),
-        items: vec![],
+    State(state): State<AppState>,
+    Query(query): Query<DuplicateCandidatesFilterQuery>,
+) -> Result<Json<DuplicateCandidatesListResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let min_score = query.min_score.unwrap_or(60).clamp(1, 100);
+    let all = compute_duplicate_candidates(&store, min_score);
+    let total = all.len();
+    let offset = query
+        .cursor
+        .as_deref()
+        .and_then(|c| c.parse::<usize>().ok())
+        .unwrap_or(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let items: Vec<_> = all.into_iter().skip(offset).take(limit).collect();
+    let next_cursor = if offset + items.len() < total {
+        Some((offset + items.len()).to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(DuplicateCandidatesListResponse {
+        items,
+        next_cursor,
+        total,
     }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/quality/duplicates/not-duplicate",
+    request_body = NotDuplicatePairRequest,
+    responses(
+        (status = 200, description = "Pair marked as not-duplicates and excluded from future candidate lists (Admin only)", body = NotDuplicatePairResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn mark_pair_not_duplicate(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Json(req): Json<NotDuplicatePairRequest>,
+) -> Result<Json<NotDuplicatePairResponse>, AppError> {
+    let mut store = state.privacy_store.write().await;
+    let resp = mark_not_duplicate_in_store(&mut store, req)?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/people/match",
+    params(
+        ("name" = Option<String>, Query, description = "Full name to match"),
+        ("given_name" = Option<String>, Query, description = "Given name"),
+        ("surname" = Option<String>, Query, description = "Surname"),
+        ("patronymic" = Option<String>, Query, description = "Patronymic"),
+        ("birth_year" = Option<i32>, Query, description = "Approximate birth year"),
+        ("sex" = Option<String>, Query, description = "Sex ('M', 'F', 'U')")
+    ),
+    responses(
+        (status = 200, description = "Inline duplicate match candidates during person creation (Editor or Admin)", body = PersonMatchResponse),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn match_people_candidates(
+    RequireEditor(editor): RequireEditor,
+    State(state): State<AppState>,
+    Query(query): Query<PersonMatchQuery>,
+) -> Result<Json<PersonMatchResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = if editor.user.role == "admin" {
+        CallerAccess::Admin
+    } else {
+        CallerAccess::Editor
+    };
+    let store = state.privacy_store.read().await;
+    let resp = match_prospective_person(&store, &query, &access, &settings.default_locale);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/people/merge/preview",
+    params(
+        ("keep_id" = Option<String>, Query, description = "Surviving (keep/target) person UUID or GID"),
+        ("merge_id" = Option<String>, Query, description = "Source (merge) person UUID or GID"),
+        ("target_id" = Option<String>, Query, description = "Alias for keep_id"),
+        ("source_id" = Option<String>, Query, description = "Alias for merge_id")
+    ),
+    responses(
+        (status = 200, description = "Side-by-side person merge preview and conflict analysis (Admin only)", body = MergePreviewResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 404, description = "Person not found", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn preview_merge_people_get(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Query(query): Query<MergePreviewQuery>,
+) -> Result<Json<MergePreviewResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let resp = preview_person_merge(&store, &query)?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/people/merge/preview",
+    request_body = MergePreviewQuery,
+    responses(
+        (status = 200, description = "Side-by-side person merge preview and conflict analysis (Admin only)", body = MergePreviewResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 404, description = "Person not found", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn preview_merge_people_post(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    Json(query): Json<MergePreviewQuery>,
+) -> Result<Json<MergePreviewResponse>, AppError> {
+    let store = state.privacy_store.read().await;
+    let resp = preview_person_merge(&store, &query)?;
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/people/merge",
+    request_body(content = Option<PersonMergeRequest>, description = "Merge parameters (keep_id/target_id, merge_id/source_id, field_choices)"),
+    responses(
+        (status = 200, description = "Atomic undoable duplicate person merge executed (Admin only)", body = PersonMergeResponse),
+        (status = 403, description = "Admin role required", body = ErrorResponse),
+        (status = 404, description = "Person not found", body = ErrorResponse),
+        (status = 422, description = "Self-merge or ancestor cycle detected", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn merge_duplicate_people(
+    RequireAdmin(admin): RequireAdmin,
+    State(state): State<AppState>,
+    payload: Option<Json<PersonMergeRequest>>,
+) -> Result<Json<PersonMergeResponse>, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let settings = state.resolve_instance_settings().await;
+    let current_year = Utc::now().year();
+    let age_threshold = settings.living_person_age_threshold as i32;
+
+    let mut store = state.privacy_store.write().await;
+    let mut resp = execute_person_merge(
+        &mut store,
+        req,
+        Some(admin.user.id.to_string()),
+        Some(admin.user.display_name()),
+        &state.config.backup_path,
+    )?;
+
+    if let Some(chosen_surv) = resp.surviving_person.clone() {
+        recompute_all_places_metadata(&mut store);
+        recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+        if let Some(person) = store.persons.iter_mut().find(|p| p.id == chosen_surv.id) {
+            if chosen_surv.birth.is_some() {
+                person.birth = chosen_surv.birth;
+                person.birth_sort = chosen_surv.birth_sort;
+            }
+            if chosen_surv.death.is_some() {
+                person.death = chosen_surv.death;
+                person.death_sort = chosen_surv.death_sort;
+                person.has_death_event = chosen_surv.has_death_event;
+            }
+            resp.surviving_person = Some(person.clone());
+        }
+    }
+
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/dashboard",
+    params(
+        ("days" = Option<u32>, Query, description = "Anniversary lookahead window in days (default 30)"),
+        ("scope" = Option<String>, Query, description = "Anniversary scope ('all' or 'close')"),
+        ("reference_date" = Option<String>, Query, description = "Optional reference date (YYYY-MM-DD) for deterministic anniversary calculation")
+    ),
+    responses(
+        (status = 200, description = "Home dashboard widgets: upcoming anniversaries, recent activity, stats, latest photos, and quality summary", body = DashboardResponse),
+        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_dashboard(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Query(query): Query<AnniversariesQuery>,
+) -> Result<Json<DashboardResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+    let (preferred_home_id, _, _, _) = resolve_home_person_for_caller(
+        &state,
+        &caller,
+        &store.persons,
+        &settings.default_locale,
+        settings.default_home_person_id.as_deref(),
+    )
+    .await;
+
+    let resp = build_dashboard_response(
+        &store,
+        &access,
+        &settings.default_locale,
+        preferred_home_id.as_deref(),
+        &query,
+    );
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/anniversaries",
+    params(
+        ("days" = Option<u32>, Query, description = "Lookahead window in days (default 30, max 365)"),
+        ("scope" = Option<String>, Query, description = "Filter scope ('all' or 'close')"),
+        ("home_person_id" = Option<String>, Query, description = "Anchor person ID for 'close' scope"),
+        ("reference_date" = Option<String>, Query, description = "Optional YYYY-MM-DD reference date")
+    ),
+    responses(
+        (status = 200, description = "Upcoming birthdays, wedding anniversaries, and milestone memorials with Julian-to-Gregorian shifting", body = AnniversariesListResponse),
+        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_anniversaries(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Query(mut query): Query<AnniversariesQuery>,
+) -> Result<Json<AnniversariesListResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+    if query.home_person_id.is_none() {
+        let (home_id, _, _, _) = resolve_home_person_for_caller(
+            &state,
+            &caller,
+            &store.persons,
+            &settings.default_locale,
+            settings.default_home_person_id.as_deref(),
+        )
+        .await;
+        query.home_person_id = home_id;
+    }
+
+    let resp = compute_upcoming_anniversaries(&store, &query, &access, &settings.default_locale);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/stats",
+    responses(
+        (status = 200, description = "Tree-wide demographic and completeness statistics", body = TreeStatsResponse),
+        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_stats(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+) -> Result<Json<TreeStatsResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+    let resp = compute_tree_stats(&store, &access, &settings.default_locale);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/kinship",
+    params(
+        ("from" = Option<String>, Query, description = "Starting person UUID or GID"),
+        ("to" = Option<String>, Query, description = "Target person UUID or GID"),
+        ("person_a" = Option<String>, Query, description = "Alias for from"),
+        ("person_b" = Option<String>, Query, description = "Alias for to")
+    ),
+    responses(
+        (status = 200, description = "Shortest kinship relationship path and degree of kinship between two individuals", body = KinshipResponse),
+        (status = 404, description = "Person not found or hidden by privacy", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_kinship(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Query(query): Query<KinshipQuery>,
+) -> Result<Json<KinshipResponse>, AppError> {
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+
+    let raw_from = query
+        .from
+        .as_deref()
+        .or(query.person_a.as_deref())
+        .or(query.id1.as_deref())
+        .unwrap_or_default()
+        .trim();
+    let raw_to = query
+        .to
+        .as_deref()
+        .or(query.person_b.as_deref())
+        .or(query.id2.as_deref())
+        .unwrap_or_default()
+        .trim();
+
+    let from_id = store
+        .resolve_person_id(raw_from)
+        .ok_or(AppError::PersonNotFound)?;
+    let to_id = store
+        .resolve_person_id(raw_to)
+        .ok_or(AppError::PersonNotFound)?;
+
+    let endpoint_visible = |pid: &str| -> bool {
+        store
+            .persons
+            .iter()
+            .find(|p| p.id == pid)
+            .and_then(|p| redact_person_for_caller(p, &access, "en"))
+            .is_some()
+    };
+
+    if !endpoint_visible(&from_id) || !endpoint_visible(&to_id) {
+        return Err(AppError::PersonNotFound);
+    }
+
+    let visible_persons: Vec<TreePersonNodeDto> = store
+        .persons
+        .iter()
+        .filter_map(|p| redact_person_for_tree_view(p, &access))
+        .collect();
+
+    let visible_families: Vec<FamilyDto> = store
+        .families
+        .iter()
+        .filter(|f| !f.is_private || access.can_view_private())
+        .cloned()
+        .collect();
+
+    let resp = compute_kinship_path(&from_id, &to_id, &visible_persons, &visible_families);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/tree/fan",
+    params(
+        ("root" = Option<String>, Query, description = "Root person UUID or GID (defaults to caller's home person)"),
+        ("focal_id" = Option<String>, Query, description = "Alias for root"),
+        ("generations" = Option<u32>, Query, description = "Number of ancestor generations (4..=8, default 5)")
+    ),
+    responses(
+        (status = 200, description = "Ahnentafel-indexed ancestor fan chart hierarchy with quadrant metadata", body = FanChartResponse),
+        (status = 404, description = "Root person not found or hidden by privacy", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_fan_chart(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+    Query(query): Query<FanChartQuery>,
+) -> Result<Json<FanChartResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+
+    let visible_persons: Vec<TreePersonNodeDto> = store
+        .persons
+        .iter()
+        .filter_map(|p| redact_person_for_tree_view(p, &access))
+        .collect();
+
+    let raw_root = query
+        .root
+        .as_deref()
+        .or(query.focal_id.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let root_id = if let Some(requested) = raw_root {
+        let resolved = store
+            .resolve_person_id(requested)
+            .ok_or(AppError::PersonNotFound)?;
+        if !visible_persons.iter().any(|p| p.id == resolved) {
+            return Err(AppError::PersonNotFound);
+        }
+        resolved
+    } else {
+        let (home_opt, _, _, _) = resolve_home_person_for_caller(
+            &state,
+            &caller,
+            &store.persons,
+            &settings.default_locale,
+            settings.default_home_person_id.as_deref(),
+        )
+        .await;
+        home_opt
+            .filter(|hid| visible_persons.iter().any(|p| &p.id == hid))
+            .or_else(|| visible_persons.first().map(|p| p.id.clone()))
+            .ok_or(AppError::PersonNotFound)?
+    };
+
+    let visible_families: Vec<FamilyDto> = store
+        .families
+        .iter()
+        .filter(|f| !f.is_private || access.can_view_private())
+        .cloned()
+        .collect();
+
+    let generations = query.generations.unwrap_or(5).clamp(1, 8);
+    let resp = compute_fan_chart(&root_id, generations, &visible_persons, &visible_families);
+    Ok(Json(resp))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/places/map",
+    responses(
+        (status = 200, description = "Clustered map markers for all geocoded places with event and person counts", body = PlacesMapResponse),
+        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
+    ),
+    tag = "Tree & Privacy"
+)]
+pub async fn get_places_map(
+    caller: PublicOrAuth,
+    State(state): State<AppState>,
+) -> Result<Json<PlacesMapResponse>, AppError> {
+    let settings = state.resolve_instance_settings().await;
+    let access = caller.caller_access();
+    let store = state.privacy_store.read().await;
+
+    let visible_persons: Vec<TreePersonNodeDto> = store
+        .persons
+        .iter()
+        .filter_map(|p| redact_person_for_caller(p, &access, &settings.default_locale))
+        .collect();
+
+    let resp = compute_places_map(&store, &visible_persons);
+    Ok(Json(resp))
 }

@@ -328,7 +328,11 @@ export interface StartWithSelfInput {
 // Phase 1.6 — Interactive Tree Canvas (Hourglass, Pedigree, Descendants) DTOs
 // =============================================================================
 
-export type TreeProjectionMode = 'hourglass' | 'pedigree' | 'descendant';
+export type TreeProjectionMode =
+  | 'hourglass'
+  | 'pedigree'
+  | 'descendant'
+  | 'fan';
 
 export interface TreePersonNodeDto {
   id: string;

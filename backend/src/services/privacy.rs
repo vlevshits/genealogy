@@ -828,6 +828,19 @@ pub fn redact_media_for_caller(
     Some(media.clone())
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct DismissedWarningDto {
+    pub id: String,
+    pub rule_code: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dismissed_by: Option<String>,
+    pub dismissed_at: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct GenealogyPrivacyStore {
     pub persons: Vec<TreePersonNodeDto>,
@@ -838,6 +851,9 @@ pub struct GenealogyPrivacyStore {
     pub places: Vec<PlaceSummaryDto>,
     pub change_log: Vec<ChangeLogEntryDto>,
     pub snapshots: Vec<TreeSnapshotDto>,
+    pub dismissed_warnings: Vec<DismissedWarningDto>,
+    pub not_duplicate_pairs: Vec<(String, String)>,
+    pub gid_aliases: HashMap<String, String>,
     pub next_gid_seq: u32,
     pub next_family_gid_seq: u32,
     pub next_event_gid_seq: u32,
@@ -857,6 +873,9 @@ impl GenealogyPrivacyStore {
             places: vec![],
             change_log: vec![],
             snapshots: vec![],
+            dismissed_warnings: vec![],
+            not_duplicate_pairs: vec![],
+            gid_aliases: HashMap::new(),
             next_gid_seq: 100,
             next_family_gid_seq: 100,
             next_event_gid_seq: 100,
@@ -864,6 +883,29 @@ impl GenealogyPrivacyStore {
             next_media_gid_seq: 100,
             is_demo_seed: false,
         }
+    }
+
+    /// Resolves a person UUID or GID (including merged losing GIDs via `gid_aliases`) to the canonical person UUID.
+    pub fn resolve_person_id(&self, id_or_gid: &str) -> Option<String> {
+        let trimmed = id_or_gid.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(p) = self
+            .persons
+            .iter()
+            .find(|p| p.id == trimmed || p.gid.eq_ignore_ascii_case(trimmed))
+        {
+            return Some(p.id.clone());
+        }
+        for (alias_gid, target_id) in &self.gid_aliases {
+            if alias_gid.eq_ignore_ascii_case(trimmed)
+                && self.persons.iter().any(|p| p.id == *target_id)
+            {
+                return Some(target_id.clone());
+            }
+        }
+        None
     }
 }
 
@@ -1154,6 +1196,9 @@ impl Default for GenealogyPrivacyStore {
             places,
             change_log: vec![],
             snapshots: vec![],
+            dismissed_warnings: vec![],
+            not_duplicate_pairs: vec![],
+            gid_aliases: HashMap::new(),
             next_gid_seq: 100,
             next_family_gid_seq: 100,
             next_event_gid_seq: 100,

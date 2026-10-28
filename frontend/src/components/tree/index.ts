@@ -5,4 +5,6 @@ export * from './TreeToolbar';
 export * from './TreeMiniMap';
 export * from './PersonDrawer';
 export * from './PersonBottomSheet';
+export * from './FanChartCanvas';
+export * from './KinshipFinderDialog';
 export * from './TreeCanvas';

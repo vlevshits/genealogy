@@ -37,31 +37,36 @@ use crate::{
             analyze_gedcom, create_event, create_face_tag, create_family, create_manual_snapshot,
             create_media, create_media_link, create_note, create_person, create_place,
             delete_event, delete_face_tag, delete_family, delete_media, delete_media_link,
-            delete_note, delete_person, delete_place, export_gedcom, export_gedcom_post,
-            export_printable_pdf, get_audit_history, get_data_quality_warnings, get_family,
-            get_media_crop, get_media_detail, get_media_file, get_onboarding_status,
-            get_patronymic_suggestion, get_person, get_person_delete_impact, get_person_profile,
-            get_place_detail, get_record_history, get_record_version, get_tree, get_tree_view,
-            global_search, import_gedcom, list_event_sources, list_events, list_families,
-            list_media_archive, list_notes, list_people_directory, list_people_surnames,
-            list_places_directory, list_snapshots, merge_duplicate_people, merge_place,
-            quick_add_relative, restore_deleted_person, rollback_to_snapshot, start_with_self,
-            undo_history_transaction, update_event, update_face_tag, update_family, update_media,
-            update_note, update_person, update_place, AdminToolOperationResponse,
-            CreateEventRequest, CreateFaceTagRequest, CreateFamilyRequest, CreateMediaLinkRequest,
-            CreateMediaRequest, CreateNoteRequest, CreatePersonRequest, CreatePlaceRequest,
-            DeleteImpactDto, EventFilterQuery, EventListResponse, FamilyListResponse,
-            MediaArchiveResponse, MediaCropQuery, MediaFilterQuery, MergePlaceRequest,
-            NoteFilterQuery, NoteListResponse, OnboardingStatusResponse, PatronymicSuggestionQuery,
-            PatronymicSuggestionResponse, PeopleDirectoryItemDto, PeopleDirectoryQuery,
-            PeopleDirectoryResponse, PersonMergeRequest, PersonProfileQuery,
-            PersonProfileResponseDto, PlaceDetailDto, PlacesDirectoryResponse, PlacesFilterQuery,
-            ProfileCapabilitiesDto, ProfileChildSummaryDto, ProfileFamiliesDto,
-            ProfileLifeEventDto, ProfileParentFamilyDto, ProfileRelativeSummaryDto,
-            ProfileSourceSummaryDto, ProfileSpouseFamilyDto, QuickAddRelativeRequest,
-            QuickAddRelativeResponse, SearchActionDto, SearchMediaResultDto, SearchPersonResultDto,
-            SearchPlaceResultDto, SearchQuery, SearchResultResponseDto, SourceAutocompleteResponse,
-            SourceSearchQuery, StartWithSelfRequest, StartWithSelfResponse, SurnameIndexEntryDto,
+            delete_note, delete_person, delete_place, dismiss_quality_warning,
+            dismiss_quality_warning_by_id, export_gedcom, export_gedcom_post, export_printable_pdf,
+            get_anniversaries, get_audit_history, get_dashboard, get_data_quality_warnings,
+            get_family, get_fan_chart, get_kinship, get_media_crop, get_media_detail,
+            get_media_file, get_onboarding_status, get_patronymic_suggestion, get_person,
+            get_person_delete_impact, get_person_profile, get_place_detail, get_places_map,
+            get_quality_summary, get_record_history, get_record_version, get_stats, get_tree,
+            get_tree_view, global_search, import_gedcom, list_duplicate_candidates,
+            list_event_sources, list_events, list_families, list_media_archive, list_notes,
+            list_people_directory, list_people_surnames, list_places_directory,
+            list_quality_warnings, list_snapshots, mark_pair_not_duplicate,
+            match_people_candidates, merge_duplicate_people, merge_place, preview_merge_people_get,
+            preview_merge_people_post, quick_add_relative, restore_deleted_person,
+            rollback_to_snapshot, start_with_self, undo_history_transaction, update_event,
+            update_face_tag, update_family, update_media, update_note, update_person, update_place,
+            AdminToolOperationResponse, CreateEventRequest, CreateFaceTagRequest,
+            CreateFamilyRequest, CreateMediaLinkRequest, CreateMediaRequest, CreateNoteRequest,
+            CreatePersonRequest, CreatePlaceRequest, DeleteImpactDto, EventFilterQuery,
+            EventListResponse, FamilyListResponse, MediaArchiveResponse, MediaCropQuery,
+            MediaFilterQuery, MergePlaceRequest, NoteFilterQuery, NoteListResponse,
+            OnboardingStatusResponse, PatronymicSuggestionQuery, PatronymicSuggestionResponse,
+            PeopleDirectoryItemDto, PeopleDirectoryQuery, PeopleDirectoryResponse,
+            PersonMergeRequest, PersonProfileQuery, PersonProfileResponseDto, PlaceDetailDto,
+            PlacesDirectoryResponse, PlacesFilterQuery, ProfileCapabilitiesDto,
+            ProfileChildSummaryDto, ProfileFamiliesDto, ProfileLifeEventDto,
+            ProfileParentFamilyDto, ProfileRelativeSummaryDto, ProfileSourceSummaryDto,
+            ProfileSpouseFamilyDto, QuickAddRelativeRequest, QuickAddRelativeResponse,
+            SearchActionDto, SearchMediaResultDto, SearchPersonResultDto, SearchPlaceResultDto,
+            SearchQuery, SearchResultResponseDto, SourceAutocompleteResponse, SourceSearchQuery,
+            StartWithSelfRequest, StartWithSelfResponse, SurnameIndexEntryDto,
             SurnameLetterGroupDto, SurnamesIndexQuery, SurnamesIndexResponse, TreeEdgeDto,
             TreeResponse, TreeViewQuery, TreeViewResponse, UpdateEventRequest,
             UpdateFaceTagRequest, UpdateFamilyRequest, UpdateMediaRequest, UpdateNoteRequest,
@@ -89,11 +94,19 @@ use crate::{
             WebAuthnChallengeResponse,
         },
         backup::{BackupArchiveInfo, BackupFileEntry, BackupManifest, BackupStats},
+        dashboard::{
+            AnniversariesListResponse, AnniversariesQuery, AnniversaryItemDto,
+            DashboardQualityWidgetDto, DashboardResponse, TreeStatsResponse,
+        },
         gedcom::{
             GedcomAnalysisReport, GedcomAnalyzeRequest, GedcomDialectSummary, GedcomExportRequest,
             GedcomImportRequest, GedcomImportResult,
         },
-        genealogy::ProfileKinshipDto,
+        genealogy::{
+            FanChartNodeDto, FanChartQuery, FanChartResponse, KinshipEdgeStepDto, KinshipQuery,
+            KinshipResponse, PlaceMapMarkerDto, PlaceMapMarkerPersonDto, PlacesMapResponse,
+            ProfileKinshipDto,
+        },
         history::{
             ChangeLogTransactionGroupDto, CreateSnapshotRequest, EntityVersionResponse,
             FieldDiffDto, HistoryFeedQuery, HistoryFeedResponse, RecordHistoryItemDto,
@@ -101,10 +114,19 @@ use crate::{
             SnapshotListResponse, UndoTransactionResponse,
         },
         privacy::{
-            AvatarCropDto, ChangeLogEntryDto, FaceTagDto, FamilyChildDto, FamilyDto,
-            IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, MediaLinkDto, NoteDto,
-            PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
-            TreeSnapshotDto, TreeSnapshotRecordCountsDto, VitalEventSummaryDto,
+            AvatarCropDto, ChangeLogEntryDto, DismissedWarningDto, FaceTagDto, FamilyChildDto,
+            FamilyDto, IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, MediaLinkDto,
+            NoteDto, PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto,
+            TreePersonNodeDto, TreeSnapshotDto, TreeSnapshotRecordCountsDto, VitalEventSummaryDto,
+        },
+        quality::{
+            DismissWarningRequest, DismissWarningResponse, DuplicateCandidatePairDto,
+            DuplicateCandidatesFilterQuery, DuplicateCandidatesListResponse,
+            MergeCombinedCountsDto, MergeFieldConflictDto, MergePreviewQuery, MergePreviewResponse,
+            NotDuplicatePairRequest, NotDuplicatePairResponse, PersonMatchCandidateDto,
+            PersonMatchQuery, PersonMatchResponse, PersonMergeResponse, QualityCategoryCountsDto,
+            QualitySeverityCountsDto, QualitySummaryResponse, QualityWarningDto,
+            QualityWarningPersonRefDto, QualityWarningsFilterQuery, QualityWarningsListResponse,
         },
         security::csrf_protection_middleware,
     },
@@ -160,6 +182,8 @@ use crate::{
         rbac::start_with_self,
         rbac::get_tree,
         rbac::get_tree_view,
+        rbac::get_fan_chart,
+        rbac::get_kinship,
         rbac::get_patronymic_suggestion,
         rbac::get_person,
         rbac::get_person_profile,
@@ -189,6 +213,7 @@ use crate::{
         rbac::list_people_directory,
         rbac::list_people_surnames,
         rbac::list_places_directory,
+        rbac::get_places_map,
         rbac::create_place,
         rbac::get_place_detail,
         rbac::update_place,
@@ -217,7 +242,19 @@ use crate::{
         rbac::rollback_to_snapshot,
         rbac::get_record_version,
         rbac::get_data_quality_warnings,
+        rbac::get_quality_summary,
+        rbac::list_quality_warnings,
+        rbac::dismiss_quality_warning_by_id,
+        rbac::dismiss_quality_warning,
+        rbac::list_duplicate_candidates,
+        rbac::mark_pair_not_duplicate,
+        rbac::match_people_candidates,
+        rbac::preview_merge_people_get,
+        rbac::preview_merge_people_post,
         rbac::merge_duplicate_people,
+        rbac::get_dashboard,
+        rbac::get_anniversaries,
+        rbac::get_stats,
     ),
     components(
         schemas(
@@ -296,6 +333,7 @@ use crate::{
             ChangeLogEntryDto,
             TreeSnapshotRecordCountsDto,
             TreeSnapshotDto,
+            DismissedWarningDto,
             HistoryFeedQuery,
             FieldDiffDto,
             ChangeLogTransactionGroupDto,
@@ -315,6 +353,12 @@ use crate::{
             TreeViewQuery,
             TreeEdgeDto,
             TreeViewResponse,
+            FanChartQuery,
+            FanChartNodeDto,
+            FanChartResponse,
+            KinshipQuery,
+            KinshipEdgeStepDto,
+            KinshipResponse,
             PersonProfileQuery,
             ProfileKinshipDto,
             ProfileRelativeSummaryDto,
@@ -351,6 +395,9 @@ use crate::{
             UpdatePlaceRequest,
             MergePlaceRequest,
             PlaceDetailDto,
+            PlaceMapMarkerPersonDto,
+            PlaceMapMarkerDto,
+            PlacesMapResponse,
             SearchQuery,
             SearchPersonResultDto,
             SearchPlaceResultDto,
@@ -380,7 +427,35 @@ use crate::{
             GedcomImportResult,
             GedcomExportRequest,
             AdminToolOperationResponse,
+            QualityWarningPersonRefDto,
+            QualityWarningDto,
+            QualityCategoryCountsDto,
+            QualitySeverityCountsDto,
+            QualitySummaryResponse,
+            QualityWarningsFilterQuery,
+            QualityWarningsListResponse,
+            DismissWarningRequest,
+            DismissWarningResponse,
+            DuplicateCandidatePairDto,
+            DuplicateCandidatesFilterQuery,
+            DuplicateCandidatesListResponse,
+            NotDuplicatePairRequest,
+            NotDuplicatePairResponse,
+            PersonMatchQuery,
+            PersonMatchCandidateDto,
+            PersonMatchResponse,
+            MergeCombinedCountsDto,
+            MergeFieldConflictDto,
+            MergePreviewQuery,
+            MergePreviewResponse,
             PersonMergeRequest,
+            PersonMergeResponse,
+            AnniversariesQuery,
+            AnniversaryItemDto,
+            AnniversariesListResponse,
+            DashboardQualityWidgetDto,
+            DashboardResponse,
+            TreeStatsResponse,
         )
     ),
     tags(
@@ -464,9 +539,15 @@ pub fn create_router(state: AppState) -> Router {
         // Onboarding & Home Person
         .route("/onboarding/status", get(get_onboarding_status))
         .route("/onboarding/start-with-self", post(start_with_self))
+        // Dashboard, Anniversaries & Stats
+        .route("/dashboard", get(get_dashboard))
+        .route("/anniversaries", get(get_anniversaries))
+        .route("/stats", get(get_stats))
         // Core Genealogy Data Model, Person/Family/Event Editing, Places & RBAC Endpoints
         .route("/tree", get(get_tree))
         .route("/tree/view", get(get_tree_view))
+        .route("/tree/fan", get(get_fan_chart))
+        .route("/kinship", get(get_kinship))
         .route(
             "/persons/suggest-patronymic",
             get(get_patronymic_suggestion),
@@ -509,7 +590,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/search", get(global_search))
         .route("/people", get(list_people_directory))
         .route("/people/surnames", get(list_people_surnames))
+        .route("/people/match", get(match_people_candidates))
+        .route(
+            "/people/merge/preview",
+            get(preview_merge_people_get).post(preview_merge_people_post),
+        )
+        .route("/people/merge/not-duplicate", post(mark_pair_not_duplicate))
+        .route("/people/merge", post(merge_duplicate_people))
         .route("/places", get(list_places_directory).post(create_place))
+        .route("/places/map", get(get_places_map))
         .route(
             "/places/{id}",
             get(get_place_detail)
@@ -538,7 +627,18 @@ pub fn create_router(state: AppState) -> Router {
         .route("/snapshots/{id}/rollback", post(rollback_to_snapshot))
         .route("/{entity_type}/{id}/version", get(get_record_version))
         .route("/quality", get(get_data_quality_warnings))
-        .route("/people/merge", post(merge_duplicate_people))
+        .route("/quality/summary", get(get_quality_summary))
+        .route("/quality/warnings", get(list_quality_warnings))
+        .route("/quality/warnings/dismiss", post(dismiss_quality_warning))
+        .route(
+            "/quality/warnings/{id}/dismiss",
+            post(dismiss_quality_warning_by_id),
+        )
+        .route("/quality/duplicates", get(list_duplicate_candidates))
+        .route(
+            "/quality/duplicates/not-duplicate",
+            post(mark_pair_not_duplicate),
+        )
         // Admin Operations, Users & Invitations
         .route("/admin/system", get(get_admin_system))
         .route(

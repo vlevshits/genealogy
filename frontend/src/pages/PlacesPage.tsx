@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useToast } from '../components/ui';
+import { ListTree, Map as MapIcon } from 'lucide-react';
+import { SegmentedControl, useToast } from '../components/ui';
 import {
   PlaceDetailPanel,
   PlaceFormDialog,
   PlaceMergeDialog,
+  PlacesMapView,
   PlacesTreeListCard,
 } from '../components/places';
 import {
@@ -21,6 +23,7 @@ import { matchesCrossScript } from '../lib/utils';
 export interface PlacesPageProps {
   initialPlaces?: PlaceDto[];
   initialMapTileUrl?: string;
+  initialView?: 'list' | 'map';
   userRole?: 'admin' | 'editor' | 'viewer';
 }
 
@@ -103,6 +106,7 @@ export const DEFAULT_PLACES: PlaceDto[] = [
 export const PlacesPage: React.FC<PlacesPageProps> = ({
   initialPlaces,
   initialMapTileUrl = '',
+  initialView,
   userRole,
 }) => {
   const { t } = useI18n();
@@ -111,6 +115,14 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
 
   const effectiveRole = userRole ?? user?.role ?? 'admin';
   const canEdit = effectiveRole === 'admin' || effectiveRole === 'editor';
+
+  const resolvedInitialView: 'list' | 'map' =
+    initialView ??
+    (typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('view') === 'map'
+      ? 'map'
+      : 'list');
+  const [viewMode, setViewMode] = useState<'list' | 'map'>(resolvedInitialView);
 
   const [places, setPlaces] = useState<PlaceDto[]>(
     initialPlaces ?? DEFAULT_PLACES
@@ -221,28 +233,67 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
 
   return (
     <div className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-serif text-2xl font-semibold text-primary">
+            {t('places.title')}
+          </h1>
+          <p className="text-xs text-secondary mt-0.5">
+            {t('places.subtitle')}
+          </p>
+        </div>
+
+        <SegmentedControl<'list' | 'map'>
+          size="sm"
+          aria-label={t('places.viewModeAria')}
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            {
+              value: 'list',
+              label: t('places.viewList'),
+              icon: <ListTree className="h-3.5 w-3.5" />,
+            },
+            {
+              value: 'map',
+              label: t('places.viewMap'),
+              icon: <MapIcon className="h-3.5 w-3.5" />,
+            },
+          ]}
+        />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2 min-w-0">
-          <PlacesTreeListCard
-            places={filteredPlaces}
-            selectedPlaceId={selectedPlace?.id ?? null}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            missingCoordsOnly={missingCoordsOnly}
-            onMissingCoordsChange={setMissingCoordsOnly}
-            canEdit={canEdit}
-            onSelectPlace={(pl) => setSelectedPlace(pl)}
-            onAddPlace={() => {
-              setEditingPlace(null);
-              setFormOpen(true);
-            }}
-            onEditPlace={(pl) => {
-              setEditingPlace(pl);
-              setFormOpen(true);
-            }}
-            onMergePlace={(pl) => setMergingPlace(pl)}
-            onDeletePlace={handleDeletePlace}
-          />
+        <div className="lg:col-span-2 min-w-0 space-y-6">
+          {viewMode === 'map' ? (
+            <PlacesMapView
+              places={filteredPlaces}
+              selectedPlaceId={selectedPlace?.id ?? null}
+              mapTileUrl={mapTileUrl}
+              onSelectPlace={(pl) => setSelectedPlace(pl)}
+            />
+          ) : (
+            <PlacesTreeListCard
+              places={filteredPlaces}
+              selectedPlaceId={selectedPlace?.id ?? null}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              missingCoordsOnly={missingCoordsOnly}
+              onMissingCoordsChange={setMissingCoordsOnly}
+              canEdit={canEdit}
+              onSelectPlace={(pl) => setSelectedPlace(pl)}
+              onAddPlace={() => {
+                setEditingPlace(null);
+                setFormOpen(true);
+              }}
+              onEditPlace={(pl) => {
+                setEditingPlace(pl);
+                setFormOpen(true);
+              }}
+              onMergePlace={(pl) => setMergingPlace(pl)}
+              onDeletePlace={handleDeletePlace}
+            />
+          )}
         </div>
 
         <div className="lg:col-span-1 min-w-0">

@@ -190,7 +190,19 @@ fn julian_to_gregorian_offset_days(year: i32) -> u64 {
 }
 
 fn extract_calendar(s: &str) -> (&str, CalendarType) {
-    let lower = s.to_lowercase();
+    let trimmed = s.trim();
+    let lower = trimmed.to_lowercase();
+
+    if lower.starts_with("@#djulian@") {
+        return (trimmed["@#djulian@".len()..].trim(), CalendarType::Julian);
+    }
+    if lower.starts_with("@#dgregorian@") {
+        return (
+            trimmed["@#dgregorian@".len()..].trim(),
+            CalendarType::Gregorian,
+        );
+    }
+
     let julian_markers = [
         "(ст. ст.)",
         "(ст.ст.)",
@@ -201,8 +213,8 @@ fn extract_calendar(s: &str) -> (&str, CalendarType) {
     ];
     for marker in julian_markers {
         if lower.ends_with(marker) {
-            let new_len = s.len() - marker.len();
-            return (&s[..new_len], CalendarType::Julian);
+            let new_len = trimmed.len() - marker.len();
+            return (&trimmed[..new_len], CalendarType::Julian);
         }
     }
 
@@ -216,12 +228,12 @@ fn extract_calendar(s: &str) -> (&str, CalendarType) {
     ];
     for marker in gregorian_markers {
         if lower.ends_with(marker) {
-            let new_len = s.len() - marker.len();
-            return (&s[..new_len], CalendarType::Gregorian);
+            let new_len = trimmed.len() - marker.len();
+            return (&trimmed[..new_len], CalendarType::Gregorian);
         }
     }
 
-    (s, CalendarType::Gregorian)
+    (trimmed, CalendarType::Gregorian)
 }
 
 fn split_range(s: &str) -> Option<(GenDateMod, &str, &str)> {

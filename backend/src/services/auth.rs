@@ -85,7 +85,7 @@ pub struct InviteRegisterRequest {
 }
 
 fn default_start_page() -> String {
-    "tree".to_string()
+    "dashboard".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -662,7 +662,7 @@ impl AuthService {
             locale: Some(state.config.default_locale.clone()),
             theme: None,
             home_person_id: None,
-            start_page: "tree".to_string(),
+            start_page: "dashboard".to_string(),
             digest_opt_in: false,
             failed_login_attempts: 0,
             locked_until: None,
@@ -926,7 +926,7 @@ impl AuthService {
             locale: Some(state.config.default_locale.clone()),
             theme: None,
             home_person_id: inv.person_id,
-            start_page: "tree".to_string(),
+            start_page: "dashboard".to_string(),
             digest_opt_in: false,
             failed_login_attempts: 0,
             locked_until: None,

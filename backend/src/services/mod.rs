@@ -1,10 +1,12 @@
 pub mod auth;
 pub mod backup;
+pub mod dashboard;
 pub mod db_init;
 pub mod gedcom;
 pub mod genealogy;
 pub mod history;
 pub mod privacy;
+pub mod quality;
 pub mod rbac;
 pub mod scheduler;
 pub mod security;
