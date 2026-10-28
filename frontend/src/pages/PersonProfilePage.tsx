@@ -8,6 +8,7 @@ import {
 import {
   Alert,
   Button,
+  Skeleton,
   Spinner,
   Tabs,
   useToast,
@@ -379,17 +380,16 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
 
   const resolvedAccessTier =
     propAccessTier ??
-    (user?.role
+    (isAuthenticated && user?.role
       ? user.role
       : isAuthenticated
       ? 'viewer'
       : 'public_anonymous');
 
-  const [profile, setProfile] = useState<PersonProfileResponseDto>(
-    () =>
-      initialProfile ?? buildDefaultPersonProfile(personId, resolvedAccessTier)
+  const [profile, setProfile] = useState<PersonProfileResponseDto | null>(
+    () => initialProfile ?? null
   );
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(() => !initialProfile);
   const [notFoundError, setNotFoundError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTabKey>(initialTab);
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(
@@ -424,10 +424,8 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       .then((res) => {
         setProfile(res);
       })
-      .catch((err) => {
-        if (err && typeof err === 'object' && 'status' in err && err.status === 404) {
-          setNotFoundError(t('profile.notFoundDesc'));
-        }
+      .catch(() => {
+        setNotFoundError(t('profile.notFoundDesc'));
       })
       .finally(() => {
         setLoading(false);
@@ -437,25 +435,30 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
   useEffect(() => {
     if (initialProfile) {
       setProfile(initialProfile);
+      setLoading(false);
       return;
     }
     loadProfile();
   }, [initialProfile, loadProfile]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !profile) return;
     const handleAvatarUpdated = (event: Event) => {
       const detail = (
         event as CustomEvent<{ personId: string; avatarUrl: string }>
       ).detail;
       if (detail && detail.personId === profile.person.id) {
-        setProfile((prev) => ({
-          ...prev,
-          person: {
-            ...prev.person,
-            avatar_url: detail.avatarUrl,
-          },
-        }));
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                person: {
+                  ...prev.person,
+                  avatar_url: detail.avatarUrl,
+                },
+              }
+            : prev
+        );
       }
     };
     window.addEventListener('genealogy:avatar-updated', handleAvatarUpdated);
@@ -465,7 +468,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         handleAvatarUpdated
       );
     };
-  }, [profile.person.id]);
+  }, [profile]);
 
   const navigateTo = (nextPath: string) => {
     if (onNavigate) {
@@ -476,30 +479,80 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     }
   };
 
-  const { displayName, isMaskedLiving } = formatTreeCardName(
-    profile.person,
-    resolvedAccessTier,
-    locale,
-    'card'
-  );
+  const formattedIdentity = profile
+    ? formatTreeCardName(profile.person, resolvedAccessTier, locale, 'card')
+    : { displayName: '', isMaskedLiving: false };
+  const { displayName, isMaskedLiving } = formattedIdentity;
 
   useEffect(() => {
-    if (loading) {
+    if (loading || !profile) {
       onPersonLoaded?.('');
       return;
     }
     onPersonLoaded?.(displayName || '');
-  }, [displayName, loading, onPersonLoaded]);
+  }, [displayName, loading, profile, onPersonLoaded]);
+
+  if (loading && !profile) {
+    return (
+      <div className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        <div className="flex items-center gap-2 text-xs text-secondary">
+          <Spinner size="sm" />
+          <span>{t('common.loading')}</span>
+        </div>
+        <div className="rounded-3xl border border-border bg-surface p-6 sm:p-8 space-y-4">
+          <div className="flex items-center gap-4">
+            <Skeleton variant="circle" className="h-24 w-24 rounded-2xl" />
+            <div className="flex-1 space-y-2.5">
+              <Skeleton variant="text" className="w-1/3 h-6" />
+              <Skeleton variant="text" className="w-1/2 h-4" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFoundError || !profile) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12 space-y-4">
+        <Alert variant="danger" title={t('profile.notFoundTitle')}>
+          {notFoundError || t('profile.notFoundDesc')}
+        </Alert>
+        <Button variant="secondary" onClick={() => navigateTo('/tree')}>
+          {t('profile.actions.viewInTree')}
+        </Button>
+      </div>
+    );
+  }
+
+  const effectiveCanEdit =
+    (resolvedAccessTier === 'editor' || resolvedAccessTier === 'admin') &&
+    Boolean(profile.capabilities?.can_edit);
+  const effectiveCanDelete =
+    (resolvedAccessTier === 'editor' || resolvedAccessTier === 'admin') &&
+    Boolean(profile.capabilities?.can_delete);
+  const effectiveCanMerge =
+    resolvedAccessTier === 'admin' && Boolean(profile.capabilities?.can_merge);
+  const effectiveCapabilities = {
+    can_edit: effectiveCanEdit,
+    can_delete: effectiveCanDelete,
+    can_merge: effectiveCanMerge,
+    is_home_person: Boolean(profile.capabilities?.is_home_person),
+  };
 
   const handleSaveInlineIdentity = async (input: UpdatePersonInput) => {
     const updated = await updatePerson(profile.person.id, input);
-    setProfile((prev) => ({
-      ...prev,
-      person: {
-        ...prev.person,
-        ...updated,
-      },
-    }));
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            person: {
+              ...prev.person,
+              ...updated,
+            },
+          }
+        : prev
+    );
     const txId = (updated as unknown as { tx_id?: string }).tx_id;
     if (txId) {
       showUndoToast({
@@ -522,14 +575,18 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       biography: nextBio,
       version: profile.person.version ?? 1,
     });
-    setProfile((prev) => ({
-      ...prev,
-      person: {
-        ...prev.person,
-        ...updated,
-        biography: nextBio,
-      },
-    }));
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            person: {
+              ...prev.person,
+              ...updated,
+              biography: nextBio,
+            },
+          }
+        : prev
+    );
     const txId = (updated as unknown as { tx_id?: string }).tx_id;
     if (txId) {
       showUndoToast({
@@ -551,13 +608,17 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     try {
       const updatedUser = await setHomePerson(profile.person.id);
       updateUser(updatedUser);
-      setProfile((prev) => ({
-        ...prev,
-        capabilities: {
-          ...prev.capabilities,
-          is_home_person: true,
-        },
-      }));
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              capabilities: {
+                ...prev.capabilities,
+                is_home_person: true,
+              },
+            }
+          : prev
+      );
       addToast({
         type: 'success',
         title: t('tree.homePersonUpdatedToast'),
@@ -579,14 +640,18 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         is_private: nextPrivate,
         version: profile.person.version ?? 1,
       });
-      setProfile((prev) => ({
-        ...prev,
-        person: {
-          ...prev.person,
-          ...updated,
-          is_private: nextPrivate,
-        },
-      }));
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              person: {
+                ...prev.person,
+                ...updated,
+                is_private: nextPrivate,
+              },
+            }
+          : prev
+      );
       const txId = (updated as unknown as { tx_id?: string }).tx_id;
       if (txId) {
         showUndoToast({
@@ -613,10 +678,14 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
   const handleDeleteEvent = async (ev: ProfileLifeEventDto) => {
     try {
       const res = await deleteLifeEvent(ev.id);
-      setProfile((prev) => ({
-        ...prev,
-        events: prev.events.filter((item) => item.id !== ev.id),
-      }));
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              events: prev.events.filter((item) => item.id !== ev.id),
+            }
+          : prev
+      );
       if (res?.tx_id) {
         showUndoToast({
           txId: res.tx_id,
@@ -643,10 +712,14 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
   const handleDeleteNote = async (note: NoteDto) => {
     try {
       const res = await deleteNote(note.id);
-      setProfile((prev) => ({
-        ...prev,
-        notes: prev.notes.filter((n) => n.id !== note.id),
-      }));
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              notes: prev.notes.filter((n) => n.id !== note.id),
+            }
+          : prev
+      );
       const txId = (res as { tx_id?: string } | undefined)?.tx_id;
       if (txId) {
         showUndoToast({
@@ -681,19 +754,6 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     });
   };
 
-  if (notFoundError) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12 space-y-4">
-        <Alert variant="danger" title={t('profile.notFoundTitle')}>
-          {notFoundError}
-        </Alert>
-        <Button variant="secondary" onClick={() => navigateTo('/tree')}>
-          {t('profile.actions.viewInTree')}
-        </Button>
-      </div>
-    );
-  }
-
   const tabItems = [
     {
       value: 'chronology' as ProfileTabKey,
@@ -704,7 +764,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         <ProfileChronologyTab
           person={profile.person}
           events={profile.events}
-          canEdit={profile.capabilities.can_edit}
+          canEdit={effectiveCanEdit}
           isMaskedLiving={isMaskedLiving}
           highlightedEventId={highlightedEventId}
           onSelectEvent={(id) => setHighlightedEventId(id)}
@@ -727,7 +787,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       content: (
         <ProfileFamilyTab
           families={profile.families}
-          canEdit={profile.capabilities.can_edit}
+          canEdit={effectiveCanEdit}
           accessTier={resolvedAccessTier}
           onSelectRelative={(relId) => navigateTo(`/persons/${relId}`)}
           onQuickAdd={(relation) => setQuickAddState({ open: true, relation })}
@@ -742,33 +802,45 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       content: (
         <ProfileMediaTab
           media={profile.media}
-          canEdit={profile.capabilities.can_edit}
+          canEdit={effectiveCanEdit}
           isMaskedLiving={isMaskedLiving}
           personId={profile.person.id}
           onSelectPersonId={(pid) => navigateTo(`/persons/${pid}`)}
           onMediaUpdated={(updatedAsset) => {
-            setProfile((prev) => ({
-              ...prev,
-              media: prev.media.map((m) =>
-                m.id === updatedAsset.id ? updatedAsset : m
-              ),
-            }));
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    media: prev.media.map((m) =>
+                      m.id === updatedAsset.id ? updatedAsset : m
+                    ),
+                  }
+                : prev
+            );
           }}
           onMediaUploaded={(createdAssets) => {
-            setProfile((prev) => ({
-              ...prev,
-              media: [...createdAssets, ...prev.media],
-            }));
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    media: [...createdAssets, ...prev.media],
+                  }
+                : prev
+            );
           }}
           onAvatarSynchronized={(targetPersonId, nextAvatarUrl) => {
             if (targetPersonId === profile.person.id) {
-              setProfile((prev) => ({
-                ...prev,
-                person: {
-                  ...prev.person,
-                  avatar_url: nextAvatarUrl,
-                },
-              }));
+              setProfile((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      person: {
+                        ...prev.person,
+                        avatar_url: nextAvatarUrl,
+                      },
+                    }
+                  : prev
+              );
             }
           }}
         />
@@ -783,7 +855,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         <ProfileNotesTab
           notes={profile.notes}
           sourcesSummary={profile.sources_summary}
-          canEdit={profile.capabilities.can_edit}
+          canEdit={effectiveCanEdit}
           isMaskedLiving={isMaskedLiving}
           onAddNote={() =>
             setNoteDialogState({ open: true, initialNote: null })
@@ -818,7 +890,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       <ProfileHeroHeader
         person={profile.person}
         kinship={profile.kinship}
-        capabilities={profile.capabilities}
+        capabilities={effectiveCapabilities}
         accessTier={resolvedAccessTier}
         mediaCount={profile.media.length}
         onViewInTree={() =>
@@ -856,13 +928,17 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         onOpenChange={setEditPersonOpen}
         person={profile.person}
         onPersonUpdated={(updated) => {
-          setProfile((prev) => ({
-            ...prev,
-            person: {
-              ...prev.person,
-              ...updated,
-            },
-          }));
+          setProfile((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  person: {
+                    ...prev.person,
+                    ...updated,
+                  },
+                }
+              : prev
+          );
           loadProfile();
         }}
       />
@@ -887,6 +963,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         initialNote={noteDialogState.initialNote}
         onNoteSaved={(saved) => {
           setProfile((prev) => {
+            if (!prev) return prev;
             const exists = prev.notes.some((n) => n.id === saved.id);
             return {
               ...prev,

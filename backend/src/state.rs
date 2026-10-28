@@ -73,13 +73,18 @@ impl AppState {
             config: Arc::new(config),
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
-            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::default())),
+            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::empty())),
             rate_limiter: RateLimiter::new(),
         }
     }
 
     /// Creates an application state with an empty genealogy store (0 individuals) for onboarding scenarios.
     pub fn new_empty(db: Option<PgPool>, config: AppConfig) -> Self {
+        Self::new(db, config)
+    }
+
+    /// Creates an application state pre-seeded with the demo genealogy fixture store (for RBAC/privacy tests).
+    pub fn new_demo(db: Option<PgPool>, config: AppConfig) -> Self {
         let initial = InstanceSettingsValues {
             tree_title: config.tree_title.clone(),
             default_locale: config.default_locale.clone(),
@@ -92,7 +97,7 @@ impl AppState {
             config: Arc::new(config),
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
-            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::empty())),
+            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::demo())),
             rate_limiter: RateLimiter::new(),
         }
     }

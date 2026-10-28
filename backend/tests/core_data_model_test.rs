@@ -36,7 +36,7 @@ async fn setup_test_app() -> (axum::Router, String) {
         enable_public_access: false,
         ..AppConfig::default()
     };
-    let state = AppState::new(None, config);
+    let state = AppState::new_demo(None, config);
 
     let (admin_setup, _) = AuthService::setup_initial_admin(
         &state,

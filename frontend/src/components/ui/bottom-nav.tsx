@@ -4,6 +4,7 @@ import {
   Globe,
   Home,
   Image as ImageIcon,
+  LogIn,
   MapPin,
   MoreHorizontal,
   Printer,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../i18n';
+import { useAuth } from '../../lib/auth-context';
 import { BrandLogoIcon } from './brand-logo-icon';
 import { Button } from './button';
 import { Drawer } from './drawer';
@@ -40,6 +42,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   className,
 }) => {
   const { locale, setLocale, t } = useI18n();
+  const { isAuthenticated } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -50,32 +53,53 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     setMoreOpen(false);
   };
 
-  const primaryTabs = [
-    {
-      id: 'home',
-      label: t('nav.home'),
-      href: '/',
-      icon: <Home className="h-5 w-5" />,
-    },
-    {
-      id: 'tree',
-      label: t('nav.tree'),
-      href: '/tree',
-      icon: <BrandLogoIcon className="h-5 w-5" />,
-    },
-    {
-      id: 'people',
-      label: t('nav.people'),
-      href: '/people',
-      icon: <Users className="h-5 w-5" />,
-    },
-    {
-      id: 'media',
-      label: t('nav.media'),
-      href: '/media',
-      icon: <ImageIcon className="h-5 w-5" />,
-    },
-  ];
+  const primaryTabs = isAuthenticated
+    ? [
+        {
+          id: 'home',
+          label: t('nav.home'),
+          href: '/',
+          icon: <Home className="h-5 w-5" />,
+        },
+        {
+          id: 'tree',
+          label: t('nav.tree'),
+          href: '/tree',
+          icon: <BrandLogoIcon className="h-5 w-5" />,
+        },
+        {
+          id: 'people',
+          label: t('nav.people'),
+          href: '/people',
+          icon: <Users className="h-5 w-5" />,
+        },
+        {
+          id: 'media',
+          label: t('nav.media'),
+          href: '/media',
+          icon: <ImageIcon className="h-5 w-5" />,
+        },
+      ]
+    : [
+        {
+          id: 'home',
+          label: t('nav.home'),
+          href: '/',
+          icon: <Home className="h-5 w-5" />,
+        },
+        {
+          id: 'tree',
+          label: t('nav.tree'),
+          href: '/tree',
+          icon: <BrandLogoIcon className="h-5 w-5" />,
+        },
+        {
+          id: 'signin',
+          label: t('nav.signIn'),
+          href: '/login',
+          icon: <LogIn className="h-5 w-5" />,
+        },
+      ];
 
   const moreLinks = [
     {
@@ -125,7 +149,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           className
         )}
       >
-        <div className="mx-auto grid max-w-md grid-cols-5 items-center px-1 pt-1">
+        <div
+          className={cn(
+            'mx-auto grid max-w-md items-center px-1 pt-1',
+            isAuthenticated ? 'grid-cols-5' : 'grid-cols-3'
+          )}
+        >
           {primaryTabs.map((tab) => {
             const active = currentPath === tab.href;
             return (
@@ -147,22 +176,24 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             );
           })}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={moreOpen}
-            aria-haspopup="dialog"
-            onClick={() => setMoreOpen(true)}
-            className={cn(
-              'flex min-h-12 min-w-12 h-auto flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors cursor-pointer',
-              moreOpen || isMoreActive
-                ? 'text-brand font-semibold'
-                : 'text-secondary hover:bg-surface-muted hover:text-primary'
-            )}
-          >
-            <MoreHorizontal className="h-5 w-5" />
-            <span className="truncate max-w-full">{t('nav.more')}</span>
-          </Button>
+          {isAuthenticated && (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={moreOpen}
+              aria-haspopup="dialog"
+              onClick={() => setMoreOpen(true)}
+              className={cn(
+                'flex min-h-12 min-w-12 h-auto flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors cursor-pointer',
+                moreOpen || isMoreActive
+                  ? 'text-brand font-semibold'
+                  : 'text-secondary hover:bg-surface-muted hover:text-primary'
+              )}
+            >
+              <MoreHorizontal className="h-5 w-5" />
+              <span className="truncate max-w-full">{t('nav.more')}</span>
+            </Button>
+          )}
         </div>
       </nav>
 

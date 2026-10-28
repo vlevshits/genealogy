@@ -283,7 +283,7 @@ export const PersonDrawer: React.FC<PersonDrawerProps> = ({
         )}
 
         {/* Home Person & Authoring Actions */}
-        {isAuthenticated && !isMaskedLiving && (
+        {canEdit && isAuthenticated && !isMaskedLiving && (
           <>
             <Divider />
             <div className="space-y-2.5">
@@ -299,74 +299,72 @@ export const PersonDrawer: React.FC<PersonDrawerProps> = ({
                 </Button>
               )}
 
-              {canEdit && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
-                    {t('tree.drawer.quickActionsTitle')}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      leftIcon={<UserPlus className="h-3 w-3" />}
-                      onClick={() => onQuickAdd?.(person, 'father')}
-                    >
-                      {t('person.actions.addFather')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      leftIcon={<UserPlus className="h-3 w-3" />}
-                      onClick={() => onQuickAdd?.(person, 'mother')}
-                    >
-                      {t('person.actions.addMother')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      leftIcon={<UserPlus className="h-3 w-3" />}
-                      onClick={() => onQuickAdd?.(person, 'spouse')}
-                    >
-                      {t('person.actions.addSpouse')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      leftIcon={<UserPlus className="h-3 w-3" />}
-                      onClick={() => onQuickAdd?.(person, 'child')}
-                    >
-                      {t('person.actions.addChild')}
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      leftIcon={<PenTool className="h-3 w-3" />}
-                      onClick={() => onEditPerson?.(person)}
-                    >
-                      {t('person.actions.editProfile')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      leftIcon={<Plus className="h-3 w-3" />}
-                      onClick={() => onAddEvent?.(person)}
-                    >
-                      {t('person.actions.addEvent')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
-                      onClick={() => onDeletePerson?.(person)}
-                    >
-                      {t('person.actions.deletePerson')}
-                    </Button>
-                  </div>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
+                  {t('tree.drawer.quickActionsTitle')}
                 </div>
-              )}
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<UserPlus className="h-3 w-3" />}
+                    onClick={() => onQuickAdd?.(person, 'father')}
+                  >
+                    {t('person.actions.addFather')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<UserPlus className="h-3 w-3" />}
+                    onClick={() => onQuickAdd?.(person, 'mother')}
+                  >
+                    {t('person.actions.addMother')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<UserPlus className="h-3 w-3" />}
+                    onClick={() => onQuickAdd?.(person, 'spouse')}
+                  >
+                    {t('person.actions.addSpouse')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<UserPlus className="h-3 w-3" />}
+                    onClick={() => onQuickAdd?.(person, 'child')}
+                  >
+                    {t('person.actions.addChild')}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<PenTool className="h-3 w-3" />}
+                    onClick={() => onEditPerson?.(person)}
+                  >
+                    {t('person.actions.editProfile')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<Plus className="h-3 w-3" />}
+                    onClick={() => onAddEvent?.(person)}
+                  >
+                    {t('person.actions.addEvent')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
+                    onClick={() => onDeletePerson?.(person)}
+                  >
+                    {t('person.actions.deletePerson')}
+                  </Button>
+                </div>
+              </div>
             </div>
           </>
         )}

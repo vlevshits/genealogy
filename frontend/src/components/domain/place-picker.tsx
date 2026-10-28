@@ -2,7 +2,6 @@ import React from 'react';
 import { MapPin } from 'lucide-react';
 import { Combobox, ComboboxOption } from '../ui/combobox';
 import { Place } from '../../types/place';
-import { SAMPLE_PLACES } from '../../lib/mock-data';
 import { useI18n } from '../../i18n';
 
 export interface PlacePickerProps {
@@ -17,7 +16,7 @@ export interface PlacePickerProps {
 }
 
 export const PlacePicker: React.FC<PlacePickerProps> = ({
-  places = SAMPLE_PLACES,
+  places = [],
   value,
   onChange,
   onCreatePlace,

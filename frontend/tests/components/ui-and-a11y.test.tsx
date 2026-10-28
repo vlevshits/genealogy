@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { I18nProvider } from '../../src/i18n';
 import { ThemeProvider } from '../../src/lib/theme';
+import { AuthProvider } from '../../src/lib/auth-context';
 import {
   ToastProvider,
   ConfirmProvider,
@@ -261,9 +262,21 @@ describe('Component Library, Accessibility & Design Token Verification', () => {
     expect(htmlBtnSm).toContain('touch-target-expand');
 
     const htmlShell = renderWithProviders(
-      <AppShell currentPath="/">
-        <div>Content</div>
-      </AppShell>,
+      <AuthProvider
+        initialUser={{
+          id: 'u-1',
+          email: 'admin@example.com',
+          first_name: 'Vera',
+          last_name: 'Levshits',
+          display_name: 'Vera Levshits',
+          role: 'admin',
+          is_active: true,
+        }}
+      >
+        <AppShell currentPath="/">
+          <div>Content</div>
+        </AppShell>
+      </AuthProvider>,
       'en'
     );
     expect(htmlShell).toContain('env(safe-area-inset-top,0px)');

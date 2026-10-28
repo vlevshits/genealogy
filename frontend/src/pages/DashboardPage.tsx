@@ -177,6 +177,24 @@ export function buildDefaultDashboardPayload(): DashboardPayloadDto {
   };
 }
 
+export function buildCleanDashboardPayload(): DashboardPayloadDto {
+  return {
+    resolved_home_person_id: null,
+    anniversaries: [],
+    recent_activity: [],
+    stats: {
+      total_persons: 0,
+      total_families: 0,
+      total_photos: 0,
+      total_places: 0,
+      max_generations: 0,
+      open_warnings_count: 0,
+      missing_birth_dates_count: 0,
+    },
+    latest_photos: [],
+  };
+}
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   initialDashboard,
   instanceTitle,
@@ -191,7 +209,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const effectiveTier =
     propAccessTier ??
-    (user?.role
+    (isAuthenticated && user?.role
       ? user.role
       : isAuthenticated
       ? 'viewer'
@@ -201,7 +219,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const [scope, setScope] = useState<'all' | 'close'>('all');
   const [dashboard, setDashboard] = useState<DashboardPayloadDto>(
-    () => initialDashboard ?? buildDefaultDashboardPayload()
+    () => initialDashboard ?? buildCleanDashboardPayload()
   );
   const [quickAddOpen, setQuickAddOpen] = useState<boolean>(false);
   const [previewPhoto, setPreviewPhoto] =
@@ -368,15 +386,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <TreeGlanceWidget
           stats={dashboard.stats}
           isAdmin={isAdmin}
-          onOpenQuality={() => navigateTo('/quality')}
-          onOpenPeople={() => navigateTo('/people')}
-          onOpenPlaces={() => navigateTo('/places')}
+          onOpenQuality={isAdmin ? () => navigateTo('/quality') : undefined}
+          onOpenPeople={
+            effectiveTier !== 'public_anonymous'
+              ? () => navigateTo('/people')
+              : undefined
+          }
+          onOpenPlaces={
+            effectiveTier !== 'public_anonymous'
+              ? () => navigateTo('/places')
+              : undefined
+          }
         />
 
         <LatestPhotosWidget
           photos={dashboard.latest_photos}
           onPreviewPhoto={(asset) => setPreviewPhoto(asset)}
-          onOpenMediaArchive={() => navigateTo('/media')}
+          onOpenMediaArchive={
+            effectiveTier !== 'public_anonymous'
+              ? () => navigateTo('/media')
+              : undefined
+          }
         />
       </div>
 

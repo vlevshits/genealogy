@@ -48,10 +48,10 @@ Every view in the application (with the exception of isolated full-screen auth p
 ## 3. Persistent Shell Elements
 
 ### 3.1 Top Navigation Bar (Header)
-- **Brand Identity:** Subtle leaf/tree icon + Instance Tree Name (e.g. *"Levshits Family Archive"*). Clicking navigates to `/` (Home for authenticated users; `/tree` for public guests).
+- **Brand Identity:** Subtle leaf/tree icon + Instance Tree Name (e.g. *"Levshits Family Archive"*). Clicking navigates to `/` (Home).
 - **Public Guest Header (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):**
-  - Renders a minimal read-only bar: Brand Logo/Title, single `Tree` (`/tree`) navigation link, Language toggle (`RU/EN`), Theme switch, and a discreet **"Sign In"** button.
-  - All other links (`Home`, `People`, `Media`, `More ▾`, `+ Add`) and global Omnibox search are strictly hidden.
+  - Renders a minimal read-only bar: Brand Logo/Title, permitted navigation links (`Home` [`/`] and `Tree` [`/tree`]), Language toggle (`RU/EN`), Theme switch, and a prominent **"Sign In"** button.
+  - All restricted module links (`People`, `Media`, `Places`, `More ▾`), the `+ Add` creation menu, and global Omnibox search are strictly hidden.
 - **Authenticated Primary Navigation Links (Viewers, Editors, Admins):**
   - `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md)).
   - `Tree` (`/tree`): Interactive canvas visualizer.
@@ -95,7 +95,7 @@ Every view in the application (with the exception of isolated full-screen auth p
 | :--- | :--- | :--- | :--- |
 | `/setup` | First-time instance setup | Unconfigured only (0 users exist) | [01 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md) |
 | `/login`, `/register`, `/magic-link/verify` | Auth & invite acceptance | Public / Unauthenticated | [01 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md) |
-| `/` | Home dashboard / empty onboarding | Authenticated (Viewer+) *(Unauthenticated redirects to `/login` if private, or `/tree` if public)* | [16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md) |
+| `/` | Home dashboard / empty onboarding | Authenticated (Viewer+) or Public Guest (Read-only, masked living data when `ENABLE_PUBLIC_ACCESS=true`; redirects `/login` if private) | [09 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/09-dashboard-page.md) |
 | `/tree` | Tree canvas visualizer | Authenticated (Viewer+) or Public Guest (Masked living data when `ENABLE_PUBLIC_ACCESS=true`) | [02 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/02-tree-view-page.md) |
 | `/people`, `/people/surnames` | People directory & surnames | Authenticated (Viewer+) | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
 | `/people/merge` | In-tree duplicate merge | Administrators Only | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
@@ -131,7 +131,7 @@ Every view in the application (with the exception of isolated full-screen auth p
 - **Activation:** Displayed exclusively on mobile screens (`< 768px`). Replaces desktop top-navigation links to bring primary navigation within thumb reach.
 - **Dimensions & Safe Area:** `h-16` base height + `padding-bottom: max(0.5rem, env(safe-area-inset-bottom))`.
 - **Public Guest Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):**
-  - Renders a minimal 2-action bar: `[🌳 Tree]` and `[🔐 Sign In]`.
+  - Renders a minimal 3-action thumb bar: `[🏠 Home]`, `[🌳 Tree]`, and `[🔐 Sign In]`. All restricted modules (`People`, `Media`, `Places`, `More`) are completely omitted.
 - **Authenticated Navigation Tabs (5 fixed items, 48×48px tap targets):**
   1. `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md))
   2. `Tree` (`/tree`): Canvas visualizer ([04](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/04-tree-visualizations.md))

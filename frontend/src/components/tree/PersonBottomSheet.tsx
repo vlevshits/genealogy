@@ -192,7 +192,7 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
                 {t('tree.drawer.makeFocalBtn')}
               </Button>
 
-              {isAuthenticated && !isMaskedLiving && !isHomePerson && (
+              {canEdit && isAuthenticated && !isMaskedLiving && !isHomePerson && (
                 <Button
                   size="sm"
                   variant="secondary"

@@ -9,7 +9,6 @@ import {
   SearchResultResponseDto,
 } from '../../api/client';
 import { Kbd, Spinner, TextInput } from '../ui';
-import { SAMPLE_PEOPLE, SAMPLE_PLACES } from '../../lib/mock-data';
 import { matchesCrossScript } from '../../lib/utils';
 import { useAuth } from '../../lib/auth-context';
 import { useI18n } from '../../i18n';
@@ -258,57 +257,7 @@ export const OmniboxDialog: React.FC<OmniboxDialogProps> = ({
       })
       .catch(() => {
         if (!cancelled) {
-          // Offline fallback using sample dataset & cross-script matching
           const qTrim = debouncedQuery.trim();
-          const fallbackPeople: SearchPersonResultDto[] = qTrim
-            ? SAMPLE_PEOPLE.filter(
-                (p) =>
-                  !p.is_redacted &&
-                  matchesCrossScript(
-                    `${p.surname ?? ''} ${p.birth_surname ?? ''} ${p.given_name ?? ''} ${p.patronymic ?? ''} ${p.gid} ${p.birth_date ?? ''}`,
-                    qTrim
-                  )
-              )
-                .slice(0, 8)
-                .map((p, idx) => ({
-                  id: p.id,
-                  gid: p.gid,
-                  display_name: [p.surname, p.given_name, p.patronymic]
-                    .filter(Boolean)
-                    .join(' '),
-                  given_name: p.given_name ?? '',
-                  patronymic: p.patronymic ?? null,
-                  surname: p.surname ?? '',
-                  sex: p.sex ?? 'U',
-                  birth_year: p.birth_date?.start?.y ?? null,
-                  death_year: p.death_date?.start?.y ?? null,
-                  birth_place: p.birth_place ?? null,
-                  avatar_url: null,
-                  is_living: Boolean(p.is_living),
-                  is_private: false,
-                  score: 100 - idx,
-                }))
-            : [];
-
-          const fallbackPlaces: SearchPlaceResultDto[] = qTrim
-            ? SAMPLE_PLACES.filter((pl) =>
-                matchesCrossScript(
-                  `${pl.name} ${pl.hierarchy_names?.join(' ') ?? ''} ${pl.gid}`,
-                  qTrim
-                )
-              )
-                .slice(0, 3)
-                .map((pl) => ({
-                  id: pl.id,
-                  gid: pl.gid,
-                  name: pl.name,
-                  full_name: pl.hierarchy_names?.join(', ') || pl.name,
-                  place_type: 'city',
-                  events_count: pl.events_count ?? 0,
-                  has_coordinates: true,
-                }))
-            : [];
-
           const fallbackActions = qTrim
             ? defaultActions.filter((a) =>
                 matchesCrossScript(`${a.label} ${a.hint}`, qTrim)
@@ -317,8 +266,8 @@ export const OmniboxDialog: React.FC<OmniboxDialogProps> = ({
 
           setResults({
             query: qTrim,
-            people: fallbackPeople,
-            places: fallbackPlaces,
+            people: [],
+            places: [],
             media: [],
             actions: fallbackActions,
             timing_ms: 1,

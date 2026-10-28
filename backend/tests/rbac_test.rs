@@ -157,7 +157,7 @@ async fn test_tier1_default_private_gatekeeper_and_tier2_public_mode_masking_and
         enable_public_access: false,
         ..AppConfig::default()
     };
-    let state = AppState::new(None, config);
+    let state = AppState::new_demo(None, config);
 
     // Bootstrap Admin
     let (admin_setup, _) = AuthService::setup_initial_admin(
@@ -369,7 +369,7 @@ async fn test_tier3_viewer_and_tier4_editor_and_tier5_admin_rbac_matrix() {
         enable_public_access: false,
         ..AppConfig::default()
     };
-    let state = AppState::new(None, config);
+    let state = AppState::new_demo(None, config);
 
     // 1. Setup Admin, Viewer, and Editor accounts
     let (admin_setup, _) = AuthService::setup_initial_admin(
@@ -765,7 +765,7 @@ async fn test_sole_admin_protection_role_promotion_and_deactivation_session_purg
         tree_title: "Sole Admin Protection Archive".to_string(),
         ..AppConfig::default()
     };
-    let state = AppState::new(None, config);
+    let state = AppState::new_demo(None, config);
 
     // 1. Bootstrap sole Admin
     let (admin_setup, _) = AuthService::setup_initial_admin(

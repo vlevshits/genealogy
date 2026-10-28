@@ -1047,6 +1047,10 @@ async fn test_dashboard_julian_anniversaries_fan_chart_kinship_and_places_map() 
     assert_eq!(st_priv_kin, StatusCode::NOT_FOUND);
 
     // 6. Test Clustered Places Map (`GET /api/v1/places/map`)
+    // Unauthenticated guest must be rejected with 401 Unauthorized even when public tree sharing is enabled!
+    let (st_guest_map, _) = get_json(&app, "/api/v1/places/map", None).await;
+    assert_eq!(st_guest_map, StatusCode::UNAUTHORIZED);
+
     let (st_map, map_val) = get_json(&app, "/api/v1/places/map", Some(&editor_auth)).await;
     assert_eq!(st_map, StatusCode::OK);
     let map_resp: PlacesMapResponse = serde_json::from_value(map_val).unwrap();
@@ -1058,4 +1062,13 @@ async fn test_dashboard_julian_anniversaries_fan_chart_kinship_and_places_map() 
         .expect("Expected geocoded Minsk marker in /api/v1/places/map");
     assert_eq!(minsk_marker.person_count, 1);
     assert_eq!(minsk_marker.persons[0].id, gf_id);
+
+    // 7. Verify default GenealogyPrivacyStore and AppState::new start completely empty (0 dummy records)
+    let default_store = genealogy_backend::services::privacy::GenealogyPrivacyStore::default();
+    assert!(default_store.persons.is_empty());
+    assert!(default_store.families.is_empty());
+    assert!(default_store.events.is_empty());
+    assert!(default_store.media.is_empty());
+    assert!(default_store.places.is_empty());
+    assert!(!default_store.is_demo_seed);
 }

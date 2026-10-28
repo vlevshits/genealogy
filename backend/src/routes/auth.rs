@@ -130,8 +130,7 @@ pub async fn complete_initial_setup(
     {
         let mut store = state.privacy_store.write().await;
         if store.is_demo_seed {
-            store.persons.clear();
-            store.is_demo_seed = false;
+            *store = crate::services::privacy::GenealogyPrivacyStore::empty();
         }
     }
     Ok((

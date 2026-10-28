@@ -100,7 +100,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               </span>
             </a>
 
-            {/* Primary 4 Nav Links + More */}
+            {/* Primary Nav Links */}
             <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1 ml-3">
               <NavLink
                 href="/"
@@ -116,105 +116,102 @@ export const AppShell: React.FC<AppShellProps> = ({
               >
                 {t('nav.tree')}
               </NavLink>
-              <NavLink
-                href="/people"
-                active={currentPath.startsWith('/people')}
-                onNavigate={navigate}
-              >
-                {t('nav.people')}
-              </NavLink>
-              <NavLink
-                href="/media"
-                active={currentPath.startsWith('/media')}
-                onNavigate={navigate}
-              >
-                {t('nav.media')}
-              </NavLink>
+              {isAuthenticated && (
+                <>
+                  <NavLink
+                    href="/people"
+                    active={currentPath.startsWith('/people')}
+                    onNavigate={navigate}
+                  >
+                    {t('nav.people')}
+                  </NavLink>
+                  <NavLink
+                    href="/media"
+                    active={currentPath.startsWith('/media')}
+                    onNavigate={navigate}
+                  >
+                    {t('nav.media')}
+                  </NavLink>
 
-              <DropdownMenu
-                align="start"
-                ariaLabel={t('nav.more')}
-                trigger={
-                  <span className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-secondary hover:bg-surface-muted hover:text-primary">
-                    <span>{t('nav.more')}</span>
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </span>
-                }
-                items={[
-                  { id: 'places', label: t('nav.places'), onSelect: () => navigate('/places') },
-                  { id: 'print', label: t('nav.print'), onSelect: () => navigate('/export/print') },
-                  {
-                    id: 'history',
-                    label: t('nav.history'),
-                    separatorBefore: true,
-                    onSelect: () => navigate('/history'),
-                  },
-                  { id: 'quality', label: t('nav.quality'), onSelect: () => navigate('/quality') },
-                  { id: 'gedcom', label: t('nav.gedcom'), onSelect: () => navigate('/settings/gedcom') },
-                ]}
-              />
+                  <DropdownMenu
+                    align="start"
+                    ariaLabel={t('nav.more')}
+                    trigger={
+                      <span className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-secondary hover:bg-surface-muted hover:text-primary">
+                        <span>{t('nav.more')}</span>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </span>
+                    }
+                    items={[
+                      { id: 'places', label: t('nav.places'), onSelect: () => navigate('/places') },
+                      { id: 'print', label: t('nav.print'), onSelect: () => navigate('/export/print') },
+                      ...(user?.role === 'admin'
+                        ? [
+                            {
+                              id: 'history',
+                              label: t('nav.history'),
+                              separatorBefore: true,
+                              onSelect: () => navigate('/history'),
+                            },
+                            { id: 'quality', label: t('nav.quality'), onSelect: () => navigate('/quality') },
+                            { id: 'gedcom', label: t('nav.gedcom'), onSelect: () => navigate('/settings/gedcom') },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </>
+              )}
             </nav>
           </div>
 
           {/* Right: Omnibox Trigger, +Add, Locale, Theme, User Menu */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="md"
-              aria-label={t('nav.searchTrigger')}
-              onClick={() => setOmniboxOpen(true)}
-              leftIcon={<Search className="h-3.5 w-3.5" />}
-              rightIcon={<Kbd className="hidden sm:inline-flex">⌘K</Kbd>}
-              className="rounded-xl bg-surface-muted/70 px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary"
-            >
-              <span className="hidden lg:inline">{t('nav.searchTrigger')}</span>
-            </Button>
-
-            {(!user || user.role !== 'viewer') && (
-              <DropdownMenu
-                ariaLabel={t('nav.add')}
-                trigger={
-                  <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
-                    <Plus className="h-4 w-4" />
-                    <span className="hidden sm:inline">{t('nav.add')}</span>
-                  </span>
-                }
-                items={[
-                  { id: 'add-person', label: t('nav.addPerson'), onSelect: () => navigate('/people') },
-                  { id: 'upload-photos', label: t('nav.uploadPhotos'), onSelect: () => navigate('/media') },
-                ]}
-              />
+            {isAuthenticated && (
+              <Button
+                variant="secondary"
+                size="md"
+                aria-label={t('nav.searchTrigger')}
+                onClick={() => setOmniboxOpen(true)}
+                leftIcon={<Search className="h-3.5 w-3.5" />}
+                rightIcon={<Kbd className="hidden sm:inline-flex">⌘K</Kbd>}
+                className="rounded-xl bg-surface-muted/70 px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary"
+              >
+                <span className="hidden lg:inline">{t('nav.searchTrigger')}</span>
+              </Button>
             )}
+
+            {isAuthenticated &&
+              user &&
+              (user.role === 'editor' || user.role === 'admin') && (
+                <DropdownMenu
+                  ariaLabel={t('nav.add')}
+                  trigger={
+                    <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
+                      <Plus className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t('nav.add')}</span>
+                    </span>
+                  }
+                  items={[
+                    { id: 'add-person', label: t('nav.addPerson'), onSelect: () => navigate('/people') },
+                    { id: 'upload-photos', label: t('nav.uploadPhotos'), onSelect: () => navigate('/media') },
+                  ]}
+                />
+              )}
 
             {/* Reusable Language & Theme Toggle Buttons */}
             <LanguageToggleButton />
             <ThemeToggleButton />
 
             {/* User Profile Menu or Sign-In Button in Public Mode */}
-            {!isAuthenticated && currentPath !== '/login' && user === null ? (
-              <DropdownMenu
-                ariaLabel={t('nav.userMenu')}
-                trigger={
-                  <span
-                    aria-label={t('nav.userMenu')}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-brand/15 text-xs font-semibold text-brand"
-                  >
-                    <User className="h-4 w-4" />
-                  </span>
-                }
-                items={[
-                  { id: 'profile', label: t('nav.myProfile'), onSelect: () => navigate('/settings/profile') },
-                  { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
-                  { id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') },
-                  {
-                    id: 'signin',
-                    label: t('nav.signIn'),
-                    icon: <LogIn className="h-3.5 w-3.5" />,
-                    separatorBefore: true,
-                    onSelect: () => navigate('/login'),
-                  },
-                ]}
-              />
+            {!isAuthenticated ? (
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<LogIn className="h-4 w-4" />}
+                onClick={() => navigate('/login')}
+              >
+                {t('nav.signIn')}
+              </Button>
             ) : (
               <DropdownMenu
                 ariaLabel={t('nav.userMenu')}
@@ -234,7 +231,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     onSelect: () => navigate('/settings/profile'),
                   },
                   { id: 'passkeys', label: t('nav.securityPasskeys'), onSelect: () => navigate('/settings/security') },
-                  ...(!user || user.role === 'admin'
+                  ...(user?.role === 'admin'
                     ? [{ id: 'admin', label: t('nav.adminSettings'), onSelect: () => navigate('/settings') }]
                     : []),
                   {
@@ -277,27 +274,47 @@ export const AppShell: React.FC<AppShellProps> = ({
           <NavLink href="/tree" active={currentPath.startsWith('/tree')} onNavigate={navigate}>
             {t('nav.tree')}
           </NavLink>
-          <NavLink href="/people" active={currentPath.startsWith('/people')} onNavigate={navigate}>
-            {t('nav.people')}
-          </NavLink>
-          <NavLink href="/media" active={currentPath.startsWith('/media')} onNavigate={navigate}>
-            {t('nav.media')}
-          </NavLink>
-          <NavLink href="/places" active={currentPath.startsWith('/places')} onNavigate={navigate}>
-            {t('nav.places')}
-          </NavLink>
-          <NavLink href="/settings" active={currentPath.startsWith('/settings')} onNavigate={navigate}>
-            {t('nav.adminSettings')}
-          </NavLink>
+          {isAuthenticated ? (
+            <>
+              <NavLink href="/people" active={currentPath.startsWith('/people')} onNavigate={navigate}>
+                {t('nav.people')}
+              </NavLink>
+              <NavLink href="/media" active={currentPath.startsWith('/media')} onNavigate={navigate}>
+                {t('nav.media')}
+              </NavLink>
+              <NavLink href="/places" active={currentPath.startsWith('/places')} onNavigate={navigate}>
+                {t('nav.places')}
+              </NavLink>
+              {user?.role === 'admin' && (
+                <NavLink href="/settings" active={currentPath.startsWith('/settings')} onNavigate={navigate}>
+                  {t('nav.adminSettings')}
+                </NavLink>
+              )}
+            </>
+          ) : (
+            <div className="pt-2 mt-2 border-t border-border">
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<LogIn className="h-4 w-4" />}
+                onClick={() => navigate('/login')}
+                className="w-full justify-center"
+              >
+                {t('nav.signIn')}
+              </Button>
+            </div>
+          )}
         </div>
       </Drawer>
 
       {/* Global Omnibox (Cmd+K) */}
-      <OmniboxDialog
-        open={omniboxOpen}
-        onOpenChange={setOmniboxOpen}
-        onNavigate={navigate}
-      />
+      {isAuthenticated && (
+        <OmniboxDialog
+          open={omniboxOpen}
+          onOpenChange={setOmniboxOpen}
+          onNavigate={navigate}
+        />
+      )}
 
       {/* Main Content Viewport */}
       <PwaInstallPrompt instanceTitle={resolvedTitle} />

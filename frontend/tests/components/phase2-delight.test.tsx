@@ -4,25 +4,37 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { I18nProvider } from '../../src/i18n';
+import { ThemeProvider } from '../../src/lib/theme';
 import { AuthProvider } from '../../src/lib/auth-context';
-import { ToastProvider } from '../../src/components/ui';
+import { AppShell, BottomNav, ConfirmProvider, ToastProvider } from '../../src/components/ui';
 import {
   AnniversariesWidget,
   LatestPhotosWidget,
   RecentActivityWidget,
   TreeGlanceWidget,
 } from '../../src/components/dashboard';
-import { DashboardPage } from '../../src/pages/DashboardPage';
+import {
+  buildDefaultDashboardPayload,
+  DashboardPage,
+} from '../../src/pages/DashboardPage';
 import {
   FanChartCanvas,
   KinshipFinderDialog,
   normalizeRemoteKinshipResponse,
+  PersonBottomSheet,
+  PersonDrawer,
+  TreeCanvas,
 } from '../../src/components/tree';
 import { buildDefaultTreeViewData } from '../../src/lib/tree-layouts';
 import { QuickAddDuplicateHint } from '../../src/components/quality';
 import { DataQualityPage } from '../../src/pages/DataQualityPage';
 import { PersonMergePage } from '../../src/pages/PersonMergePage';
+import {
+  buildDefaultPersonProfile,
+  PersonProfilePage,
+} from '../../src/pages/PersonProfilePage';
 import { PlacesPage } from '../../src/pages/PlacesPage';
+import { App } from '../../src/App';
 
 const DEMO_TREE_DATA = buildDefaultTreeViewData('admin', 'hourglass');
 
@@ -47,18 +59,22 @@ function renderWithProviders(
     : null;
 
   return renderToStaticMarkup(
-    <I18nProvider initialLocale={locale}>
-      <AuthProvider
-        initialUser={initialUser}
-        initialSetupStatus={{
-          is_initialized: true,
-          enable_public_access: role === null,
-          tree_title: 'Volkov & Levshits Archive',
-        }}
-      >
-        <ToastProvider>{node}</ToastProvider>
-      </AuthProvider>
-    </I18nProvider>
+    <ThemeProvider>
+      <I18nProvider initialLocale={locale}>
+        <AuthProvider
+          initialUser={initialUser}
+          initialSetupStatus={{
+            is_initialized: true,
+            enable_public_access: role === null,
+            tree_title: 'Volkov & Levshits Archive',
+          }}
+        >
+          <ToastProvider>
+            <ConfirmProvider>{node}</ConfirmProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </I18nProvider>
+    </ThemeProvider>
   );
 }
 
@@ -98,6 +114,7 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
   it('renders DashboardPage and all 4 live widgets in EN and RU with † for deceased and single-initial masking for public guests', () => {
     const htmlEn = renderWithProviders(
       <DashboardPage
+        initialDashboard={buildDefaultDashboardPayload()}
         instanceTitle="Volkov Family Archive"
         resolvedHomePersonId="p-elena"
       />,
@@ -113,6 +130,7 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
 
     const htmlRu = renderWithProviders(
       <DashboardPage
+        initialDashboard={buildDefaultDashboardPayload()}
         instanceTitle="Семейный архив Волковых"
         resolvedHomePersonId="p-elena"
       />,
@@ -573,5 +591,108 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
     );
     expect(htmlKinship).not.toContain('<li aria-hidden="true"');
     expect(htmlKinship).toContain('<span aria-hidden="true"');
+  });
+
+  it('enforces Unauthenticated Segregation, Clean Navigation, Zero Edit Controls, and Clean Slate defaults', () => {
+    // 1. Clean Unauthenticated Navigation in AppShell and BottomNav
+    const unauthShellHtml = renderWithProviders(
+      <AppShell currentPath="/">
+        <div>Guest Content</div>
+      </AppShell>,
+      'en',
+      null
+    );
+    expect(unauthShellHtml).toContain('Home');
+    expect(unauthShellHtml).toContain('Tree');
+    expect(unauthShellHtml).toContain('Sign in');
+    expect(unauthShellHtml).not.toContain('People');
+    expect(unauthShellHtml).not.toContain('Media');
+    expect(unauthShellHtml).not.toContain('More');
+    expect(unauthShellHtml).not.toContain('⌘K');
+    expect(unauthShellHtml).not.toContain('Add unconnected person');
+
+    const unauthBottomNavHtml = renderWithProviders(
+      <BottomNav currentPath="/" />,
+      'en',
+      null
+    );
+    expect(unauthBottomNavHtml).toContain('grid-cols-3');
+    expect(unauthBottomNavHtml).toContain('Home');
+    expect(unauthBottomNavHtml).toContain('Tree');
+    expect(unauthBottomNavHtml).toContain('Sign in');
+    expect(unauthBottomNavHtml).not.toContain('People');
+    expect(unauthBottomNavHtml).not.toContain('Media');
+
+    // 2. Navigating to / in public mode renders DashboardPage in public guest mode (not TreeCanvas) with clean empty slate
+    const unauthAppHomeHtml = renderWithProviders(<App />, 'en', null);
+    expect(unauthAppHomeHtml).toContain('data-testid="dashboard-page"');
+    expect(unauthAppHomeHtml).toContain('Public Guest View');
+    expect(unauthAppHomeHtml).toContain('No upcoming anniversaries in the next 30 days');
+    expect(unauthAppHomeHtml).not.toContain('Add unconnected person');
+    expect(unauthAppHomeHtml).not.toContain('Undo');
+
+    // 3. Zero edit controls in PersonDrawer, PersonBottomSheet, and PersonProfilePage when unauthenticated or viewer
+    const drawerGuestHtml = renderWithProviders(
+      <PersonDrawer
+        open
+        onOpenChange={() => {}}
+        person={DEMO_TREE_DATA.nodes[0]}
+        accessTier="public_anonymous"
+        canEdit={false}
+      />,
+      'en',
+      null
+    );
+    expect(drawerGuestHtml).not.toContain('Set as my home person');
+    expect(drawerGuestHtml).not.toContain('Edit Profile');
+    expect(drawerGuestHtml).not.toContain('Add Father');
+    expect(drawerGuestHtml).not.toContain('Delete person record');
+
+    const sheetViewerHtml = renderWithProviders(
+      <PersonBottomSheet
+        open
+        onOpenChange={() => {}}
+        person={DEMO_TREE_DATA.nodes[0]}
+        accessTier="viewer"
+        canEdit={false}
+      />,
+      'en',
+      'viewer'
+    );
+    expect(sheetViewerHtml).not.toContain('Set as my home person');
+    expect(sheetViewerHtml).not.toContain('Edit Profile');
+
+    // 4. PersonProfilePage without initialProfile shows loading skeleton instead of mock data
+    const loadingProfileHtml = renderWithProviders(
+      <PersonProfilePage personId="unknown-id" />,
+      'en',
+      null
+    );
+    expect(loadingProfileHtml).toContain('Loading');
+    expect(loadingProfileHtml).not.toContain('Alexander Mikhailovich Levshits');
+
+    // 5. PersonProfilePage in public guest mode has zero edit controls even if backend capabilities had can_edit=true
+    const profileWithFakeCaps = buildDefaultPersonProfile('I0001', 'admin');
+    const guestProfileHtml = renderWithProviders(
+      <PersonProfilePage
+        personId="I0001"
+        initialProfile={profileWithFakeCaps}
+        accessTier="public_anonymous"
+      />,
+      'en',
+      null
+    );
+    expect(guestProfileHtml).not.toContain('Edit Profile');
+    expect(guestProfileHtml).not.toContain('Add Event');
+    expect(guestProfileHtml).not.toContain('Set as my home person');
+
+    // 6. TreeCanvas without initialTreeView renders EmptyTreeOnboardingCard (zero mock nodes injected)
+    const emptyTreeCanvasHtml = renderWithProviders(
+      <TreeCanvas />,
+      'en',
+      null
+    );
+    expect(emptyTreeCanvasHtml).toContain('This family tree is still being prepared.');
+    expect(emptyTreeCanvasHtml).not.toContain('Alexander Mikhailovich Levshits');
   });
 });

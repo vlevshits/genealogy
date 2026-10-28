@@ -225,7 +225,7 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
       id: 'copy-link',
       label: t('profile.actions.copyLink'),
       icon: <Copy className="h-3.5 w-3.5" />,
-      separatorBefore: true,
+      separatorBefore: accessTier !== 'public_anonymous',
       onSelect: () => onCopyLink?.(),
     },
     ...(capabilities.can_delete

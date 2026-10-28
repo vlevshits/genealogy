@@ -27,18 +27,20 @@ Access is partitioned into four distinct tiers:
 | View Living Persons' Names & Surnames | No | **Strictly Masked (Single Initial, e.g. `И.` / `J.`)** | **Yes (Full Name)** | **Yes (Full Name)** | **Yes (Full Name)** |
 | View Living Persons' Dates & Places | No | **Blocked (Hidden)** | **Yes (Full Dates/Places)** | **Yes (Full Dates/Places)** | **Yes (Full Dates/Places)** |
 | View Living Persons' Photos & Avatars | No | **Blocked (Silhouette)** | **Yes (Full Media)** | **Yes (Full Media)** | **Yes (Full Media)** |
-| View Private Records (`is_private=true`) | No | No | No | **Yes** | **Yes** |
-| People & Surnames Directory (`/people`) | No | No | Yes | Yes | Yes |
-| Places Directory & Maps (`/places`) | No | No | Yes | Yes | Yes |
-| Media Archive & Gallery (`/media`) | No | No | Yes (Deceased + Living) | Yes (Deceased + Living) | Yes |
-| Dashboard & Anniversaries (`/`) | No | No | Yes (Living Birthdays) | Yes | Yes |
-| Kinship Finder ("Relationship to me") | No | No | Yes | Yes | Yes |
-| **GENEALOGICAL CURATION & EDITING** | | | | | |
+| People & Surnames Directory (`/people`) | **No (Redirects `/login`)** | **No (Redirects `/login`)** | Yes | Yes | Yes |
+| Places Directory & Maps (`/places`) | **No (Redirects `/login`)** | **No (Redirects `/login`)** | Yes | Yes | Yes |
+| Media Archive & Gallery (`/media`) | **No (Redirects `/login`)** | **No (Redirects `/login`)** | Yes (Deceased + Living) | Yes (Deceased + Living) | Yes |
+| Dashboard & Anniversaries (`/`) | **No (Redirects `/login`)** | **Yes (Read-Only, Masked Living)** | Yes (Living Birthdays) | Yes | Yes |
+| Kinship Finder ("Relationship to me") | No | Yes (Between chosen persons) | Yes | Yes | Yes |
+| **AUTHORING, CURATION & EDIT CONTROLS** | | | | | |
+| Header `+ Add` & Toolbar Quick-Add | **No (Hidden)** | **No (Hidden)** | **No (Hidden)** | **Yes** | **Yes** |
+| Canvas Node Add Handles & Ghost Slots | **No (Hidden)** | **No (Hidden)** | **No (Hidden)** | **Yes** | **Yes** |
+| Node, Drawer & Profile Edit/Delete CTAs | **No (Hidden)** | **No (Hidden)** | **No (Hidden)** | **Yes** | **Yes** |
 | Create / Edit / Delete Individuals | No | No | No | **Yes** | **Yes** |
 | Create / Edit / Delete Unions & Events | No | No | No | **Yes** | **Yes** |
 | Upload & Face-Tag Media Assets | No | No | No | **Yes** | **Yes** |
 | Toggle Record Privacy (`is_private`) | No | No | No | **Yes** | **Yes** |
-| Undo Own Recent Edit (Within 60s) | No | No | No | **Yes** | **Yes** |
+| Undo Own Recent Edit (Toast & Widget) | **No (Hidden)** | **No (Hidden)** | **No (Hidden)** | **Yes** | **Yes** |
 | **BULK DATA, AUDIT & EXPORT TOOLS** | | | | | |
 | Printable PDF / Poster Export (`/export/print`)| No | No | No | No | **Yes** |
 | GEDCOM Import (Clean Slate & Merge) | No | No | No | No | **Yes** |
@@ -64,9 +66,37 @@ By default, the application is strictly private (`ENABLE_PUBLIC_ACCESS=false`):
 - Unauthenticated visitors cannot discover person counts, ancestor names, surnames, or tree existence.
 - The browser tab and title display only the instance title and a clean login form per [01-auth-pages.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md).
 
-### 3.2 Tier 2: Public Tree Mode (Strict Backend Masking)
+### 3.2 Tier 2: Public Tree Mode (Strict Module Segregation & Zero Edit Controls)
 When an administrator explicitly toggles public sharing (`ENABLE_PUBLIC_ACCESS=true` in Admin Settings or `.env`):
-- **Permitted Surface:** Unauthenticated visitors may access ONLY the tree visualizer (`/tree`) and individual profile views (`/persons/:id`).
+- **Permitted Surface:** Unauthenticated visitors may access ONLY:
+  - **Home Dashboard (`/`):** Public read-only dashboard with living relatives shielded and zero edit/creation buttons.
+  - **Tree Visualizer (`/tree`):** Interactive canvas in strictly masked read-only mode.
+  - **Individual Person Profile (`/persons/:id`):** Biographical profile (for deceased ancestors) or masked single-initial placeholder (for living relatives) in strictly read-only mode.
+  - **Authentication Views:** Sign-In page (`/login`) and Invitation Acceptance (`/register` with valid token).
+- **Strict Module Segregation:**
+  - All auxiliary and administrative modules are strictly restricted:
+    - People & Surnames Directory (`/people`, `/people/*`)
+    - Media Archive & Lightbox Studio (`/media`, `/media/*`)
+    - Places Directory & Clustered Maps (`/places`, `/places/*`)
+    - Change History & Audit Feed (`/history`)
+    - Data Quality Inspections (`/quality`)
+    - In-Tree Person Merge Wizard (`/people/merge`)
+    - Instance Settings & Backups (`/settings`, `/settings/*`)
+    - Printable PDF Studio (`/export/*`)
+  - Navigating to any restricted route while unauthenticated immediately redirects to `/login` (with an unauthenticated gatekeeper notice).
+  - All corresponding API endpoints return `401 Unauthorized`.
+- **Zero Edit Controls Rule:**
+  - When unauthenticated, absolutely NO authoring, editing, or mutation controls may be rendered anywhere in the application:
+    - **Header:** No `+ Add` button or creation dropdown.
+    - **Home Dashboard (`/`):** No `+ Add Person` button in the header, hero, or widget cards.
+    - **Tree Toolbar:** No `+ Add Person` / Quick-Add button.
+    - **Tree Canvas:** No `+ Add parent / child / spouse` placeholder ghost slots, plus handles, or node creation triggers.
+    - **Node Cards, Quick Drawer & Bottom Sheet:** No `Edit`, `Delete`, `+ Add Relative`, `Add Event`, `Set as my home person`, or `Upload avatar` buttons.
+    - **Person Profile (`/persons/:id`):** No `Edit Profile`, `+ Add Event`, `Upload Avatar`, `Delete`, `Mark private`, `Merge with…`, or inline timeline event edit pencils.
+    - **Activity Widgets & Toasts:** No `Undo` buttons; the undo capability is completely suppressed for unauthenticated guests.
+- **Navigation Cleanliness:**
+  - Desktop header navigation, mobile drawer, and mobile `BottomNav` must only display links to permitted pages (`Home`, `Tree`) and a prominent `Sign In` / `Log In` action button.
+  - Restricted module links (`People`, `Media`, `Places`, `More ▾`, etc.) and the global Omnibox search (`Cmd+K`) must be completely omitted from navigation for unauthenticated visitors.
 - **Strict Living Person Masking:** The backend response serialization layer redacts all personal data of living individuals:
   - Display Name (Single Initial): Masked to exactly one initial character with a dot (e.g. `[Given Initial].` / `И.` / `J.`). Full given name is never transmitted.
   - Surname & Birth Surname: Completely redacted (`NULL`). Family surnames of living individuals are never exposed to unauthenticated visitors.
@@ -76,7 +106,6 @@ When an administrator explicitly toggles public sharing (`ENABLE_PUBLIC_ACCESS=t
   - Biographies, Notes, Event Sources: Redacted (`NULL`).
   - Avatar & Photos: Profile avatars are replaced by a generic neutral silhouette. Direct media requests for photos tagged with living persons return `404 Not Found`.
   - Group Photos: If a historical photo includes deceased and living persons, the image remains viewable, but face-tag bounding boxes for living persons are stripped from the API payload.
-- **Blocked Pages:** All auxiliary views—Dashboard (`/`), People Directory (`/people`), Media Archive (`/media`), Places (`/places`), Print PDF (`/export/print`), History (`/history`), Data Quality (`/quality`), Settings (`/settings`)—return `401 Unauthorized` and prompt the visitor to sign in.
 
 ### 3.3 Tier 3: Authenticated Viewers (`Viewer` — Trusted Family Circle)
 Viewers are verified family members who have accepted an invitation and authenticated via Passkey or password:
@@ -197,7 +226,10 @@ All SQLx read queries pass through a privacy-filtering query pipeline:
 ## 7. Definition of Done (DoD)
 
 - [ ] **Default Private Gatekeeper:** On a fresh instance with `ENABLE_PUBLIC_ACCESS=false`, any unauthenticated visit to `/`, `/tree`, `/people`, or `/media` redirects to `/login`.
-- [ ] **Public Mode Masking:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors to `/tree` see living people masked as a single initial character with dot (e.g. `"И."` / `"J."`) with surnames, patronymics, birth dates, places, and photos completely stripped.
+- [ ] **Public Mode Permitted Surface & Module Segregation:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors can access ONLY `/`, `/tree`, and `/persons/:id` (plus `/login` and `/register` with token). Navigating to `/people`, `/media`, `/places`, `/history`, `/quality`, `/people/merge`, `/settings`, or `/export/*` immediately redirects to `/login`.
+- [ ] **Public Mode Masking:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors to `/tree` and `/persons/:id` see living people masked as a single initial character with dot (e.g. `"И."` / `"J."`) with surnames, patronymics, birth dates, places, and photos completely stripped.
+- [ ] **Zero Edit Controls for Unauthenticated Visitors:** Absolutely NO mutation controls (+ Add in top header, + Add Person on home dashboard or tree toolbar, ghost slots on canvas, edit/delete buttons on node cards/drawer/profile, or undo buttons) are rendered when unauthenticated.
+- [ ] **Unauthenticated Navigation Cleanliness:** Top header, mobile drawer, and mobile BottomNav display ONLY Home, Tree, and Sign In links for unauthenticated visitors; all restricted module links are completely omitted.
 - [ ] **Direct Media Shield:** Attempting to fetch a photo of a living person via `/api/v1/media/:id/file` as an unauthenticated visitor returns `404 Not Found`.
 - [ ] **Viewer Full Living Visibility:** Authenticated Viewers can see full names, birth dates, places, relationships, and photos of living family members.
 - [ ] **Viewer Read-Only Boundary:** Any `POST`, `PUT`, `PATCH`, or `DELETE` attempt by a Viewer returns `403 Forbidden`.

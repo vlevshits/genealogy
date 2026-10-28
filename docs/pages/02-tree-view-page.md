@@ -5,7 +5,14 @@ The Tree Canvas is the interactive visual heart of the application. It occupies 
 
 > [!IMPORTANT] Tier-Based Access & Privacy Behavior:
 > - **Default Private Instance (`ENABLE_PUBLIC_ACCESS=false`):** Unauthenticated visitors cannot access `/tree` and are immediately redirected to `/login`.
-> - **Public Tree Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):** Public visitors see the tree canvas in **Strictly Masked Mode**. Living persons display as a single initial character with dot (e.g. `И.` / `J.`) with silhouette avatars, and zero dates, places, notes, or photos. Surnames, patronymics, and full given names are never exposed. Canvas editing controls, add buttons, and search omnibox are hidden.
+> - **Public Tree Mode (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):** Public visitors see the tree canvas in **Strictly Masked Read-Only Mode**:
+>   - Living persons display as a single initial character with dot (e.g. `И.` / `J.`) with silhouette avatars, and zero dates, places, notes, or photos. Surnames, patronymics, and full given names are never exposed.
+>   - **Zero Edit Controls:** Absolutely NO authoring or editing controls are rendered on the canvas:
+>     - No `+ Add Person` or Quick-Add trigger in the floating toolbar.
+>     - No `+ Add parent / child / spouse` placeholder ghost slots, node add handles, or hover plus indicators.
+>     - No `Edit`, `Delete`, `+ Add Relative`, `Add Event`, or `Set home person` buttons on node cards, Quick Drawer, or Bottom Sheet.
+>     - Context menus (long-press) provide only *"Make Focal"* and *"View Profile"* (for deceased).
+>     - Header omnibox search and `+ Add` menu are completely omitted.
 > - **Authenticated Viewers (`Viewer`):** Trusted family members see the complete tree with all living relatives' data (names, patronymics, dates, places, photos) fully visible. Canvas is strictly read-only (node add handles and edit triggers are hidden).
 > - **Authenticated Editors & Admins (`Editor`, `Admin`):** Full living person visibility plus interactive node edit handles, quick-add relative triggers (`+`), and contextual menus.
 
@@ -90,7 +97,7 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
     - Public Mode: 3 recent tagged photos of deceased individuals only; photos of living persons return silhouette placeholders.
     - Authenticated: 3 recent tagged photos.
   - **Actions:**
-    - Public Mode: *"View Full Profile"* (available for deceased only; living links redirect to login).
+    - Public Mode: *"View Full Profile"* (for deceased ancestors; living profiles render masked placeholder) and *"Make Focal Person"*. All authoring/editing controls (`+ Add Relative`, `Edit Details`, `Set as my home person`, `Upload avatar`, `Delete`) are strictly hidden.
     - Authenticated Viewers: *"View Full Profile"* (`/persons/:id`), *"Make Focal Person"*. Write actions (`+ Add Relative`, `Edit Details`) are hidden.
     - Editors & Admins: *"View Full Profile"*, *"Make Focal Person"*, plus `+ Add Relative` and `Edit Details`.
 - **Mobile (`< 768px`) & Tablet:** Converts into a swipeable **Quick-View Bottom Sheet** (`BottomSheet`) per [18 §3.7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md#37-mobile-quick-view-bottom-sheet-bottomsheet):
@@ -114,6 +121,7 @@ Positioned bottom-right (`absolute bottom-6 right-6 z-20`):
 - [ ] **Full Viewport Canvas:** Canvas stretches to full screen height with no scrollbars on the parent container.
 - [ ] **Default Private Redirection:** In default private posture (`ENABLE_PUBLIC_ACCESS=false`), unauthenticated access to `/tree` redirects directly to `/login`.
 - [ ] **Public Mode Living Masking:** When accessed unauthenticated under `ENABLE_PUBLIC_ACCESS=true`, cards of living persons display single initial character placeholders (e.g. `И.` / `J.`) and neutral silhouettes; surnames, patronymics, facts, and photos are completely stripped.
+- [ ] **Zero Edit Controls in Public Canvas:** When accessed unauthenticated under `ENABLE_PUBLIC_ACCESS=true`, no toolbar Add buttons, canvas ghost slots, node creation handles (+), drawer/sheet edit buttons, or destructive controls are rendered anywhere.
 - [ ] **Viewer Living Visibility & Read-Only:** Authenticated Viewers see complete personal records (full names, patronymics, dates, places, media) for living relatives, while write handles and edit buttons remain hidden.
 - [ ] **Editor & Admin Node Authoring:** Node hover handles (`+`), quick-add controls, and drawer edit buttons are accessible to Editors and Admins.
 - [ ] **Smooth Mode Switching:** Changing visualization mode transitions smoothly without page reload or lost selection.

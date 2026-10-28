@@ -29,7 +29,7 @@ async fn setup_test_env() -> (axum::Router, String, String, String, String) {
         backup_path: temp_dir.to_string_lossy().to_string(),
         ..AppConfig::default()
     };
-    let state = AppState::new(None, config);
+    let state = AppState::new_demo(None, config);
     let (admin_setup, _) = AuthService::setup_initial_admin(
         &state,
         SetupRequest {

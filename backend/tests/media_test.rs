@@ -33,7 +33,7 @@ async fn read_json(resp: axum::response::Response) -> Value {
 }
 
 async fn setup_state_and_admin() -> (AppState, String) {
-    let state = AppState::new(None, test_config());
+    let state = AppState::new_demo(None, test_config());
     let (admin_setup, _) = AuthService::setup_initial_admin(
         &state,
         SetupRequest {

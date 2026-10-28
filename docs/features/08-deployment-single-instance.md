@@ -8,6 +8,7 @@ The application follows a **Single-Instance = Single-Family-Tree** architecture.
 2. **100% Configurable via Environment Variables:** Every single configuration option (domain, ports, SMTP credentials, WebAuthn RP ID, living person age thresholds, public access) is defined in a single `.env` file with sensible production defaults.
 3. **Absolute Data Privacy:** Family data, private photos, and sensitive records are physically isolated in dedicated local volumes (`postgres-data`, `media-data`, `backup-data`).
 4. **Zero Multi-Tenant Complexity:** No tenant IDs, no cross-account data leaks, and in-memory tree topology caching with ~30-50MB RAM footprint for the backend.
+5. **Default Clean Slate (Zero Dummy Data in Production):** Fresh database migrations initialize an empty archive (0 individuals, 0 families, 0 events, 0 media, 0 places). No demo, test, or mock genealogical data may ever be seeded in production builds. The frontend displays the genuine Empty Tree Onboarding flow until real family data is imported or added.
 
 ---
 
@@ -231,3 +232,4 @@ Passkeys only work on `https://` or `http://localhost`. Choose one:
 - [ ] **Non-Root Security:** Containers run as unprivileged users (`appuser`) with minimal attack surface.
 - [ ] **Minimal Footprint:** Full stack runs with 3 containers (frontend, backend, postgres) and idles under ~150 MB RAM total.
 - [ ] **Lockout Recovery:** `genealogy-cli create-admin-link` lets the server owner regain admin access without the UI.
+- [ ] **Default Clean Slate:** Fresh deployment initializes an empty database with zero dummy/demo individuals, families, places, or mock dashboard items; the UI presents the authentic empty-tree onboarding card.

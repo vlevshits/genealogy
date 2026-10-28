@@ -87,17 +87,29 @@ export const TreeGlanceWidget: React.FC<TreeGlanceWidgetProps> = ({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div
-            role="button"
-            tabIndex={0}
-            aria-label={`${t('dashboard.glance.personsLabel')}: ${totalPersons}`}
+            role={onOpenPeople ? 'button' : undefined}
+            tabIndex={onOpenPeople ? 0 : undefined}
+            aria-label={
+              onOpenPeople
+                ? `${t('dashboard.glance.personsLabel')}: ${totalPersons}`
+                : undefined
+            }
             onClick={onOpenPeople}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onOpenPeople?.();
-              }
-            }}
-            className="rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1 cursor-pointer hover:border-brand/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            onKeyDown={
+              onOpenPeople
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenPeople();
+                    }
+                  }
+                : undefined
+            }
+            className={
+              onOpenPeople
+                ? 'rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1 cursor-pointer hover:border-brand/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
+                : 'rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1'
+            }
           >
             <div className="flex items-center gap-1.5 text-xs text-secondary">
               <Users className="h-3.5 w-3.5 text-brand" />
@@ -129,17 +141,29 @@ export const TreeGlanceWidget: React.FC<TreeGlanceWidgetProps> = ({
           </div>
 
           <div
-            role="button"
-            tabIndex={0}
-            aria-label={`${t('dashboard.glance.placesLabel')}: ${placesCount}`}
+            role={onOpenPlaces ? 'button' : undefined}
+            tabIndex={onOpenPlaces ? 0 : undefined}
+            aria-label={
+              onOpenPlaces
+                ? `${t('dashboard.glance.placesLabel')}: ${placesCount}`
+                : undefined
+            }
             onClick={onOpenPlaces}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onOpenPlaces?.();
-              }
-            }}
-            className="rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1 cursor-pointer hover:border-brand/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            onKeyDown={
+              onOpenPlaces
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenPlaces();
+                    }
+                  }
+                : undefined
+            }
+            className={
+              onOpenPlaces
+                ? 'rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1 cursor-pointer hover:border-brand/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
+                : 'rounded-2xl border border-border bg-surface-muted/40 p-3.5 space-y-1'
+            }
           >
             <div className="flex items-center gap-1.5 text-xs text-secondary">
               <MapPin className="h-3.5 w-3.5 text-brand" />

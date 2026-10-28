@@ -199,27 +199,49 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   }
 
   // 4b. Public Tree Mode Guard (02-rbac-access-control.md §3.2):
-  // When enable_public_access === true and visitor is unauthenticated, only /tree and /persons/* are accessible;
-  // auxiliary routes (/people, /media, /places, /settings, /history, /quality, /export/print) redirect to /login
-  if (
-    !isLoading &&
-    backendReachable &&
-    setupStatus &&
-    setupStatus.is_initialized &&
-    setupStatus.enable_public_access &&
-    !isAuthenticated &&
-    (path.startsWith('/people') ||
-      path.startsWith('/media') ||
-      path.startsWith('/places') ||
-      path.startsWith('/settings') ||
-      path.startsWith('/history') ||
-      path.startsWith('/quality') ||
-      path.startsWith('/export'))
-  ) {
+  // When visitor is unauthenticated, permitted surface is ONLY: /, /tree, /persons/:id, /login, /register (and /setup, /magic-link/verify).
+  // Auxiliary routes (/people*, /media*, /places*, /settings*, /history*, /quality*, /people/merge*, /export*) redirect to /login with returnUrl.
+  const isRestrictedUnauthenticatedRoute =
+    path.startsWith('/people') ||
+    path.startsWith('/media') ||
+    path.startsWith('/places') ||
+    path.startsWith('/settings') ||
+    path.startsWith('/history') ||
+    path.startsWith('/quality') ||
+    path.startsWith('/export') ||
+    (path !== '/' &&
+      !path.startsWith('/tree') &&
+      !path.startsWith('/persons/') &&
+      !path.startsWith('/login') &&
+      !path.startsWith('/register') &&
+      !path.startsWith('/setup') &&
+      !path.startsWith('/magic-link/verify') &&
+      !path.startsWith('/dev/ui'));
+
+  useEffect(() => {
+    if (
+      !isLoading &&
+      !isAuthenticated &&
+      isRestrictedUnauthenticatedRoute &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login')
+    ) {
+      const returnUrl = `${path}${search}`;
+      window.history.replaceState(
+        {},
+        '',
+        `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+      );
+    }
+  }, [isLoading, isAuthenticated, isRestrictedUnauthenticatedRoute, path, search]);
+
+  if (!isLoading && !isAuthenticated && isRestrictedUnauthenticatedRoute) {
+    const returnUrl = `${path}${search}`;
     return (
       <AuthPages
         currentPath="/login"
-        instanceTitle={instanceTitle || setupStatus.tree_title}
+        search={`?returnUrl=${encodeURIComponent(returnUrl)}`}
+        instanceTitle={instanceTitle || setupStatus?.tree_title}
         onNavigate={navigate}
       />
     );
@@ -473,11 +495,9 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     user?.person_id ??
     null;
 
-  // Unauthenticated visitors on a public instance or users who chose 'tree' as their start page
+  // Navigating to / displays DashboardPage in public guest mode; only authenticated users who chose 'tree' open TreeCanvas directly
   const openTreeDirectly =
-    !isTreeEmpty &&
-    (effectiveStartPage === 'tree' ||
-      (Boolean(setupStatus?.enable_public_access) && !isAuthenticated));
+    !isTreeEmpty && isAuthenticated && effectiveStartPage === 'tree';
 
   return (
     <AppShell

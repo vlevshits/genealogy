@@ -25,7 +25,6 @@ import {
 import { useAuth } from '../../lib/auth-context';
 import { useI18n } from '../../i18n';
 import {
-  buildDefaultTreeViewData,
   buildTreeGraphIndex,
   CARD_HEIGHT,
   CARD_WIDTH,
@@ -61,11 +60,30 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   onNavigate,
 }) => {
   const { t } = useI18n();
-  const { user, updateUser } = useAuth();
+  const { user, isAuthenticated, updateUser } = useAuth();
   const { addToast } = useToast();
 
+  const defaultAccessTier =
+    isAuthenticated && user?.role
+      ? user.role
+      : isAuthenticated
+      ? 'viewer'
+      : 'public_anonymous';
+
   const [treeView, setTreeView] = useState<TreeViewResponse>(
-    initialTreeView ?? buildDefaultTreeViewData('admin', 'hourglass')
+    () =>
+      initialTreeView ?? {
+        tree_title: '',
+        focal_id: null,
+        resolved_home_person_id: null,
+        mode: 'hourglass',
+        generations: 4,
+        access_tier: defaultAccessTier,
+        total_visible: 0,
+        nodes: [],
+        edges: [],
+        families: [],
+      }
   );
   const [mode, setMode] = useState<TreeProjectionMode>(
     ((initialTreeView?.mode as TreeProjectionMode) || 'hourglass')
@@ -201,8 +219,18 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     [effectiveViewData]
   );
 
+  const effectiveAccessTier =
+    initialTreeView?.access_tier ??
+    (isAuthenticated && user?.role
+      ? user.role
+      : isAuthenticated
+      ? treeView.access_tier === 'public_anonymous'
+        ? 'viewer'
+        : treeView.access_tier
+      : 'public_anonymous');
+
   const canEdit =
-    treeView.access_tier === 'editor' || treeView.access_tier === 'admin';
+    effectiveAccessTier === 'editor' || effectiveAccessTier === 'admin';
   const resolvedHomePersonId =
     treeView.resolved_home_person_id ??
     user?.home_person_id ??

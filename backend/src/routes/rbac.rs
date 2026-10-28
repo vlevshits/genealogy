@@ -8654,17 +8654,17 @@ pub async fn get_fan_chart(
     get,
     path = "/api/v1/places/map",
     responses(
-        (status = 200, description = "Clustered map markers for all geocoded places with event and person counts", body = PlacesMapResponse),
-        (status = 401, description = "Unauthenticated when public tree sharing is disabled", body = ErrorResponse)
+        (status = 200, description = "Clustered map markers for all geocoded places with event and person counts (authenticated users only)", body = PlacesMapResponse),
+        (status = 401, description = "Authentication required even when public tree sharing is enabled", body = ErrorResponse)
     ),
     tag = "Tree & Privacy"
 )]
 pub async fn get_places_map(
-    caller: PublicOrAuth,
+    RequireAuth(auth): RequireAuth,
     State(state): State<AppState>,
 ) -> Result<Json<PlacesMapResponse>, AppError> {
     let settings = state.resolve_instance_settings().await;
-    let access = caller.caller_access();
+    let access = auth.access();
     let store = state.privacy_store.read().await;
 
     let visible_persons: Vec<TreePersonNodeDto> = store

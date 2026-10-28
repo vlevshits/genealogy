@@ -907,10 +907,8 @@ impl GenealogyPrivacyStore {
         }
         None
     }
-}
 
-impl Default for GenealogyPrivacyStore {
-    fn default() -> Self {
+    pub fn demo() -> Self {
         let deceased_ancestor = TreePersonNodeDto {
             id: "00000000-0000-0000-0000-000000000001".to_string(),
             gid: "I0001".to_string(),
@@ -1206,5 +1204,11 @@ impl Default for GenealogyPrivacyStore {
             next_media_gid_seq: 100,
             is_demo_seed: true,
         }
+    }
+}
+
+impl Default for GenealogyPrivacyStore {
+    fn default() -> Self {
+        Self::empty()
     }
 }

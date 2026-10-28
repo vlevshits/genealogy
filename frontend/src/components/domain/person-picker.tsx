@@ -2,7 +2,6 @@ import React from 'react';
 import { Combobox, ComboboxOption } from '../ui/combobox';
 import { Individual } from '../../types/person';
 import { PersonListItem } from './person-list-item';
-import { SAMPLE_PEOPLE } from '../../lib/mock-data';
 import { matchesCrossScript } from '../../lib/utils';
 import { useI18n } from '../../i18n';
 
@@ -19,7 +18,7 @@ export interface PersonPickerProps {
 }
 
 export const PersonPicker: React.FC<PersonPickerProps> = ({
-  people = SAMPLE_PEOPLE,
+  people = [],
   value,
   onChange,
   excludeIds = [],
