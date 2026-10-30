@@ -91,8 +91,50 @@ Genealogical dates in Russian records often use historical Russian abbreviations
 
 ### 2.6 Backend Email & Notification Templates
 Transactional emails (invitations, magic links) are rendered bilingual based on the recipient's language preference or the instance default:
-- English: *"Sign in to Levshits Family Tree — click the link below"*
-- Russian: *"Вход в Семейное Древо Левшиц — нажмите ссылку ниже"*
+
+#### Magic Link Email Template
+- **English (`magic_link_en.html` / text):**
+  - **Subject:** `Sign in to {{tree_title}}`
+  - **Body Content:**
+    > Hello {{user_name}},
+    >
+    > Click the button below to sign in to {{tree_title}}. This link is valid for **15 minutes** and can only be used once.
+    >
+    > **[ Sign In to Family Archive ]** ({{magic_link_url}})
+    >
+    > If you did not request this link, you can safely ignore this email. Your account remains secure.
+- **Russian (`magic_link_ru.html` / text):**
+  - **Subject:** `Вход в {{tree_title}}`
+  - **Body Content:**
+    > Здравствуйте, {{user_name}}!
+    >
+    > Нажмите кнопку ниже для входа в {{tree_title}}. Ссылка действительна в течение **15 минут** и может быть использована только один раз.
+    >
+    > **[ Войти в семейный архив ]** ({{magic_link_url}})
+    >
+    > Если вы не запрашивали это письмо, просто проигнорируйте его. Ваша учётная запись в безопасности.
+
+#### Family Invitation Email Template
+- **English (`invite_en.html` / text):**
+  - **Subject:** `Invitation to join {{tree_title}}`
+  - **Body Content:**
+    > Hello,
+    >
+    > {{inviter_name}} has invited you to view and preserve family history in {{tree_title}} as an **{{role}}**.
+    >
+    > **[ Accept Invitation & Create Account ]** ({{invite_url}})
+    >
+    > This invitation link is valid for 7 days.
+- **Russian (`invite_ru.html` / text):**
+  - **Subject:** `Приглашение в {{tree_title}}`
+  - **Body Content:**
+    > Здравствуйте!
+    >
+    > {{inviter_name}} приглашает вас исследовать и сохранять семейную историю в архиве {{tree_title}} с правами **{{role}}**.
+    >
+    > **[ Принять приглашение и войти ]** ({{invite_url}})
+    >
+    > Ссылка-приглашение действительна в течение 7 дней.
 
 ---
 
@@ -111,7 +153,7 @@ The application must **never** display raw unlocalized English strings (e.g. `"F
    - The backend `message` property is strictly for developer logs and telemetry; the frontend must never render it directly in localized UI.
    - The frontend translates the error by resolving `errors.<code_in_snake_case>` from the active translation dictionary.
 3. **HTTP Status Fallback:**
-   - If an error lacks a recognized machine code, the client resolves the HTTP status code (e.g. `errors.401`, `errors.403`, `errors.404`, `errors.409`, `errors.422`, `errors.429`, `errors.500`).
+   - If an error lacks a recognized machine code, the client resolves the HTTP status code (e.g. `errors.401`, `errors.403`, `errors.404`, `errors.409`, `errors.422`, `errors.429`, `errors.500`, `errors.503`).
 4. **Generic Fallback:**
    - If neither code nor status resolves to a known translation key, the client renders `errors.unknown` (English: *"An unexpected error occurred. Please try again."* / Russian: *"Произошла непредвиденная ошибка. Пожалуйста, попробуйте снова."*).
 
@@ -142,6 +184,7 @@ The application must **never** display raw unlocalized English strings (e.g. `"F
 | `place_in_use` | 409 | Place cannot be deleted because events reference it | This place cannot be deleted because it is associated with life events. | Это место нельзя удалить, так как к нему привязаны исторические события. |
 | `rate_limited` | 429 | Rate limit exceeded | Too many requests. Please wait a moment and try again. | Слишком много запросов. Пожалуйста, подождите немного и повторите попытку. |
 | `account_locked` | 429 | 5 failed login attempts → 15-minute lockout | Account is temporarily locked due to failed attempts. Try again in 15 minutes. | Учётная запись временно заблокирована из-за частых попыток входа. Попробуйте через 15 минут. |
+| `smtp_not_configured` | 503 | Magic link requested when SMTP is disabled or unconfigured | Email delivery is not configured on this server. Please sign in with your passkey, password, or contact an administrator. | Отправка писем не настроена на этом сервере. Пожалуйста, используйте ключ доступа, пароль или обратитесь к администратору. |
 | `database_error` | 500 | Database query or connection fault | A database error occurred. Please try again shortly. | Произошла ошибка базы данных. Пожалуйста, повторите попытку позже. |
 | `internal_error` | 500 | Unexpected server error | An internal server error occurred. | Произошла внутренняя ошибка сервера. |
 | `unknown` | — | Fallback for unmapped errors | An unexpected error occurred. Please try again. | Произошла непредвиденная ошибка. Пожалуйста, попробуйте снова. |

@@ -13,8 +13,10 @@ use genealogy_backend::{
         RegenerateRecoveryCodesResponse, SessionListResponse, SetupCompleteResponse,
         SetupStatusResponse, UserDto, WebAuthnChallengeResponse,
     },
+    services::EmailService,
     state::AppState,
 };
+use std::sync::Arc;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -319,10 +321,11 @@ async fn test_password_login_lockout_recovery_codes_and_magic_link() {
     let config = AppConfig {
         app_env: "test".to_string(),
         auth_password_enabled: "true".to_string(),
+        smtp_enabled: true,
         ..AppConfig::default()
     };
     let state = AppState::new(None, config);
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
     // 1. Setup admin with password (< 10 chars rejected first, then valid 12-char password accepted)
     let short_setup = serde_json::json!({
@@ -457,7 +460,6 @@ async fn test_password_login_lockout_recovery_codes_and_magic_link() {
 
     // 4. Magic link request (3 per 15 min per email rate limit) & single-use verify
     let ml_req = serde_json::json!({ "email": "vera@family.local" });
-    let mut magic_token = String::new();
     for i in 0..3 {
         let res = app
             .clone()
@@ -475,8 +477,22 @@ async fn test_password_login_lockout_recovery_codes_and_magic_link() {
         assert_eq!(res.status(), StatusCode::OK, "Attempt {i} should succeed");
         let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
         let ml_resp: MagicLinkRequestResponse = serde_json::from_slice(&body).unwrap();
-        magic_token = ml_resp.preview_token.unwrap();
+        assert_eq!(ml_resp.status, "sent");
     }
+
+    let emails = state.email_service.captured_emails().await;
+    assert_eq!(emails.len(), 3);
+    let last_email = emails.last().unwrap();
+    assert_eq!(last_email.to, "vera@family.local");
+    let magic_token = last_email
+        .text_body
+        .split("token=")
+        .nth(1)
+        .and_then(|s| s.lines().next())
+        .unwrap()
+        .trim()
+        .to_string();
+    assert!(!magic_token.is_empty());
 
     // 4th magic link request within 15 min is rate limited (429 rate_limited)
     let res = app
@@ -1163,4 +1179,1189 @@ async fn test_reverse_proxy_forwarded_origin_multi_origin_and_csrf_rejection() {
         .await
         .unwrap();
     assert_eq!(res_evil.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_magic_link_smtp_disabled_and_anti_enumeration() {
+    // 1. When smtp_enabled is false, request returns 503 smtp_not_configured
+    let config_disabled = AppConfig {
+        app_env: "test".to_string(),
+        smtp_enabled: false,
+        ..AppConfig::default()
+    };
+    let state_disabled = AppState::new(None, config_disabled);
+    let app_disabled = create_router(state_disabled);
+
+    let res = app_disabled
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/magic-link/request")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .body(Body::from(
+                    serde_json::json!({ "email": "nonexistent@family.local" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "smtp_not_configured");
+
+    // 2. When smtp_enabled is true, anti-enumeration for non-existent user: returns 200 with status "sent"
+    // and sends NO emails
+    let config_enabled = AppConfig {
+        app_env: "test".to_string(),
+        smtp_enabled: true,
+        ..AppConfig::default()
+    };
+    let state_enabled = AppState::new(None, config_enabled);
+    let app_enabled = create_router(state_enabled.clone());
+
+    let res = app_enabled
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/magic-link/request")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .body(Body::from(
+                    serde_json::json!({ "email": "ghost@family.local" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let ml_resp: MagicLinkRequestResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(ml_resp.status, "sent");
+    assert_eq!(
+        ml_resp.message,
+        "If an active account exists for this email address, a sign-in link has been sent."
+    );
+    assert!(state_enabled
+        .email_service
+        .captured_emails()
+        .await
+        .is_empty());
+}
+
+#[tokio::test]
+async fn test_transactional_email_bilingual_templating_and_html_escaping() {
+    let config = Arc::new(AppConfig {
+        app_env: "test".to_string(),
+        tree_title: "Архив <Тест> & 'Семья'".to_string(),
+        app_origin: "https://tree.example.com".to_string(),
+        smtp_enabled: true,
+        ..AppConfig::default()
+    });
+    let email_service = EmailService::new(Arc::clone(&config));
+
+    // 1. Russian magic link with XSS/special chars in user_name and tree_title
+    email_service
+        .send_magic_link(
+            "user@test.local",
+            "Иван <script>alert('xss')</script> & \"Друзья\"",
+            "secret_token_12345",
+            "ru-RU",
+        )
+        .await
+        .unwrap();
+
+    let captured = email_service.captured_emails().await;
+    assert_eq!(captured.len(), 1);
+    let ru_mail = &captured[0];
+    assert_eq!(ru_mail.to, "user@test.local");
+    assert!(ru_mail.subject.contains("Вход в Архив <Тест> & 'Семья'"));
+    // Plaintext body contains raw unescaped name
+    assert!(ru_mail
+        .text_body
+        .contains("Иван <script>alert('xss')</script> & \"Друзья\""));
+    assert!(ru_mail.text_body.contains("15 минут"));
+    assert!(ru_mail
+        .text_body
+        .contains("https://tree.example.com/magic-link/verify?token=secret_token_12345"));
+    // HTML body MUST be properly escaped
+    assert!(!ru_mail.html_body.contains("<script>alert"));
+    assert!(ru_mail.html_body.contains(
+        "Иван &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;Друзья&quot;"
+    ));
+    assert!(ru_mail
+        .html_body
+        .contains("Архив &lt;Тест&gt; &amp; &#39;Семья&#39;"));
+    assert!(ru_mail.html_body.contains("lang=\"ru\""));
+
+    // 2. English magic link with XSS/special chars
+    email_service
+        .send_magic_link(
+            "john@test.local",
+            "John <img src=x onerror=alert(1)> & Co",
+            "token_en_67890",
+            "en-US",
+        )
+        .await
+        .unwrap();
+
+    let captured = email_service.captured_emails().await;
+    assert_eq!(captured.len(), 2);
+    let en_mail = &captured[1];
+    assert_eq!(en_mail.to, "john@test.local");
+    assert!(en_mail
+        .subject
+        .contains("Sign in to Архив <Тест> & 'Семья'"));
+    assert!(en_mail
+        .text_body
+        .contains("John <img src=x onerror=alert(1)> & Co"));
+    assert!(en_mail.text_body.contains("15 minutes"));
+    assert!(en_mail
+        .text_body
+        .contains("https://tree.example.com/magic-link/verify?token=token_en_67890"));
+    assert!(!en_mail.html_body.contains("<img src=x"));
+    assert!(en_mail
+        .html_body
+        .contains("John &lt;img src=x onerror=alert(1)&gt; &amp; Co"));
+    assert!(en_mail.html_body.contains("lang=\"en\""));
+
+    // 3. Invitation escaping in RU & EN
+    email_service
+        .send_invitation(
+            "invitee@test.local",
+            "Invitee",
+            "Admin <admin@test.local>",
+            "Editor & Contributor",
+            "invite_tok_abc",
+            "ru",
+        )
+        .await
+        .unwrap();
+
+    let captured = email_service.captured_emails().await;
+    assert_eq!(captured.len(), 3);
+    let invite_ru = &captured[2];
+    assert!(!invite_ru.html_body.contains("<admin@test.local>"));
+    assert!(invite_ru.html_body.contains("&lt;admin@test.local&gt;"));
+    assert!(invite_ru.html_body.contains("Editor &amp; Contributor"));
+}
+
+#[tokio::test]
+async fn test_passkey_authenticator_data_uv_flag_and_replay_protection() {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use sha2::{Digest, Sha256};
+
+    fn make_authenticator_data(rp_id: &str, flags: u8, sign_count: u32) -> String {
+        let rp_hash = Sha256::digest(rp_id.as_bytes());
+        let mut data = Vec::with_capacity(37);
+        data.extend_from_slice(&rp_hash);
+        data.push(flags);
+        data.extend_from_slice(&sign_count.to_be_bytes());
+        URL_SAFE_NO_PAD.encode(&data)
+    }
+
+    let config = AppConfig {
+        app_env: "test".to_string(),
+        rp_id: "genealogy.local".to_string(),
+        tree_title: "Security Hardened Tree".to_string(),
+        ..AppConfig::default()
+    };
+    let state = AppState::new(None, config);
+    let app = create_router(state);
+    let mut step = 0;
+
+    // 1. Passkey registration input validation: empty credential_id or public_key must be rejected
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/register/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let reg_ch: WebAuthnChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let invalid_setup_empty_cred = serde_json::json!({
+        "first_name": "Ivan",
+        "last_name": "Petrov",
+        "email": "ivan@petrov.local",
+        "passkey": {
+            "credential_id": "",
+            "public_key": "some-public-key",
+            "challenge": reg_ch.challenge,
+        }
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(invalid_setup_empty_cred.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "validation_failed");
+
+    // 2. Successful initial setup with valid passkey
+    step += 1;
+    let valid_setup = serde_json::json!({
+        "first_name": "Ivan",
+        "last_name": "Petrov",
+        "email": "ivan@petrov.local",
+        "passkey": {
+            "credential_id": "cred-hardened-01",
+            "public_key": "cose-key-01",
+            "challenge": reg_ch.challenge,
+            "device_name": "TouchID Mac"
+        }
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(valid_setup.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // 3. Test UV = 0 (flags = 0x01, User Present only) is rejected with 400 user_verification_required
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let auth_data_no_uv = make_authenticator_data("genealogy.local", 0x01, 0);
+    let verify_no_uv = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_no_uv,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_no_uv.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_resp: AuthSessionResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(login_resp.user.email, "ivan@petrov.local");
+
+    // 4. Test mismatched rpIdHash is rejected with 400 passkey_verification_failed
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let auth_data_bad_rp = make_authenticator_data("phishing-domain.com", 0x05, 1);
+    let verify_bad_rp = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_bad_rp,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_bad_rp.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_verification_failed");
+
+    // 5. Test missing UP (flags = 0x04) is rejected with 400 passkey_verification_failed
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let auth_data_no_up = make_authenticator_data("genealogy.local", 0x04, 1);
+    let verify_no_up = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_no_up,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_no_up.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_verification_failed");
+
+    // 6. Test truncated authenticator data (< 37 bytes) is rejected with 400 passkey_verification_failed
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let truncated_data = URL_SAFE_NO_PAD.encode([0u8; 36]);
+    let verify_truncated = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": truncated_data,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_truncated.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_verification_failed");
+
+    // 7. Valid WebAuthn authenticatorData (UP | UV = 0x05, sign_count = 1) succeeds
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let valid_auth_data_1 = make_authenticator_data("genealogy.local", 0x05, 1);
+    let verify_valid_1 = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": valid_auth_data_1,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_valid_1.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let session: AuthSessionResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(session.user.email, "ivan@petrov.local");
+
+    // 8. Replay of same sign_count = 1 must be rejected with 401 passkey_replay_detected
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let verify_replayed = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": valid_auth_data_1,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_replayed.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_replay_detected");
+
+    // 9. Subsequent login with incremented sign_count = 2 succeeds
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let valid_auth_data_2 = make_authenticator_data("genealogy.local", 0x05, 2);
+    let verify_valid_2 = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": valid_auth_data_2,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_valid_2.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 10. Platform authenticators with sign_count = 0 (e.g. Apple Touch ID) can login repeatedly without replay detection
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let auth_data_zero_1 = make_authenticator_data("genealogy.local", 0x05, 0);
+    let verify_zero_1 = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_zero_1,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_zero_1.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    step += 1;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    step += 1;
+    let auth_data_zero_2 = make_authenticator_data("genealogy.local", 0x05, 0);
+    let verify_zero_2 = serde_json::json!({
+        "credential_id": "cred-hardened-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_zero_2,
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", format!("10.10.1.{step}"))
+                .body(Body::from(verify_zero_2.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 11. In production (app_env != "test"), omitting authenticator_data is rejected with 400 passkey_verification_failed
+    let prod_config = AppConfig {
+        app_env: "production".to_string(),
+        rp_id: "genealogy.local".to_string(),
+        tree_title: "Prod Tree".to_string(),
+        ..AppConfig::default()
+    };
+    let prod_state = AppState::new(None, prod_config);
+    let prod_app = create_router(prod_state);
+
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/register/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let reg_ch: WebAuthnChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    let prod_setup = serde_json::json!({
+        "first_name": "Elena",
+        "last_name": "Smirnova",
+        "email": "elena@smirnova.local",
+        "passkey": {
+            "credential_id": "cred-prod-01",
+            "public_key": "cose-key-prod-01",
+            "challenge": reg_ch.challenge,
+        }
+    });
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.2")
+                .body(Body::from(prod_setup.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.3")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    // Verify without authenticator_data in production must fail
+    let verify_no_auth_data = serde_json::json!({
+        "credential_id": "cred-prod-01",
+        "challenge": login_ch.challenge,
+        "sign_count": 1
+    });
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.4")
+                .body(Body::from(verify_no_auth_data.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_verification_failed");
+
+    // 12. Safe u32 to i32 sign counter conversion without negative integer overflow
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    // sign_count > i32::MAX (e.g. 3,500,000,000 or u32::MAX) converts safely without overflow
+    let auth_data_large_count = make_authenticator_data("genealogy.local", 0x05, 3_500_000_000u32);
+    let verify_large_count = serde_json::json!({
+        "credential_id": "cred-prod-01",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_large_count,
+    });
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.6")
+                .body(Body::from(verify_large_count.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let session: AuthSessionResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(session.user.email, "elena@smirnova.local");
+
+    // Attempting replay with clamped count (i32::MAX or lower) must trigger replay detection
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.7")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch_replay: LoginChallengeResponse = serde_json::from_slice(&body).unwrap();
+
+    let verify_clamped_replay = serde_json::json!({
+        "credential_id": "cred-prod-01",
+        "challenge": login_ch_replay.challenge,
+        "authenticator_data": auth_data_large_count,
+    });
+    let res = prod_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("x-forwarded-for", "10.20.1.8")
+                .body(Body::from(verify_clamped_replay.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let err: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(err.error.code, "passkey_replay_detected");
+
+    // 13. Dynamic RP ID resolution: when config.rp_id is "localhost", request headers (Host / X-Forwarded-Host)
+    // dynamically resolve the effective rp_id so reverse-proxy setups avoid browser WebAuthn SecurityError.
+    let default_config = AppConfig {
+        app_env: "test".to_string(),
+        rp_id: "localhost".to_string(),
+        ..AppConfig::default()
+    };
+    let default_app = create_router(AppState::new(None, default_config));
+
+    let res = default_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/auth/setup/status")
+                .header(header::HOST, "genealogy.levshitsvv.pro")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let status_resp: SetupStatusResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status_resp.rp_id, "genealogy.levshitsvv.pro");
+
+    let res = default_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/register/challenge")
+                .header("x-forwarded-host", "genealogy.levshitsvv.pro")
+                .header("x-requested-with", "genealogy")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let reg_ch: WebAuthnChallengeResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(reg_ch.rp_id, "genealogy.levshitsvv.pro");
+}
+
+#[tokio::test]
+async fn test_request_context_middleware_full_pipeline() {
+    let config = AppConfig {
+        app_env: "production".to_string(),
+        app_origin: "http://internal-default:8080".to_string(),
+        auth_password_enabled: "true".to_string(),
+        rp_id: "localhost".to_string(),
+        ..AppConfig::default()
+    };
+    let state = AppState::new(None, config);
+    let app = create_router(state.clone());
+
+    // 1. GET /api/v1/auth/setup/status through reverse proxy headers
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/auth/setup/status")
+                .header("x-forwarded-host", "family.tree.example:8443")
+                .header("x-forwarded-proto", "https")
+                .header("x-forwarded-for", "203.0.113.195, 10.0.0.1")
+                .header(header::USER_AGENT, "GenealogyTester/1.0\t(Safe)")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let status_resp: SetupStatusResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status_resp.rp_id, "family.tree.example");
+
+    // 2. POST /api/v1/auth/setup with matching origin and forwarded HTTPS
+    let setup_payload = serde_json::json!({
+        "first_name": "Context",
+        "last_name": "Tester",
+        "email": "context@tree.example",
+        "password": "ContextStrongPassword123!"
+    });
+
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("origin", "https://family.tree.example:8443")
+                .header("x-forwarded-host", "family.tree.example:8443")
+                .header("x-forwarded-proto", "https")
+                .header("x-forwarded-for", "203.0.113.195:54321, 10.0.0.1")
+                .header(header::USER_AGENT, "GenealogyTester/1.0\t(Clean)")
+                .body(Body::from(setup_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let set_cookie = res
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap();
+    assert!(set_cookie.contains("; Secure"));
+
+    // Verify session metadata recorded in auth_store
+    let store = state.auth_store.read().await;
+    let session = store.sessions.last().unwrap();
+    assert_eq!(session.ip_address.as_deref(), Some("203.0.113.195"));
+    assert_eq!(
+        session.user_agent.as_deref(),
+        Some("GenealogyTester/1.0(Clean)")
+    );
+    drop(store);
+
+    // 3. POST /api/v1/auth/password/login with malformed / injection IP and plain HTTP
+    let login_payload = serde_json::json!({
+        "email": "context@tree.example",
+        "password": "ContextStrongPassword123!"
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/password/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header("origin", "http://family.tree.example:8080")
+                .header("x-forwarded-host", "family.tree.example:8080")
+                .header("x-forwarded-proto", "http")
+                .header(
+                    "x-forwarded-for",
+                    "<script>alert(1)</script>; DROP TABLE users",
+                )
+                .header(header::USER_AGENT, "GenealogyTester/1.0 (PlainHTTP)")
+                .body(Body::from(login_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let set_cookie_http = res
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap();
+    assert!(
+        !set_cookie_http.contains("; Secure"),
+        "Plain HTTP connection without https origin must not have ; Secure flag"
+    );
+
+    // Verify session metadata recorded 127.0.0.1 fallback for injection IP
+    let store = state.auth_store.read().await;
+    let session = store.sessions.last().unwrap();
+    assert_eq!(session.ip_address.as_deref(), Some("127.0.0.1"));
+    assert_eq!(
+        session.user_agent.as_deref(),
+        Some("GenealogyTester/1.0 (PlainHTTP)")
+    );
+}
+
+#[tokio::test]
+async fn test_effective_rp_id_resolution_and_localhost_passkey_login() {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use genealogy_backend::services::auth::AuthService;
+    use sha2::{Digest, Sha256};
+
+    fn make_auth_data(rp_id: &str, flags: u8, sign_count: u32) -> String {
+        let rp_hash = Sha256::digest(rp_id.as_bytes());
+        let mut data = Vec::with_capacity(37);
+        data.extend_from_slice(&rp_hash);
+        data.push(flags);
+        data.extend_from_slice(&sign_count.to_be_bytes());
+        URL_SAFE_NO_PAD.encode(&data)
+    }
+
+    // Configured RP ID is production domain, but requests come from localhost
+    let config = AppConfig {
+        app_env: "test".to_string(),
+        rp_id: "genealogy.levshitsvv.pro".to_string(),
+        tree_title: "Localhost RP ID Tree".to_string(),
+        ..AppConfig::default()
+    };
+    let state = AppState::new(None, config);
+    let app = create_router(state.clone());
+
+    // 1. Initial admin setup with a passkey
+    let reg_ch = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/register/challenge")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "localhost:8080")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reg_ch.status(), StatusCode::OK);
+    let reg_body = to_bytes(reg_ch.into_body(), 64 * 1024).await.unwrap();
+    let reg_ch_resp: WebAuthnChallengeResponse = serde_json::from_slice(&reg_body).unwrap();
+    // Challenge RP ID must be "localhost" when host is localhost:8080
+    assert_eq!(reg_ch_resp.rp_id, "localhost");
+
+    let setup_payload = serde_json::json!({
+        "first_name": "Local",
+        "last_name": "Admin",
+        "email": "local.admin@example.com",
+        "tree_title": "Localhost Tree",
+        "default_locale": "en",
+        "passkey": {
+            "credential_id": "pk-localhost-cred-1",
+            "public_key": "pubkey-bytes-localhost",
+            "challenge": reg_ch_resp.challenge,
+            "device_name": "MacBook TouchID",
+            "transports": ["internal"]
+        }
+    });
+
+    let setup_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/setup")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "localhost:8080")
+                .body(Body::from(setup_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(setup_res.status(), StatusCode::CREATED);
+
+    // 2. Request login challenge via localhost:8080 -> effective_rp_id is "localhost"
+    let ch_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "localhost:8080")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ch_res.status(), StatusCode::OK);
+    let ch_body = to_bytes(ch_res.into_body(), 64 * 1024).await.unwrap();
+    let login_ch: LoginChallengeResponse = serde_json::from_slice(&ch_body).unwrap();
+    assert_eq!(login_ch.rp_id, "localhost");
+
+    // 3. Authenticate with authenticator_data signed with RP ID "localhost" and flags = 0x01 (UP only, no UV)
+    let auth_data_localhost_up_only = make_auth_data("localhost", 0x01, 1);
+    let verify_payload = serde_json::json!({
+        "credential_id": "pk-localhost-cred-1",
+        "challenge": login_ch.challenge,
+        "authenticator_data": auth_data_localhost_up_only,
+    });
+    let verify_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "localhost:8080")
+                .body(Body::from(verify_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(verify_res.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_res.into_body(), 64 * 1024).await.unwrap();
+    let session_resp: AuthSessionResponse = serde_json::from_slice(&verify_body).unwrap();
+    assert_eq!(session_resp.user.email, "local.admin@example.com");
+
+    // 4. Authenticate with authenticator_data signed with configured RP ID ("genealogy.levshitsvv.pro")
+    let ch_res2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/challenge")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "genealogy.levshitsvv.pro")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ch_res2.status(), StatusCode::OK);
+    let ch_body2 = to_bytes(ch_res2.into_body(), 64 * 1024).await.unwrap();
+    let login_ch2: LoginChallengeResponse = serde_json::from_slice(&ch_body2).unwrap();
+    assert_eq!(login_ch2.rp_id, "genealogy.levshitsvv.pro");
+
+    let auth_data_prod = make_auth_data("genealogy.levshitsvv.pro", 0x05, 2);
+    let verify_prod = serde_json::json!({
+        "credential_id": "pk-localhost-cred-1",
+        "challenge": login_ch2.challenge,
+        "authenticator_data": auth_data_prod,
+    });
+    let verify_res2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/login/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::HOST, "genealogy.levshitsvv.pro")
+                .body(Body::from(verify_prod.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(verify_res2.status(), StatusCode::OK);
+
+    // 5. Verify hydrate_from_db runs safely without DB (returns Ok)
+    let hyd_res = AuthService::hydrate_from_db(&state).await;
+    assert!(hyd_res.is_ok());
+
+    // 6. Verify ensure_* fallbacks return valid cached data
+    let user_found =
+        AuthService::ensure_user_and_passkeys_by_email(&state, "local.admin@example.com")
+            .await
+            .unwrap();
+    assert!(user_found.is_some());
+    assert_eq!(user_found.unwrap().email, "local.admin@example.com");
+
+    let pk_found =
+        AuthService::ensure_passkey_and_user_by_credential_id(&state, "pk-localhost-cred-1")
+            .await
+            .unwrap();
+    assert!(pk_found.is_some());
+    assert_eq!(pk_found.unwrap().0.credential_id, "pk-localhost-cred-1");
 }

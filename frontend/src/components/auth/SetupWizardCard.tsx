@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint, ShieldCheck } from 'lucide-react';
 import {
   Alert,
@@ -45,6 +45,15 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(
     initialRecoveryCodes ?? null
   );
+
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      errorRef.current.focus();
+    }
+  }, [error]);
 
   const secureContext = isSecureContextAvailable();
 
@@ -101,7 +110,16 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
         </Alert>
       )}
 
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && (
+        <Alert
+          ref={errorRef}
+          variant="danger"
+          tabIndex={-1}
+          className="focus:outline-none"
+        >
+          {error}
+        </Alert>
+      )}
 
       <FormField
         name="tree_title"
@@ -115,33 +133,31 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
         />
       </FormField>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField
-          name="first_name"
-          label={t('auth.setup.firstNameLabel')}
+      <FormField
+        name="first_name"
+        label={t('auth.setup.firstNameLabel')}
+        required
+      >
+        <TextInput
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          autoComplete="given-name"
           required
-        >
-          <TextInput
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            autoComplete="given-name"
-            required
-          />
-        </FormField>
+        />
+      </FormField>
 
-        <FormField
-          name="last_name"
-          label={t('auth.setup.lastNameLabel')}
+      <FormField
+        name="last_name"
+        label={t('auth.setup.lastNameLabel')}
+        required
+      >
+        <TextInput
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          autoComplete="family-name"
           required
-        >
-          <TextInput
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            autoComplete="family-name"
-            required
-          />
-        </FormField>
-      </div>
+        />
+      </FormField>
 
       <FormField
         name="email"

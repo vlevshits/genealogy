@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
+  ArrowLeft,
+  Compass,
   Fingerprint,
   KeyRound,
   Lock,
   Mail,
-  Send,
 } from 'lucide-react';
 import {
   Alert,
@@ -28,12 +29,16 @@ import {
 } from '../../lib/webauthn';
 import { useAuth } from '../../lib/auth-context';
 import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import { resolveGuestEgressTarget } from '../../lib/navigation-utils';
 import { useI18n } from '../../i18n';
 
 export type LoginViewMode = 'default' | 'magic_sent' | 'recovery';
 
 export interface LoginCardProps {
   authPasswordEnabled?: boolean;
+  smtpEnabled?: boolean;
+  enablePublicAccess?: boolean;
+  returnUrl?: string;
   initialMode?: LoginViewMode;
   onSuccess?: (promptPasskeyEnrollment?: boolean) => void;
   onNavigate?: (path: string) => void;
@@ -41,23 +46,57 @@ export interface LoginCardProps {
 
 export const LoginCard: React.FC<LoginCardProps> = ({
   authPasswordEnabled = true,
+  smtpEnabled: smtpEnabledProp,
+  enablePublicAccess: enablePublicAccessProp,
+  returnUrl,
   initialMode = 'default',
   onSuccess,
   onNavigate,
 }) => {
   const { t } = useI18n();
-  const { establishSession } = useAuth();
+  const { establishSession, setupStatus } = useAuth();
+  const smtpEnabled = smtpEnabledProp ?? setupStatus?.smtp_enabled ?? false;
+  const enablePublicAccess =
+    enablePublicAccessProp ?? setupStatus?.enable_public_access ?? false;
+
+  const egressTarget = resolveGuestEgressTarget(returnUrl);
+  const isTreeOrProfileTarget =
+    egressTarget.startsWith('/tree') || egressTarget.startsWith('/persons/');
+  const egressLabel = isTreeOrProfileTarget
+    ? t('auth.login.backToTreeBtn')
+    : t('auth.login.browsePublicBtn');
 
   const [mode, setMode] = useState<LoginViewMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
-  const [magicPreviewUrl, setMagicPreviewUrl] = useState<string | null>(null);
   const [loadingPasskey, setLoadingPasskey] = useState(false);
   const [loadingPassword, setLoadingPassword] = useState(false);
   const [loadingMagic, setLoadingMagic] = useState(false);
   const [loadingRecovery, setLoadingRecovery] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passkeyButtonRef = useRef<HTMLButtonElement>(null);
+  const backToSignInRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusToRef = useRef<'email' | 'passkey' | null>(null);
+
+  useEffect(() => {
+    if (mode === 'magic_sent') {
+      backToSignInRef.current?.focus();
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'default' && restoreFocusToRef.current) {
+      if (restoreFocusToRef.current === 'email' && emailInputRef.current) {
+        emailInputRef.current.focus();
+      } else if (restoreFocusToRef.current === 'passkey' && passkeyButtonRef.current) {
+        passkeyButtonRef.current.focus();
+      }
+      restoreFocusToRef.current = null;
+    }
+  }, [mode]);
 
   const secureContext = isSecureContextAvailable();
 
@@ -100,12 +139,11 @@ export const LoginCard: React.FC<LoginCardProps> = ({
   };
 
   const handleRequestMagicLink = async () => {
-    if (loadingMagic || !email.trim()) return;
+    if (!smtpEnabled || loadingMagic || !email.trim()) return;
     setError(null);
     setLoadingMagic(true);
     try {
-      const res = await requestMagicLink({ email: email.trim() });
-      setMagicPreviewUrl(res.preview_url ?? null);
+      await requestMagicLink({ email: email.trim() });
       setMode('magic_sent');
     } catch (err) {
       setError(getLocalizedErrorMessage(err, t));
@@ -134,6 +172,12 @@ export const LoginCard: React.FC<LoginCardProps> = ({
   };
 
   if (mode === 'magic_sent') {
+    const targetEmail = email.trim() || 'user@example.com';
+    const descTemplate = t('auth.login.magicLinkSentDesc', {
+      email: '___EMAIL_SLOT___',
+    });
+    const [descBefore, descAfter] = descTemplate.split('___EMAIL_SLOT___');
+
     return (
       <div className="space-y-4">
         <Alert
@@ -141,26 +185,24 @@ export const LoginCard: React.FC<LoginCardProps> = ({
           icon={<Mail className="h-4 w-4 text-success shrink-0 mt-0.5" />}
           title={t('auth.login.magicLinkSentTitle')}
         >
-          {t('auth.login.magicLinkSentDesc', {
-            email: email.trim() || 'user@example.com',
-          })}
+          <p className="break-words">
+            {descBefore}
+            <span className="font-medium text-primary break-all">
+              {targetEmail}
+            </span>
+            {descAfter}
+          </p>
         </Alert>
 
-        {magicPreviewUrl && (
-          <Button
-            variant="primary"
-            fullWidth
-            leftIcon={<Send className="h-4 w-4" />}
-            onClick={() => onNavigate?.(magicPreviewUrl)}
-          >
-            {t('auth.login.magicLinkPreviewCta')}
-          </Button>
-        )}
-
         <Button
+          ref={backToSignInRef}
+          autoFocus
           variant="secondary"
           fullWidth
-          onClick={() => setMode('default')}
+          onClick={() => {
+            restoreFocusToRef.current = 'email';
+            setMode('default');
+          }}
         >
           {t('auth.login.useAnotherMethodBtn')}
         </Button>
@@ -227,6 +269,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
           fullWidth
           onClick={() => {
             setError(null);
+            restoreFocusToRef.current = 'passkey';
             setMode('default');
           }}
         >
@@ -235,6 +278,14 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       </form>
     );
   }
+
+  const showDivider = authPasswordEnabled || smtpEnabled;
+  const dividerLabel =
+    authPasswordEnabled && smtpEnabled
+      ? t('auth.login.orPasswordOrEmailDivider')
+      : authPasswordEnabled
+        ? t('auth.login.orPasswordDivider')
+        : t('auth.login.orEmailDivider');
 
   return (
     <div className="space-y-5">
@@ -245,6 +296,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       ) : (
         <div className="space-y-1.5">
           <Button
+            ref={passkeyButtonRef}
             variant="primary"
             size="lg"
             fullWidth
@@ -262,69 +314,124 @@ export const LoginCard: React.FC<LoginCardProps> = ({
 
       {error && <Alert variant="danger">{error}</Alert>}
 
-      <Divider label={t('auth.login.orEmailDivider')} />
+      {showDivider && <Divider label={dividerLabel} />}
 
-      <form onSubmit={handlePasswordSignIn} className="space-y-3">
-        <FormField
-          name="email"
-          label={t('auth.login.emailLabel')}
-          required
-        >
-          <EmailInput
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t('auth.login.emailPlaceholder')}
-            autoComplete="username webauthn"
-            required
-          />
-        </FormField>
-
-        {authPasswordEnabled && (
+      {(authPasswordEnabled || smtpEnabled) ? (
+        <form onSubmit={handlePasswordSignIn} className="space-y-3">
           <FormField
-            name="password"
-            label={t('auth.login.passwordLabel')}
+            name="email"
+            label={t('auth.login.emailLabel')}
+            required
           >
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
+            <EmailInput
+              ref={emailInputRef}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={t('auth.login.emailPlaceholder')}
+              autoComplete="username webauthn"
+              aria-describedby={!smtpEnabled ? 'smtp-disabled-hint' : undefined}
+              required
             />
           </FormField>
-        )}
 
-        <div className="flex flex-col gap-2 pt-1">
           {authPasswordEnabled && (
-            <Button
-              type="submit"
-              variant="secondary"
-              fullWidth
-              loading={loadingPassword}
-              disabled={loadingPassword || !email.trim() || !password}
-              leftIcon={<Lock className="h-4 w-4" />}
+            <FormField
+              name="password"
+              label={t('auth.login.passwordLabel')}
             >
-              {t('auth.login.passwordSignInBtn')}
-            </Button>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+            </FormField>
           )}
 
+          <div className="flex flex-col gap-2 pt-1">
+            {authPasswordEnabled && (
+              <Button
+                type="submit"
+                variant="secondary"
+                fullWidth
+                loading={loadingPassword}
+                disabled={loadingPassword || !email.trim() || !password}
+                leftIcon={<Lock className="h-4 w-4" />}
+              >
+                {t('auth.login.passwordSignInBtn')}
+              </Button>
+            )}
+
+            {smtpEnabled && (
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                loading={loadingMagic}
+                disabled={loadingMagic || !email.trim()}
+                leftIcon={<Mail className="h-4 w-4" />}
+                onClick={handleRequestMagicLink}
+              >
+                {t('auth.login.magicLinkBtn')}
+              </Button>
+            )}
+
+            {!smtpEnabled && (
+              <Alert
+                id="smtp-disabled-hint"
+                variant="info"
+                role="status"
+                tabIndex={0}
+                className="text-xs p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {t('auth.login.smtpDisabledHint')}
+              </Alert>
+            )}
+          </div>
+        </form>
+      ) : (
+        <Alert
+          id="smtp-disabled-hint"
+          variant="info"
+          role="status"
+          tabIndex={0}
+          className="text-xs p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {t('auth.login.smtpDisabledNoPasswordHint')}
+        </Alert>
+      )}
+
+      {enablePublicAccess && (
+        <div className="pt-1">
           <Button
             type="button"
             variant="secondary"
             fullWidth
-            loading={loadingMagic}
-            disabled={loadingMagic || !email.trim()}
-            leftIcon={<Mail className="h-4 w-4" />}
-            onClick={handleRequestMagicLink}
+            leftIcon={
+              isTreeOrProfileTarget ? (
+                <ArrowLeft className="h-4 w-4" />
+              ) : (
+                <Compass className="h-4 w-4" />
+              )
+            }
+            onClick={() => {
+              if (onNavigate) {
+                onNavigate(egressTarget);
+              } else if (typeof window !== 'undefined') {
+                window.location.href = egressTarget;
+              }
+            }}
           >
-            {t('auth.login.magicLinkBtn')}
+            {egressLabel}
           </Button>
         </div>
-      </form>
+      )}
 
-      <div className="pt-2 text-center">
+      <div className="pt-2 flex justify-center text-center">
         <Button
           variant="link"
           size="sm"
-          leftIcon={<KeyRound className="h-3.5 w-3.5" />}
+          className="inline-flex items-start text-left leading-snug whitespace-normal max-w-full"
+          leftIcon={<KeyRound className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
           onClick={() => {
             setError(null);
             setMode('recovery');

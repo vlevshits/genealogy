@@ -361,7 +361,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </section>
 
-      {/* 4 Live Dashboard Widgets (2x2 Grid) */}
+      {/* Live Dashboard Widgets (2-Widget Grid in Public Anonymous, 2x2 Grid for Authenticated) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         <AnniversariesWidget
           items={dashboard.anniversaries}
@@ -377,13 +377,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
         />
 
-        <RecentActivityWidget
-          transactions={dashboard.recent_activity}
-          isAdmin={isAdmin}
-          onUndoTransaction={handleUndoTx}
-          onOpenHistory={() => navigateTo('/history')}
-          onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
-        />
+        {effectiveTier !== 'public_anonymous' && (
+          <RecentActivityWidget
+            transactions={dashboard.recent_activity}
+            isAdmin={isAdmin}
+            onUndoTransaction={handleUndoTx}
+            onOpenHistory={() => navigateTo('/history')}
+            onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
+          />
+        )}
 
         <TreeGlanceWidget
           stats={dashboard.stats}
@@ -401,15 +403,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           }
         />
 
-        <LatestPhotosWidget
-          photos={dashboard.latest_photos}
-          onPreviewPhoto={(asset) => setPreviewPhoto(asset)}
-          onOpenMediaArchive={
-            effectiveTier !== 'public_anonymous'
-              ? () => navigateTo('/media')
-              : undefined
-          }
-        />
+        {effectiveTier !== 'public_anonymous' && (
+          <LatestPhotosWidget
+            photos={dashboard.latest_photos}
+            onPreviewPhoto={(asset) => setPreviewPhoto(asset)}
+            onOpenMediaArchive={
+              effectiveTier !== 'public_anonymous'
+                ? () => navigateTo('/media')
+                : undefined
+            }
+          />
+        )}
       </div>
 
       <QuickAddRelativeDialog

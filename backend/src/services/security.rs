@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
-    extract::{Request, State},
-    http::Method,
+    extract::{FromRequestParts, Request, State},
+    http::{header, request::Parts, Extensions, HeaderMap, Method, Uri},
     middleware::Next,
     response::Response,
 };
@@ -10,6 +10,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -20,7 +21,141 @@ type HmacSha256 = Hmac<Sha256>;
 const PBKDF2_ITERATIONS: u32 = 15_000;
 const RECOVERY_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-fn parse_host_port(authority: &str) -> Option<(&str, Option<u16>)> {
+#[derive(Debug, Clone)]
+pub struct RequestContext {
+    pub client_ip: String,
+    pub user_agent: Option<String>,
+    pub host: String,
+    pub port: Option<u16>,
+    pub is_https: bool,
+    pub effective_rp_id: String,
+    pub origin: Option<String>,
+}
+
+impl RequestContext {
+    pub fn from_raw(
+        headers: &HeaderMap,
+        uri: &Uri,
+        extensions: &Extensions,
+        configured_rp_id: &str,
+    ) -> Self {
+        let client_ip = extract_sanitized_ip(headers, Some(extensions));
+        let user_agent = extract_sanitized_user_agent(headers);
+        let (host, port) = extract_sanitized_host_port(headers, Some(uri));
+        let is_https = detect_is_https(headers, Some(uri));
+        let origin = extract_sanitized_origin(headers);
+
+        let mut effective_rp_id = compute_effective_rp_id(configured_rp_id, &host);
+        if (effective_rp_id == "localhost" || effective_rp_id == "127.0.0.1") && origin.is_some() {
+            if let Some(ref orig) = origin {
+                if let Some((_, orig_host, _)) = parse_origin_scheme_host_port(orig) {
+                    let from_orig = compute_effective_rp_id(configured_rp_id, orig_host);
+                    if from_orig != "localhost" && from_orig != "127.0.0.1" {
+                        effective_rp_id = from_orig;
+                    }
+                }
+            }
+        }
+
+        Self {
+            client_ip,
+            user_agent,
+            host,
+            port,
+            is_https,
+            effective_rp_id,
+            origin,
+        }
+    }
+
+    pub fn from_request_parts(parts: &Parts, configured_rp_id: &str) -> Self {
+        Self::from_raw(
+            &parts.headers,
+            &parts.uri,
+            &parts.extensions,
+            configured_rp_id,
+        )
+    }
+}
+
+impl<S> FromRequestParts<S> for RequestContext
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        if let Some(ctx) = parts.extensions.get::<RequestContext>() {
+            return Ok(ctx.clone());
+        }
+
+        let configured_rp_id = parts
+            .extensions
+            .get::<AppState>()
+            .map(|st| st.config.rp_id.as_str())
+            .unwrap_or("localhost");
+
+        Ok(RequestContext::from_request_parts(parts, configured_rp_id))
+    }
+}
+
+fn parse_ip_candidate(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(ip) = trimmed.parse::<IpAddr>() {
+        return Some(ip.to_string());
+    }
+    if let Ok(socket) = trimmed.parse::<SocketAddr>() {
+        return Some(socket.ip().to_string());
+    }
+    let unbracketed = trimmed.trim_matches(|c| c == '[' || c == ']');
+    if let Ok(ip) = unbracketed.parse::<IpAddr>() {
+        return Some(ip.to_string());
+    }
+    None
+}
+
+/// Extracts validated IPv4 or IPv6 client IP address:
+/// checks first hop of X-Forwarded-For, then X-Real-IP, then ConnectInfo, fallback "127.0.0.1".
+pub fn extract_sanitized_ip(headers: &HeaderMap, extensions: Option<&Extensions>) -> String {
+    if let Some(val) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = val.split(',').next() {
+            if let Some(ip) = parse_ip_candidate(first) {
+                return ip;
+            }
+        }
+    }
+
+    if let Some(val) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        if let Some(ip) = parse_ip_candidate(val) {
+            return ip;
+        }
+    }
+
+    if let Some(ext) = extensions {
+        if let Some(connect_info) = ext.get::<axum::extract::ConnectInfo<SocketAddr>>() {
+            return connect_info.0.ip().to_string();
+        }
+    }
+
+    "127.0.0.1".to_string()
+}
+
+/// Extracts sanitized User-Agent: strips control characters, limits length to 512 chars.
+pub fn extract_sanitized_user_agent(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get(header::USER_AGENT)?.to_str().ok()?;
+    let filtered: String = raw.chars().filter(|c| !c.is_control()).take(512).collect();
+    let trimmed = filtered.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+pub fn parse_host_port(authority: &str) -> Option<(&str, Option<u16>)> {
     let trimmed = authority.trim();
     if trimmed.is_empty() {
         return None;
@@ -47,7 +182,115 @@ fn parse_host_port(authority: &str) -> Option<(&str, Option<u16>)> {
     }
 }
 
-fn parse_origin_scheme_host_port(origin: &str) -> Option<(&str, &str, Option<u16>)> {
+/// Extracts effective lowercase host and optional port from X-Forwarded-Host, Host header, or URI.
+pub fn extract_sanitized_host_port(
+    headers: &HeaderMap,
+    uri: Option<&Uri>,
+) -> (String, Option<u16>) {
+    let raw_target = headers
+        .get("x-forwarded-host")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            headers
+                .get(header::HOST)
+                .and_then(|v| v.to_str().ok())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| uri.and_then(|u| u.authority()).map(|a| a.as_str()));
+
+    if let Some(raw) = raw_target {
+        let cleaned: String = raw.chars().filter(|c| !c.is_control()).collect();
+        if let Some((h, p)) = parse_host_port(&cleaned) {
+            let host_clean = h.trim().to_ascii_lowercase();
+            if !host_clean.is_empty() {
+                return (host_clean, p);
+            }
+        }
+    }
+
+    ("localhost".to_string(), None)
+}
+
+/// Detects if request is HTTPS:
+/// checks X-Forwarded-Proto == "https", X-Forwarded-Ssl == "on", or URI scheme == "https".
+pub fn detect_is_https(headers: &HeaderMap, uri: Option<&Uri>) -> bool {
+    if let Some(proto) = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+    {
+        if proto.eq_ignore_ascii_case("https") {
+            return true;
+        }
+    }
+
+    if let Some(ssl) = headers
+        .get("x-forwarded-ssl")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+    {
+        if ssl.eq_ignore_ascii_case("on") {
+            return true;
+        }
+    }
+
+    if let Some(uri) = uri {
+        if let Some(scheme) = uri.scheme_str() {
+            if scheme.eq_ignore_ascii_case("https") {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Computes effective Relying Party ID (RP ID):
+/// If the incoming request host is local (localhost, 127.0.0.1, ::1), always returns "localhost".
+/// Otherwise respects non-local `configured_rp_id` or non-local request `host`.
+pub fn compute_effective_rp_id(configured_rp_id: &str, host: &str) -> String {
+    let host_trimmed = host.trim();
+    if host_trimmed.eq_ignore_ascii_case("localhost")
+        || host_trimmed == "127.0.0.1"
+        || host_trimmed == "::1"
+    {
+        return "localhost".to_string();
+    }
+
+    let configured_trimmed = configured_rp_id.trim();
+    if !configured_trimmed.is_empty()
+        && !configured_trimmed.eq_ignore_ascii_case("localhost")
+        && configured_trimmed != "127.0.0.1"
+    {
+        return configured_trimmed.to_string();
+    }
+
+    if !host_trimmed.is_empty() {
+        return host_trimmed.to_string();
+    }
+
+    "localhost".to_string()
+}
+
+/// Extracts sanitized Origin header: strips control chars, trailing slashes, max 512 chars.
+pub fn extract_sanitized_origin(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get(header::ORIGIN)?.to_str().ok()?;
+    let filtered: String = raw.chars().filter(|c| !c.is_control()).take(512).collect();
+    let trimmed = filtered.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+pub fn parse_origin_scheme_host_port(origin: &str) -> Option<(&str, &str, Option<u16>)> {
     let (scheme, rest) = origin.trim().split_once("://")?;
     if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
         return None;
@@ -57,54 +300,79 @@ fn parse_origin_scheme_host_port(origin: &str) -> Option<(&str, &str, Option<u16
     Some((scheme, host, port))
 }
 
-fn is_same_origin_as_request(origin: &str, headers: &axum::http::HeaderMap) -> bool {
+/// Checks whether an Origin matches the RequestContext (same scheme, host, and port).
+pub fn is_same_origin(origin: &str, ctx: &RequestContext) -> bool {
     let Some((origin_scheme, origin_host, origin_port)) = parse_origin_scheme_host_port(origin)
     else {
         return false;
     };
 
-    let raw_target_host = headers
-        .get("x-forwarded-host")
-        .or_else(|| headers.get("host"))
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(str::trim)
-        .unwrap_or("");
-
-    let Some((req_host, req_port)) = parse_host_port(raw_target_host) else {
+    if !origin_host.eq_ignore_ascii_case(&ctx.host) {
         return false;
+    }
+
+    if ctx.is_https {
+        if !origin_scheme.eq_ignore_ascii_case("https") {
+            return false;
+        }
+    } else if !origin_scheme.eq_ignore_ascii_case("http") {
+        return false;
+    }
+
+    let origin_port_canonical = match (origin_scheme.to_ascii_lowercase().as_str(), origin_port) {
+        ("http", Some(80)) => None,
+        ("https", Some(443)) => None,
+        (_, p) => p,
     };
 
-    if !origin_host.eq_ignore_ascii_case(req_host) {
-        return false;
-    }
+    let ctx_port_canonical = match (ctx.is_https, ctx.port) {
+        (false, Some(80)) => None,
+        (true, Some(443)) => None,
+        (_, p) => p,
+    };
 
-    if let Some(fwd_proto) = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        if !origin_scheme.eq_ignore_ascii_case(fwd_proto) {
-            return false;
+    origin_port_canonical == ctx_port_canonical
+}
+
+/// Resolves the effective Relying Party ID (RP ID) for WebAuthn passkey operations.
+/// Backwards-compatible helper that delegates to `compute_effective_rp_id`.
+pub fn resolve_effective_rp_id(headers: &HeaderMap, configured_rp_id: &str) -> String {
+    let (host, _) = extract_sanitized_host_port(headers, None);
+    let mut rp_id = compute_effective_rp_id(configured_rp_id, &host);
+    if rp_id == "localhost" || rp_id == "127.0.0.1" {
+        if let Some(orig) = extract_sanitized_origin(headers) {
+            if let Some((_, orig_host, _)) = parse_origin_scheme_host_port(&orig) {
+                let from_orig = compute_effective_rp_id(configured_rp_id, orig_host);
+                if from_orig != "localhost" && from_orig != "127.0.0.1" {
+                    rp_id = from_orig;
+                }
+            }
         }
     }
+    rp_id
+}
 
-    if let (Some(op), Some(rp)) = (origin_port, req_port) {
-        if op != rp {
-            return false;
-        }
-    }
-
-    true
+/// Global infallible middleware that constructs `RequestContext` and inserts it into request extensions.
+pub async fn request_context_middleware(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    let ctx = RequestContext::from_raw(
+        req.headers(),
+        req.uri(),
+        req.extensions(),
+        &state.config.rp_id,
+    );
+    req.extensions_mut().insert(ctx);
+    next.run(req).await
 }
 
 /// Enforces CSRF & Origin protection on all state-changing HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`)
 /// as specified in `17-api-security-operations.md §3.2` (resolves **TD-002**):
 /// 1. Requires `X-Requested-With: genealogy` header (case-insensitive value check).
 /// 2. When `Origin` header is present, it must match one of the configured origins in `state.config.app_origin`,
-///    or match the request's `X-Forwarded-Host` / `Host` (and `X-Forwarded-Proto` if present), or `http://localhost:*` in dev/test.
+///    or match the request's effective origin (`is_same_origin`), or `http://localhost:*` in dev/test.
 pub async fn csrf_protection_middleware(
     State(state): State<AppState>,
     req: Request,
@@ -147,7 +415,18 @@ pub async fn csrf_protection_middleware(
                         || origin.starts_with("http://127.0.0.1:")
                         || origin.eq_ignore_ascii_case("http://127.0.0.1"));
 
-                let matches_request_host = is_same_origin_as_request(origin, req.headers());
+                let matches_request_host =
+                    if let Some(ctx) = req.extensions().get::<RequestContext>() {
+                        is_same_origin(origin, ctx)
+                    } else {
+                        let fallback_ctx = RequestContext::from_raw(
+                            req.headers(),
+                            req.uri(),
+                            req.extensions(),
+                            &state.config.rp_id,
+                        );
+                        is_same_origin(origin, &fallback_ctx)
+                    };
 
                 if !matches_configured && !is_localhost_dev && !matches_request_host {
                     return Err(AppError::CsrfValidationFailed);
@@ -336,4 +615,316 @@ pub fn generate_recovery_codes() -> Vec<(String, String)> {
         codes.push((chars, hash));
     }
     codes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn test_extract_sanitized_ip() {
+        let mut headers = HeaderMap::new();
+
+        // 1. Fallback default
+        assert_eq!(extract_sanitized_ip(&headers, None), "127.0.0.1");
+
+        // 2. Standard IPv4
+        headers.insert("x-forwarded-for", HeaderValue::from_static("192.168.1.100"));
+        assert_eq!(extract_sanitized_ip(&headers, None), "192.168.1.100");
+
+        // 3. IPv4 with port
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("192.168.1.100:8080"),
+        );
+        assert_eq!(extract_sanitized_ip(&headers, None), "192.168.1.100");
+
+        // 4. Multi-hop XFF: first hop is selected
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("10.0.0.1, 192.168.1.50, 172.16.0.1"),
+        );
+        assert_eq!(extract_sanitized_ip(&headers, None), "10.0.0.1");
+
+        // 5. Standard IPv6
+        headers.insert("x-forwarded-for", HeaderValue::from_static("2001:db8::1"));
+        assert_eq!(extract_sanitized_ip(&headers, None), "2001:db8::1");
+
+        // 6. IPv6 in brackets
+        headers.insert("x-forwarded-for", HeaderValue::from_static("[2001:db8::1]"));
+        assert_eq!(extract_sanitized_ip(&headers, None), "2001:db8::1");
+
+        // 7. IPv6 in brackets with port
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("[2001:db8::1]:8443"),
+        );
+        assert_eq!(extract_sanitized_ip(&headers, None), "2001:db8::1");
+
+        // 8. Malformed / injection in X-Forwarded-For falls back to X-Real-IP
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("127.0.0.1; DROP TABLE users"),
+        );
+        headers.insert("x-real-ip", HeaderValue::from_static("172.16.5.5"));
+        assert_eq!(extract_sanitized_ip(&headers, None), "172.16.5.5");
+
+        // 9. Malformed / injection in both headers falls back to 127.0.0.1
+        headers.insert(
+            "x-real-ip",
+            HeaderValue::from_static("<script>alert(1)</script>"),
+        );
+        assert_eq!(extract_sanitized_ip(&headers, None), "127.0.0.1");
+
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("999.999.999.999"),
+        );
+        headers.insert("x-real-ip", HeaderValue::from_static("invalid_ip"));
+        assert_eq!(extract_sanitized_ip(&headers, None), "127.0.0.1");
+    }
+
+    #[test]
+    fn test_extract_sanitized_user_agent() {
+        let mut headers = HeaderMap::new();
+
+        // Missing UA
+        assert_eq!(extract_sanitized_user_agent(&headers), None);
+
+        // Standard UA
+        headers.insert(
+            header::USER_AGENT,
+            HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        );
+        assert_eq!(
+            extract_sanitized_user_agent(&headers),
+            Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64)".to_string())
+        );
+
+        // Control characters stripped (e.g. tabs)
+        headers.insert(
+            header::USER_AGENT,
+            HeaderValue::from_static("Browser\tInjected-Header: value\tSafe"),
+        );
+        assert_eq!(
+            extract_sanitized_user_agent(&headers),
+            Some("BrowserInjected-Header: valueSafe".to_string())
+        );
+
+        // Long UA capped at 512 chars
+        let long_ua = "a".repeat(1000);
+        headers.insert(header::USER_AGENT, HeaderValue::from_str(&long_ua).unwrap());
+        let sanitized = extract_sanitized_user_agent(&headers).unwrap();
+        assert_eq!(sanitized.len(), 512);
+
+        // Whitespace only
+        headers.insert(header::USER_AGENT, HeaderValue::from_static("    "));
+        assert_eq!(extract_sanitized_user_agent(&headers), None);
+    }
+
+    #[test]
+    fn test_extract_sanitized_host_port() {
+        let mut headers = HeaderMap::new();
+
+        // 1. Fallback to localhost
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("localhost".to_string(), None)
+        );
+
+        // 2. Standard Host header
+        headers.insert(
+            header::HOST,
+            HeaderValue::from_static("genealogy.example.com"),
+        );
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("genealogy.example.com".to_string(), None)
+        );
+
+        // 3. Host with port
+        headers.insert(
+            header::HOST,
+            HeaderValue::from_static("genealogy.example.com:8080"),
+        );
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("genealogy.example.com".to_string(), Some(8080))
+        );
+
+        // 4. Uppercase Host is lowercased
+        headers.insert(
+            header::HOST,
+            HeaderValue::from_static("GENEALOGY.EXAMPLE.COM:443"),
+        );
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("genealogy.example.com".to_string(), Some(443))
+        );
+
+        // 5. X-Forwarded-Host takes precedence over Host
+        headers.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("tree.public.org:9000, internal-proxy:8080"),
+        );
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("tree.public.org".to_string(), Some(9000))
+        );
+
+        // 6. IPv6 in brackets
+        headers.insert("x-forwarded-host", HeaderValue::from_static("[::1]:3000"));
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("::1".to_string(), Some(3000))
+        );
+
+        // 7. Control characters in host stripped
+        headers.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("evil.com\t:80"),
+        );
+        assert_eq!(
+            extract_sanitized_host_port(&headers, None),
+            ("evil.com".to_string(), Some(80))
+        );
+    }
+
+    #[test]
+    fn test_detect_is_https() {
+        let mut headers = HeaderMap::new();
+
+        // 1. None -> false
+        assert!(!detect_is_https(&headers, None));
+
+        // 2. X-Forwarded-Proto: https
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        assert!(detect_is_https(&headers, None));
+
+        // 3. X-Forwarded-Proto: http
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("http"));
+        assert!(!detect_is_https(&headers, None));
+
+        // 4. X-Forwarded-Proto comma-separated
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https, http"));
+        assert!(detect_is_https(&headers, None));
+
+        headers.remove("x-forwarded-proto");
+
+        // 5. X-Forwarded-Ssl: on
+        headers.insert("x-forwarded-ssl", HeaderValue::from_static("on"));
+        assert!(detect_is_https(&headers, None));
+
+        headers.insert("x-forwarded-ssl", HeaderValue::from_static("off"));
+        assert!(!detect_is_https(&headers, None));
+
+        headers.remove("x-forwarded-ssl");
+
+        // 6. URI scheme
+        let uri: Uri = "https://genealogy.example.com/api".parse().unwrap();
+        assert!(detect_is_https(&headers, Some(&uri)));
+
+        let uri_http: Uri = "http://genealogy.example.com/api".parse().unwrap();
+        assert!(!detect_is_https(&headers, Some(&uri_http)));
+    }
+
+    #[test]
+    fn test_compute_effective_rp_id() {
+        // Explicit configured RP ID takes priority if non-local
+        assert_eq!(
+            compute_effective_rp_id("genealogy.company.org", "proxy.internal"),
+            "genealogy.company.org"
+        );
+
+        // When configured RP ID is localhost, matches incoming host
+        assert_eq!(
+            compute_effective_rp_id("localhost", "familytree.levshitsvv.pro"),
+            "familytree.levshitsvv.pro"
+        );
+
+        // When configured RP ID is 127.0.0.1, matches incoming host
+        assert_eq!(
+            compute_effective_rp_id("127.0.0.1", "familytree.levshitsvv.pro"),
+            "familytree.levshitsvv.pro"
+        );
+
+        // Localhost config with localhost host stays localhost
+        assert_eq!(
+            compute_effective_rp_id("localhost", "localhost"),
+            "localhost"
+        );
+        assert_eq!(
+            compute_effective_rp_id("localhost", "127.0.0.1"),
+            "localhost"
+        );
+        assert_eq!(compute_effective_rp_id("localhost", "::1"), "localhost");
+
+        // Localhost host overrides configured remote RP ID for local development
+        assert_eq!(
+            compute_effective_rp_id("genealogy.company.org", "localhost"),
+            "localhost"
+        );
+        assert_eq!(
+            compute_effective_rp_id("genealogy.company.org", "127.0.0.1"),
+            "localhost"
+        );
+        assert_eq!(
+            compute_effective_rp_id("genealogy.company.org", "::1"),
+            "localhost"
+        );
+
+        // Empty config falls back to host or localhost
+        assert_eq!(
+            compute_effective_rp_id("", "genealogy.example.com"),
+            "genealogy.example.com"
+        );
+        assert_eq!(compute_effective_rp_id("", "localhost"), "localhost");
+        assert_eq!(compute_effective_rp_id("", ""), "localhost");
+    }
+
+    #[test]
+    fn test_is_same_origin() {
+        let ctx = RequestContext {
+            client_ip: "127.0.0.1".to_string(),
+            user_agent: None,
+            host: "genealogy.example.com".to_string(),
+            port: None,
+            is_https: true,
+            effective_rp_id: "genealogy.example.com".to_string(),
+            origin: None,
+        };
+
+        // Matching HTTPS origin without port
+        assert!(is_same_origin("https://genealogy.example.com", &ctx));
+
+        // Matching HTTPS origin with default port 443
+        assert!(is_same_origin("https://genealogy.example.com:443", &ctx));
+
+        // Scheme mismatch (HTTP instead of HTTPS)
+        assert!(!is_same_origin("http://genealogy.example.com", &ctx));
+
+        // Host mismatch
+        assert!(!is_same_origin("https://attacker.example.com", &ctx));
+
+        // Port mismatch
+        assert!(!is_same_origin("https://genealogy.example.com:8443", &ctx));
+
+        // Malformed origin
+        assert!(!is_same_origin("not-a-valid-origin", &ctx));
+
+        // Non-default port match
+        let ctx_port = RequestContext {
+            client_ip: "127.0.0.1".to_string(),
+            user_agent: None,
+            host: "localhost".to_string(),
+            port: Some(3000),
+            is_https: false,
+            effective_rp_id: "localhost".to_string(),
+            origin: None,
+        };
+        assert!(is_same_origin("http://localhost:3000", &ctx_port));
+        assert!(!is_same_origin("http://localhost:8080", &ctx_port));
+        assert!(!is_same_origin("https://localhost:3000", &ctx_port));
+    }
 }

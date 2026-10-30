@@ -173,6 +173,7 @@ async fn test_tier1_default_private_gatekeeper_and_tier2_public_mode_masking_and
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -385,6 +386,7 @@ async fn test_tier3_viewer_and_tier4_editor_and_tier5_admin_rbac_matrix() {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -415,6 +417,7 @@ async fn test_tier3_viewer_and_tier4_editor_and_tier5_admin_rbac_matrix() {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -444,6 +447,7 @@ async fn test_tier3_viewer_and_tier4_editor_and_tier5_admin_rbac_matrix() {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -781,6 +785,7 @@ async fn test_sole_admin_protection_role_promotion_and_deactivation_session_purg
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -813,6 +818,7 @@ async fn test_sole_admin_protection_role_promotion_and_deactivation_session_purg
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();

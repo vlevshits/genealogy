@@ -1403,6 +1403,8 @@ pub fn match_prospective_person(
         external_ids: HashMap::new(),
         version: 1,
         tx_id: None,
+        generation: None,
+        is_direct_lineage: None,
     };
 
     let mut items = Vec::new();

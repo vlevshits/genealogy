@@ -7,6 +7,7 @@ import {
   SetupWizardCard,
 } from '../components/auth';
 import { useAuth } from '../lib/auth-context';
+import { sanitizeReturnUrl } from '../lib/navigation-utils';
 import { useI18n } from '../i18n';
 
 export interface AuthPagesProps {
@@ -28,6 +29,8 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
   const { setupStatus } = useAuth();
 
   const params = new URLSearchParams(search);
+  const rawReturnUrl = params.get('returnUrl');
+  const targetUrl = sanitizeReturnUrl(rawReturnUrl, '/');
 
   if (currentPath.startsWith('/setup')) {
     return (
@@ -35,12 +38,13 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
         title={t('auth.setup.title')}
         subtitle={t('auth.setup.subtitle')}
         instanceTitle={instanceTitle}
+        onNavigate={onNavigate}
       >
         <SetupWizardCard
           defaultTreeTitle={instanceTitle || setupStatus?.tree_title}
           onComplete={(nextTitle) => {
             if (nextTitle) onInstanceTitleChange?.(nextTitle);
-            onNavigate('/');
+            onNavigate(targetUrl);
           }}
         />
       </AuthLayout>
@@ -54,10 +58,11 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
         title={t('auth.register.title')}
         subtitle={t('auth.register.subtitle')}
         instanceTitle={instanceTitle}
+        onNavigate={onNavigate}
       >
         <RegisterInviteCard
           inviteToken={inviteToken}
-          onComplete={() => onNavigate('/')}
+          onComplete={() => onNavigate(targetUrl)}
         />
       </AuthLayout>
     );
@@ -69,10 +74,11 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       <AuthLayout
         title={t('auth.magicVerify.title')}
         instanceTitle={instanceTitle}
+        onNavigate={onNavigate}
       >
         <MagicLinkVerifyCard
           token={token}
-          onComplete={() => onNavigate('/')}
+          onComplete={() => onNavigate(targetUrl)}
         />
       </AuthLayout>
     );
@@ -83,11 +89,15 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       title={t('auth.login.title')}
       subtitle={t('auth.login.subtitle')}
       instanceTitle={instanceTitle}
+      onNavigate={onNavigate}
     >
       <LoginCard
         authPasswordEnabled={setupStatus?.auth_password_enabled ?? true}
+        smtpEnabled={setupStatus?.smtp_enabled ?? false}
+        enablePublicAccess={setupStatus?.enable_public_access ?? false}
+        returnUrl={rawReturnUrl ?? undefined}
         onNavigate={onNavigate}
-        onSuccess={() => onNavigate('/')}
+        onSuccess={() => onNavigate(targetUrl)}
       />
     </AuthLayout>
   );

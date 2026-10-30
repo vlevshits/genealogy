@@ -66,6 +66,7 @@ async fn setup_profile_test_tree() -> (axum::Router, String, FamilyGraphIds) {
         },
         None,
         Some("127.0.0.1".to_string()),
+        false,
     )
     .await
     .unwrap();

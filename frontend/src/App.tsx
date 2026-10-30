@@ -24,6 +24,7 @@ import {
   OnboardingStatusResponse,
 } from './api/client';
 import { useAuth } from './lib/auth-context';
+import { buildLoginUrl } from './lib/navigation-utils';
 import { useI18n } from './i18n';
 
 const DevUiWorkbench = React.lazy(() => import('./pages/DevUiWorkbench'));
@@ -405,7 +406,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
       >
         <TreeCanvas
           focusPersonId={focusParam}
-          onSignIn={() => navigate('/login')}
+          onSignIn={() => navigate(buildLoginUrl(path, search))}
           onNavigate={navigate}
         />
       </AppShell>
@@ -434,7 +435,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
         <PersonProfilePage
           personId={rawPersonId}
           onNavigate={navigate}
-          onSignIn={() => navigate('/login')}
+          onSignIn={() => navigate(buildLoginUrl(path, search))}
           onPersonLoaded={setActivePersonName}
         />
       </AppShell>
@@ -574,7 +575,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
           />
         ) : openTreeDirectly ? (
           <TreeCanvas
-            onSignIn={() => navigate('/login')}
+            onSignIn={() => navigate(buildLoginUrl(path, search))}
             onNavigate={navigate}
           />
         ) : (
@@ -582,7 +583,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
             instanceTitle={instanceTitle}
             resolvedHomePersonId={resolvedHomePersonId}
             onNavigate={navigate}
-            onSignIn={() => navigate('/login')}
+            onSignIn={() => navigate(buildLoginUrl(path, search))}
           />
         )}
       </div>

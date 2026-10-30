@@ -87,6 +87,27 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
     return parts.join(' · ');
   };
 
+  const handleListKeyDown = (e: React.KeyboardEvent) => {
+    if (filteredCandidates.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const currentIndex = filteredCandidates.findIndex(
+        (p) => p.id === selectedId
+      );
+      const nextIndex =
+        currentIndex < filteredCandidates.length - 1 ? currentIndex + 1 : 0;
+      setSelectedId(filteredCandidates[nextIndex].id);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const currentIndex = filteredCandidates.findIndex(
+        (p) => p.id === selectedId
+      );
+      const prevIndex =
+        currentIndex > 0 ? currentIndex - 1 : filteredCandidates.length - 1;
+      setSelectedId(filteredCandidates[prevIndex].id);
+    }
+  };
+
   return (
     <div
       role="dialog"
@@ -103,7 +124,7 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
           size="sm"
           onClick={onCancel}
           aria-label={t('common.cancel')}
-          className="h-6 w-6 min-h-0 p-0 text-secondary"
+          className="h-8 w-8 min-h-0 p-0 text-secondary touch-target-expand"
         >
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -112,6 +133,11 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
       <TextInput
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            handleListKeyDown(e);
+          }
+        }}
         leftIcon={<Search className="h-3.5 w-3.5 text-tertiary" />}
         placeholder={t('mediaArchive.facePickerSearchPlaceholder')}
         aria-label={t('mediaArchive.facePickerSearchPlaceholder')}
@@ -120,6 +146,8 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
       <div
         className="max-h-44 overflow-y-auto space-y-1 pr-0.5"
         role="listbox"
+        tabIndex={0}
+        onKeyDown={handleListKeyDown}
         aria-label={t('mediaArchive.facePickerTitle')}
       >
         {filteredCandidates.length === 0 ? (
@@ -131,42 +159,45 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
             const isSelected = selectedId === person.id;
             const vitals = formatVitals(person);
             return (
-              <div
+              <Button
                 key={person.id}
                 role="option"
                 aria-selected={isSelected}
+                tabIndex={isSelected ? 0 : -1}
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedId(person.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    handleListKeyDown(e);
+                  }
+                }}
+                className={cn(
+                  'w-full justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left font-normal',
+                  isSelected
+                    ? 'bg-brand/12 text-primary ring-1 ring-brand/40'
+                    : 'text-primary hover:bg-surface-muted'
+                )}
               >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedId(person.id)}
-                  className={cn(
-                    'w-full justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left font-normal',
-                    isSelected
-                      ? 'bg-brand/12 text-primary ring-1 ring-brand/40'
-                      : 'text-primary hover:bg-surface-muted'
-                  )}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <Avatar
-                      name={person.displayName}
-                      src={person.avatarUrl ?? undefined}
-                      size="xs"
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-xs font-medium truncate">
-                        {person.displayName}
-                      </span>
-                      {vitals && (
-                        <span className="block text-[11px] text-secondary truncate">
-                          {vitals}
-                        </span>
-                      )}
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Avatar
+                    name={person.displayName}
+                    src={person.avatarUrl ?? undefined}
+                    size="xs"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium truncate">
+                      {person.displayName}
                     </span>
+                    {vitals && (
+                      <span className="block text-[11px] text-secondary truncate">
+                        {vitals}
+                      </span>
+                    )}
                   </span>
-                  <Badge variant="neutral">{person.gid}</Badge>
-                </Button>
-              </div>
+                </span>
+                <Badge variant="neutral">{person.gid}</Badge>
+              </Button>
             );
           })
         )}
@@ -180,7 +211,12 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
         />
 
         <div className="flex items-center justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onCancel}
+            className="touch-target-expand"
+          >
             {t('common.cancel')}
           </Button>
           <Button
@@ -194,6 +230,7 @@ export const PersonFacePicker: React.FC<PersonFacePickerProps> = ({
               }
             }}
             leftIcon={<Check className="h-3.5 w-3.5" />}
+            className="touch-target-expand"
           >
             {t('mediaArchive.saveFaceTagBtn')}
           </Button>

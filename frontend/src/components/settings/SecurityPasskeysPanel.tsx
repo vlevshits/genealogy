@@ -135,7 +135,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('settings.security.passkeyErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     } finally {
@@ -160,7 +160,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('settings.security.passkeyErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     }
@@ -177,7 +177,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('settings.security.passkeyErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     }
@@ -197,7 +197,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('common.error'),
         description: getLocalizedErrorMessage(err, t),
       });
     } finally {
@@ -223,7 +223,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('common.error'),
         description: getLocalizedErrorMessage(err, t),
       });
     } finally {
@@ -242,7 +242,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('common.error'),
         description: getLocalizedErrorMessage(err, t),
       });
     }
@@ -261,7 +261,7 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('common.error'),
         description: getLocalizedErrorMessage(err, t),
       });
     }

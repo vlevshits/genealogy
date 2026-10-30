@@ -3,6 +3,7 @@ import {
   TreeProjectionMode,
   TreeViewResponse,
 } from '../../api/client';
+import { computeAllNodesLayout } from './all-nodes-layout';
 import { computeDescendantsLayout } from './descendants-layout';
 import { computeHourglassLayout } from './hourglass-layout';
 import { computePedigreeLayout } from './pedigree-layout';
@@ -13,21 +14,26 @@ export * from './curve-routing';
 export * from './pedigree-layout';
 export * from './descendants-layout';
 export * from './hourglass-layout';
+export * from './all-nodes-layout';
 
 export function computeTreeLayout(
   data: TreeViewResponse,
-  options?: { mode?: TreeProjectionMode; generations?: number }
+  options?: { mode?: TreeProjectionMode; generations?: number; collateral?: boolean }
 ): TreeLayoutResult {
   const mode = (options?.mode ?? data.mode ?? 'hourglass') as TreeProjectionMode;
   const generations = options?.generations ?? data.generations ?? 4;
+  const collateral = options?.collateral ?? data.collateral ?? true;
 
+  if (mode === 'all') {
+    return computeAllNodesLayout(data);
+  }
   if (mode === 'pedigree') {
     return computePedigreeLayout(data, generations);
   }
   if (mode === 'descendant') {
     return computeDescendantsLayout(data, generations);
   }
-  return computeHourglassLayout(data, generations);
+  return computeHourglassLayout(data, generations, collateral);
 }
 
 export function buildDefaultTreeViewData(

@@ -18,6 +18,7 @@ Access is partitioned into four distinct tiers:
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **INITIAL ACCESS & AUTH** | | | | | |
 | View Login page (`/login`) | Yes | Yes | Yes (Redirects to `/`) | Yes (Redirects to `/`) | Yes (Redirects to `/`) |
+| Exit from `/login` to Home / Tree | **No (Stays on `/login`)** | **Yes (via Header Brand or Browse CTA)** | **Yes (Redirects `/` or `returnUrl`)** | **Yes (Redirects `/` or `returnUrl`)** | **Yes (Redirects `/` or `returnUrl`)** |
 | First-time Setup (`/setup`, 0 users) | Yes | Yes | No | No | No |
 | Accept Invitation & Register | Yes (with token) | Yes (with token) | No | No | No |
 | Manage Own Passkeys & Profile | No | No | Yes | Yes | Yes |
@@ -62,17 +63,29 @@ Access is partitioned into four distinct tiers:
 
 ### 3.1 Tier 1: Default Private Instance (Login-First Gatekeeper)
 By default, the application is strictly private (`ENABLE_PUBLIC_ACCESS=false`):
-- Any request from an unauthenticated user to `/`, `/tree`, `/people`, `/media`, `/settings`, or any `/api/v1/*` endpoint (except `/api/v1/auth/*` and `/api/v1/health`) immediately terminates in a `401 Unauthorized` response or an HTTP redirect to `/login`.
+- Any request from an unauthenticated user to `/`, `/tree`, `/people`, `/media`, `/settings`, or any `/api/v1/*` endpoint (except `/api/v1/auth/*` and `/api/v1/health`) immediately terminates in a `401 Unauthorized` response or an HTTP redirect to `/login?returnUrl=<target>`.
 - Unauthenticated visitors cannot discover person counts, ancestor names, surnames, or tree existence.
 - The browser tab and title display only the instance title and a clean login form per [01-auth-pages.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/01-auth-pages.md).
+- In `AuthLayout`, clicking the brand logo or tree title invokes navigation to `/`, where the private gatekeeper intercepts the request and securely retains the visitor on `/login` without exposing tree data.
+- `LoginCard` strictly omits public archive browsing actions, ensuring no unauthenticated egress into the archive.
 
 ### 3.2 Tier 2: Public Tree Mode (Strict Module Segregation & Zero Edit Controls)
 When an administrator explicitly toggles public sharing (`ENABLE_PUBLIC_ACCESS=true` in Admin Settings or `.env`):
 - **Permitted Surface:** Unauthenticated visitors may access ONLY:
-  - **Home Dashboard (`/`):** Public read-only dashboard with living relatives shielded and zero edit/creation buttons.
+  - **Home Dashboard (`/`):** Public read-only dashboard with living relatives shielded, zero edit/creation buttons, and **strict 2-widget layout**:
+    - `RecentActivityWidget` is **strictly hidden** (recent transaction log is an internal change feed not suited for public visitors).
+    - `LatestPhotosWidget` is **strictly hidden** (media gallery previews are restricted to authenticated family members, preserving photo privacy).
+    - Only `AnniversariesWidget` and `TreeGlanceWidget` render on the public dashboard.
+    - Backend API (`dashboard.rs`): For `CallerAccess::PublicAnonymous`, both `recent_activity` and `latest_photos` return empty arrays (`Vec::new()`).
   - **Tree Visualizer (`/tree`):** Interactive canvas in strictly masked read-only mode.
   - **Individual Person Profile (`/persons/:id`):** Biographical profile (for deceased ancestors) or masked single-initial placeholder (for living relatives) in strictly read-only mode.
   - **Authentication Views:** Sign-In page (`/login`) and Invitation Acceptance (`/register` with valid token).
+- **Public Archive Return & Return URL Handling from `/login`:**
+  - When an unauthenticated visitor is on `/login` (whether navigated directly, bookmarked, or via "Sign In" in the header):
+    - **Header Brand Navigation:** Clicking the brand logo and title in `AuthLayout` immediately navigates to the public Home dashboard (`/`).
+    - **Public Archive Action on LoginCard:** `LoginCard` displays a prominent "Browse Public Archive / Back to Family Tree" action button.
+    - **Safe Return Routing:** If `returnUrl` is present and refers to a permitted public route (`/`, `/tree`, `/persons/:id`), guest return navigates to that destination. If `returnUrl` points to an authenticated-only restricted module (`/people`, `/media`, `/places`, `/settings`, etc.), guest return safely falls back to `/` (Home) to avoid an immediate bounce loop back to `/login`.
+    - **Post-Authentication Preservation:** When an unauthenticated visitor authenticates successfully from `/login?returnUrl=...`, their new session unlocks the previously restricted route, and the client redirects directly to the validated `returnUrl` (with strict open-redirect sanitization ensuring relative `/` paths only).
 - **Strict Module Segregation:**
   - All auxiliary and administrative modules are strictly restricted:
     - People & Surnames Directory (`/people`, `/people/*`)
@@ -238,3 +251,5 @@ All SQLx read queries pass through a privacy-filtering query pipeline:
 - [ ] **Admin Quality & Deduplication Isolation:** Access to Data Quality (`/quality`, `GET/POST /api/v1/quality/*`) and Duplicate Person Merge (`/people/merge`, `GET/POST /api/v1/people/merge*`) is strictly restricted to Administrators; Viewers and Editors receive `403 Forbidden`.
 - [ ] **Invitation Authorization:** Only Administrators can generate, list, or revoke user invitation tokens.
 - [ ] **Sole Admin Protection:** The system rejects any request that would deactivate or demote the last remaining active Administrator.
+- [ ] **Public Archive Egress from Login:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors on `/login` can return to the public archive (`/` or public `returnUrl`) via header brand click or "Browse Public Archive" button. When `ENABLE_PUBLIC_ACCESS=false`, egress remains strictly blocked, retaining the user securely on `/login`.
+- [ ] **Restricted Route Return URL Preservation:** In public mode, accessing a restricted route (e.g. `/people`) redirects to `/login?returnUrl=%2Fpeople`. Successful sign-in unlocks and navigates to the requested route, whereas clicking "Browse Public Archive" safely falls back to `/` without redirect looping.

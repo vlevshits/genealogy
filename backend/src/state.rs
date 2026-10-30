@@ -1,7 +1,7 @@
 use crate::config::AppConfig;
 use crate::error::AppError;
 use crate::services::{
-    auth::AuthMemoryStore, privacy::GenealogyPrivacyStore, security::RateLimiter,
+    auth::AuthMemoryStore, privacy::GenealogyPrivacyStore, security::RateLimiter, EmailService,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
@@ -57,6 +57,7 @@ pub struct AppState {
     pub auth_store: Arc<RwLock<AuthMemoryStore>>,
     pub privacy_store: Arc<RwLock<GenealogyPrivacyStore>>,
     pub rate_limiter: RateLimiter,
+    pub email_service: Arc<EmailService>,
 }
 
 impl AppState {
@@ -68,13 +69,16 @@ impl AppState {
             living_person_age_threshold: config.living_person_age_threshold,
             default_home_person_id: None,
         };
+        let cfg = Arc::new(config);
+        let email_service = Arc::new(EmailService::new(Arc::clone(&cfg)));
         Self {
             db,
-            config: Arc::new(config),
+            config: cfg,
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
             privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::empty())),
             rate_limiter: RateLimiter::new(),
+            email_service,
         }
     }
 
@@ -92,13 +96,16 @@ impl AppState {
             living_person_age_threshold: config.living_person_age_threshold,
             default_home_person_id: None,
         };
+        let cfg = Arc::new(config);
+        let email_service = Arc::new(EmailService::new(Arc::clone(&cfg)));
         Self {
             db,
-            config: Arc::new(config),
+            config: cfg,
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
             privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::demo())),
             rate_limiter: RateLimiter::new(),
+            email_service,
         }
     }
 

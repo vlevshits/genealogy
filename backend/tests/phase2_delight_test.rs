@@ -2,6 +2,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
+use base64::Engine;
 use genealogy_backend::{
     config::AppConfig,
     routes::create_router,
@@ -48,6 +49,7 @@ async fn setup_phase2_env(enable_public_access: bool) -> (axum::Router, String, 
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -84,6 +86,7 @@ async fn setup_phase2_env(enable_public_access: bool) -> (axum::Router, String, 
                 },
                 None,
                 None,
+                false,
             )
             .await
             .unwrap();
@@ -973,6 +976,10 @@ async fn test_dashboard_julian_anniversaries_fan_chart_kinship_and_places_map() 
         guest_dash.recent_activity.is_empty(),
         "Guest dashboard must not expose recent_activity"
     );
+    assert!(
+        guest_dash.latest_photos.is_empty(),
+        "Guest dashboard must not expose latest_photos"
+    );
 
     // 3. Test Stats (`GET /api/v1/stats`)
     let (st_stats, stats_val) = get_json(&app, "/api/v1/stats", Some(&editor_auth)).await;
@@ -1071,4 +1078,273 @@ async fn test_dashboard_julian_anniversaries_fan_chart_kinship_and_places_map() 
     assert!(default_store.media.is_empty());
     assert!(default_store.places.is_empty());
     assert!(!default_store.is_demo_seed);
+}
+
+#[tokio::test]
+async fn test_guest_dashboard_privacy_suppression_with_media_and_activity() {
+    let (app, admin_auth, editor_auth, _) = setup_phase2_env(true).await;
+
+    // 1. Create a person to generate recent_activity
+    let (st_p, _) = post_json(
+        &app,
+        "/api/v1/persons",
+        &editor_auth,
+        json!({
+            "sex": "M",
+            "given_name": "Ivan",
+            "surname": "Smirnov",
+            "birth_date": "1930-01-01",
+            "death_date": "1990-01-01",
+            "is_living": false
+        }),
+    )
+    .await;
+    assert_eq!(st_p, StatusCode::CREATED);
+
+    // 2. Upload a public photo via editor
+    let custom_payload = b"RIFF\x1a\x00\x00\x00WEBPVP8L\x0d\x00\x00\x00/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07\x00TEST_PHOTO";
+    let b64_data = base64::engine::general_purpose::STANDARD.encode(custom_payload);
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/media")
+                .header(header::AUTHORIZATION, &editor_auth)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .body(Body::from(
+                    json!({
+                        "file_name": "historic_photo.webp",
+                        "mime_type": "image/webp",
+                        "title": "Historic Photo",
+                        "data": format!("data:image/webp;base64,{b64_data}")
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // 3. Admin dashboard should have recent_activity and latest_photos
+    let (st_admin, admin_val) = get_json(&app, "/api/v1/dashboard", Some(&admin_auth)).await;
+    assert_eq!(st_admin, StatusCode::OK);
+    let admin_dash: DashboardResponse = serde_json::from_value(admin_val).unwrap();
+    assert!(
+        !admin_dash.recent_activity.is_empty(),
+        "Admin must see recent activity"
+    );
+    assert!(
+        !admin_dash.latest_photos.is_empty(),
+        "Admin must see latest photos"
+    );
+
+    // 4. Anonymous Guest dashboard MUST suppress both recent_activity AND latest_photos
+    let (st_guest, guest_val) = get_json(&app, "/api/v1/dashboard", None).await;
+    assert_eq!(st_guest, StatusCode::OK);
+    let guest_dash: DashboardResponse = serde_json::from_value(guest_val).unwrap();
+    assert!(
+        guest_dash.recent_activity.is_empty(),
+        "Guest dashboard must suppress recent_activity completely"
+    );
+    assert!(
+        guest_dash.latest_photos.is_empty(),
+        "Guest dashboard must suppress latest_photos completely"
+    );
+    assert!(
+        guest_dash.quality_summary.is_none(),
+        "Guest dashboard must suppress quality_summary"
+    );
+}
+
+#[tokio::test]
+async fn test_multi_trace_kinship_ranking_and_max_traces() {
+    let (app, admin_auth, _, _) = setup_phase2_env(true).await;
+
+    // 1. Create Grandfather (Pyotr)
+    let (_, p_gf) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Pyotr",
+            "surname": "Smirnov",
+            "sex": "M",
+            "birth_date": "1930",
+            "death_date": "2000"
+        }),
+    )
+    .await;
+    let gf_id = p_gf["id"].as_str().unwrap().to_string();
+
+    // 2. Create Parent 1 (Dmitry, son of Pyotr)
+    let (_, p_dmitry) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Dmitry",
+            "surname": "Smirnov",
+            "sex": "M",
+            "birth_date": "1955",
+            "death_date": "2020"
+        }),
+    )
+    .await;
+    let dmitry_id = p_dmitry["id"].as_str().unwrap().to_string();
+
+    // 3. Create Parent 2 (Elena, daughter of Pyotr)
+    let (_, p_elena) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Elena",
+            "surname": "Smirnova",
+            "sex": "F",
+            "birth_date": "1958"
+        }),
+    )
+    .await;
+    let elena_id = p_elena["id"].as_str().unwrap().to_string();
+
+    // Link Pyotr -> [Dmitry, Elena]
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": gf_id,
+            "children_ids": [dmitry_id.clone(), elena_id.clone()]
+        }),
+    )
+    .await;
+
+    // 4. Create Person A (Alexey, son of Dmitry -> grandson of Pyotr)
+    let (_, p_alexey) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Alexey",
+            "surname": "Smirnov",
+            "sex": "M",
+            "birth_date": "1980"
+        }),
+    )
+    .await;
+    let alexey_id = p_alexey["id"].as_str().unwrap().to_string();
+
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": dmitry_id,
+            "children_ids": [alexey_id.clone()]
+        }),
+    )
+    .await;
+
+    // 5. Create Person B (Olga, daughter of Elena -> granddaughter of Pyotr)
+    let (_, p_olga) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Olga",
+            "surname": "Kuznetsova",
+            "sex": "F",
+            "birth_date": "1982"
+        }),
+    )
+    .await;
+    let olga_id = p_olga["id"].as_str().unwrap().to_string();
+
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": elena_id,
+            "children_ids": [olga_id.clone()]
+        }),
+    )
+    .await;
+
+    // 6. Also marry Alexey and Olga (marital connection between first cousins)
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": alexey_id,
+            "partner2_id": olga_id
+        }),
+    )
+    .await;
+
+    // Query kinship with max_traces = 5
+    let (st, kin_val) = get_json(
+        &app,
+        &format!("/api/v1/kinship?from={alexey_id}&to={olga_id}&max_traces=5"),
+        Some(&admin_auth),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let kin: KinshipResponse = serde_json::from_value(kin_val).unwrap();
+
+    // Verify multiple traces were discovered!
+    assert!(kin.connected);
+    assert_eq!(kin.traces_count, 2);
+    assert_eq!(kin.traces.len(), 2);
+
+    // Trace 1 MUST be the biological blood relationship (First cousin), ranked FIRST!
+    let trace1 = &kin.traces[0];
+    assert!(
+        trace1.is_blood_relation,
+        "Biological blood relationship must be ranked first"
+    );
+    assert_eq!(trace1.relationship_key, "first_cousin");
+    assert_eq!(trace1.degree_of_kinship, 4);
+    assert_eq!(trace1.common_ancestor_ids, vec![gf_id.clone()]);
+    assert_eq!(trace1.steps.len(), 5);
+    assert_eq!(trace1.steps[0].relation_to_next.as_deref(), Some("Father"));
+    assert_eq!(trace1.steps[0].relation_to_next_ru.as_deref(), Some("Отец"));
+
+    // Trace 2 is the affinal/marital relationship (Wife)
+    let trace2 = &kin.traces[1];
+    assert!(
+        !trace2.is_blood_relation,
+        "Affinal/marital path must come after blood path"
+    );
+    assert_eq!(trace2.relationship_key, "wife");
+    assert_eq!(trace2.degree_of_kinship, 1);
+    assert_eq!(trace2.steps.len(), 2);
+    assert_eq!(trace2.steps[0].relation_to_next.as_deref(), Some("Wife"));
+    assert_eq!(trace2.steps[0].relation_to_next_ru.as_deref(), Some("Жена"));
+
+    // Top-level fields MUST match Trace 1 for backward compatibility
+    assert_eq!(kin.relationship_key, trace1.relationship_key);
+    assert_eq!(kin.label_en, trace1.label_en);
+    assert_eq!(kin.label_ru, trace1.label_ru);
+    assert_eq!(kin.degree_of_kinship, trace1.degree_of_kinship);
+    assert_eq!(kin.is_blood_relation, trace1.is_blood_relation);
+    assert_eq!(kin.path_person_ids, trace1.path_person_ids);
+
+    // Query with max_traces = 1: should return only 1 trace
+    let (st1, kin_val1) = get_json(
+        &app,
+        &format!("/api/v1/kinship?from={alexey_id}&to={olga_id}&max_traces=1"),
+        Some(&admin_auth),
+    )
+    .await;
+    assert_eq!(st1, StatusCode::OK);
+    let kin1: KinshipResponse = serde_json::from_value(kin_val1).unwrap();
+    assert_eq!(kin1.traces_count, 1);
+    assert_eq!(kin1.traces.len(), 1);
+    assert_eq!(kin1.traces[0].id, "trace-1");
+    assert!(kin1.traces[0].is_blood_relation);
 }

@@ -2,6 +2,8 @@ pub mod auth;
 pub mod backup;
 pub mod dashboard;
 pub mod db_init;
+pub mod email;
+pub use email::EmailService;
 pub mod gedcom;
 pub mod genealogy;
 pub mod history;

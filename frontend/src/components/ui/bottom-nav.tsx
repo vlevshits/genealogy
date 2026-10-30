@@ -21,6 +21,7 @@ import { useAuth } from '../../lib/auth-context';
 import { BrandLogoIcon } from './brand-logo-icon';
 import { Button } from './button';
 import { Drawer } from './drawer';
+import { buildLoginUrl } from '../../lib/navigation-utils';
 import { ThemeMode } from '../../types/common';
 
 export interface BottomNavProps {
@@ -96,7 +97,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         {
           id: 'signin',
           label: t('nav.signIn'),
-          href: '/login',
+          href: buildLoginUrl(
+            currentPath,
+            typeof window !== 'undefined' ? window.location.search : undefined
+          ),
           icon: <LogIn className="h-5 w-5" />,
         },
       ];
@@ -139,7 +143,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <>
       <nav
-        aria-label="Main navigation"
+        aria-label={t('nav.bottomNav')}
         className={cn(
           'border-t border-border bg-surface/95 backdrop-blur-md',
           inlinePreview

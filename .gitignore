@@ -74,3 +74,4 @@ scratch/
 # Local Private Test Data & Real Exports (NEVER commit real family data)
 test-data/
 
+.playwright-mcp

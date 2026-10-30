@@ -49,19 +49,17 @@ The Home Dashboard provides an inviting, informative landing view that welcomes 
 +------------------------------------------------------------------------------------+
 | Levshits Family Archive                                              [Open Tree →] | <- Zero Add button
 +-----------------------------------+------------------------------------------------+
-| 🎂 THIS MONTH                      | 🕓 RECENTLY ADDED & CHANGED                    |
-| Today   · I. turns 34 (Living)    | Added Пётр Щеглов — 2h ago                     |
-| Nov 2   · Ivan Levshits (1931†)   | Uploaded 6 photos — yesterday                  |
-|          would be 95 — birthday   | Edited E. — 2 days ago                         |
-| Nov 7   · Wedding anniversary     |                               (Zero Undo CTAs, |
-|          A. & E. Petrov — 90 yrs  |                                all read-only)  |
+| 🎂 THIS MONTH                      | 📊 TREE AT A GLANCE                            |
+| Today   · I. turns 34 (Living)    | 1,420 people · 512 families                    |
+| Nov 2   · Ivan Levshits (1931†)   | 340 photos · 12 generations                    |
+|          would be 95 — birthday   | Oldest ancestor: b. abt 1702                   |
+| Nov 7   · Wedding anniversary     | (Admin nudge link hidden)                      |
+|          A. & E. Petrov — 90 yrs  |                                                |
+| (Living dates masked)             |                                                |
 +-----------------------------------+------------------------------------------------+
-| 📊 TREE AT A GLANCE                | 🖼 LATEST PHOTOS                                |
-| 1,420 people · 512 families       | [thumb][thumb][thumb][thumb][thumb][thumb]     |
-| 340 photos · 12 generations       | (Public deceased ancestor photos only;         |
-| Oldest ancestor: b. abt 1702      |  clicking opens preview with sign-in CTA)      |
-| (Admin nudge link hidden)         |                                                |
-+-----------------------------------+------------------------------------------------+
+| [Activity feed & Photos preview are hidden in public guest mode to preserve        |
+|  transaction log privacy and restrict media previews to authenticated family]      |
++------------------------------------------------------------------------------------+
 | Footer: [Tree Title] © 2026 • Private Family Archive                               |
 +------------------------------------------------------------------------------------+
 ```
@@ -85,8 +83,8 @@ The Home Dashboard provides an inviting, informative landing view that welcomes 
 ### 3.3 `RecentActivityWidget`
 - Shows recent tree modifications in reverse chronological order.
 - **Admin View:** Full transaction descriptions, actor attribution, relative timestamp, and 1-click `Undo` button.
-- **Viewer View:** Read-only list of additions without `Undo` buttons.
-- **Public Guest View:** Read-only list with living person names masked to single initial with dot (`И.` / `J.`). Absolutely zero `Undo` buttons or author links.
+- **Viewer & Editor View:** Read-only list of additions without `Undo` buttons.
+- **Public Guest View:** **Strictly hidden / omitted from rendering** on the public dashboard (`effectiveTier === 'public_anonymous'`). The internal transaction log is unsuited for public visitors and would render an empty placeholder.
 
 ### 3.4 `TreeGlanceWidget`
 - Displays high-level archive statistics: total individuals, families, places, and photos, plus generational span.
@@ -95,7 +93,8 @@ The Home Dashboard provides an inviting, informative landing view that welcomes 
 
 ### 3.5 `LatestPhotosWidget`
 - Grid of 6 recently uploaded family photographs and documents.
-- **Public Guest Mode:** Displays photographs of deceased ancestors only; photos containing living relatives are excluded. Clicking a photo opens a read-only preview card or prompts sign-in to browse the full media library.
+- **Authenticated View:** Displays thumbnails of recently added photographs.
+- **Public Guest View:** **Strictly hidden / omitted from rendering** on the public dashboard (`effectiveTier === 'public_anonymous'`). Photo browsing is reserved for authenticated family members to safeguard family privacy.
 
 ---
 
@@ -103,8 +102,9 @@ The Home Dashboard provides an inviting, informative landing view that welcomes 
 
 - [ ] **Default Private Redirection:** When `ENABLE_PUBLIC_ACCESS=false`, any unauthenticated visit to `/` immediately redirects to `/login`.
 - [ ] **Public Guest Read-Only Mode:** When `ENABLE_PUBLIC_ACCESS=true`, unauthenticated visitors can view `/` with zero edit controls and zero `+ Add Person` button.
-- [ ] **Living Relative Shielding:** On public `/`, living individuals display solely as single initial with dot (`И.` / `J.`) with exact birth dates and private records hidden.
-- [ ] **Zero Undo CTAs in Public Mode:** The recent activity widget in public guest mode completely suppresses `Undo` buttons and administrative links.
+- [ ] **Public Guest 2-Widget Grid:** In public guest mode (`effectiveTier === 'public_anonymous'`), `/` renders exclusively `AnniversariesWidget` and `TreeGlanceWidget`; `RecentActivityWidget` and `LatestPhotosWidget` are strictly hidden from the DOM.
+- [ ] **Zero Photo/Activity Payload in Public API:** Backend `GET /api/v1/dashboard/stats` (or `dashboard.rs`) for `CallerAccess::PublicAnonymous` returns empty arrays (`[]`) for both `recent_activity` and `latest_photos`.
+- [ ] **Living Relative Shielding:** On public `/`, living individuals in `AnniversariesWidget` display solely as single initial with dot (`И.` / `J.`) with exact birth dates and private records hidden.
 - [ ] **Role-Segregated Actions:** `+ Add Person` button renders exclusively for Editors and Administrators; hidden for Viewers and public guests.
 - [ ] **Accessible Widget Cards:** All widget cards satisfy WCAG 2.2 AA keyboard navigation and focus-visible standards.
 - [ ] **Default Clean Slate & Zero Dummy Data:** Production builds never insert or display hardcoded mock individuals or fake dashboard payload; an empty database displays the authentic empty-tree onboarding card.

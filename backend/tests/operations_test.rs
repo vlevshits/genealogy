@@ -343,6 +343,7 @@ async fn test_operations_and_settings_endpoints() {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -585,6 +586,7 @@ async fn test_settings_locked_from_env_blocks_mutation() {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -24,6 +24,7 @@ use crate::{
             UserDto, UserRecord, WebAuthnChallengeResponse,
         },
         rbac::RequireAdmin,
+        security::RequestContext,
     },
     state::AppState,
 };
@@ -31,21 +32,6 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct MagicLinkQuery {
     pub token: String,
-}
-
-fn extract_client_meta(headers: &HeaderMap) -> (Option<String>, String) {
-    let ua = headers
-        .get(header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-    let ip = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "127.0.0.1".to_string());
-    (ua, ip)
 }
 
 pub fn extract_session_token(headers: &HeaderMap) -> Option<String> {
@@ -68,7 +54,10 @@ async fn require_authenticated(
     ),
     tag = "Auth"
 )]
-pub async fn get_setup_status(State(state): State<AppState>) -> Json<SetupStatusResponse> {
+pub async fn get_setup_status(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+) -> Json<SetupStatusResponse> {
     let is_initialized = AuthService::is_initialized(&state).await;
     let settings = state.resolve_instance_settings().await;
     Json(SetupStatusResponse {
@@ -77,8 +66,9 @@ pub async fn get_setup_status(State(state): State<AppState>) -> Json<SetupStatus
         default_locale: settings.default_locale,
         enable_public_access: settings.enable_public_access,
         auth_password_enabled: state.config.is_password_auth_effectively_enabled(),
-        rp_id: state.config.rp_id.clone(),
+        rp_id: ctx.effective_rp_id,
         rp_name: state.config.rp_name.clone(),
+        smtp_enabled: state.config.smtp_enabled,
     })
 }
 
@@ -93,14 +83,13 @@ pub async fn get_setup_status(State(state): State<AppState>) -> Json<SetupStatus
 )]
 pub async fn create_register_challenge(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
 ) -> Result<Json<WebAuthnChallengeResponse>, AppError> {
-    let (_, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
     let challenge = AuthService::create_challenge(&state, None).await?;
     Ok(Json(WebAuthnChallengeResponse {
         challenge,
-        rp_id: state.config.rp_id.clone(),
+        rp_id: ctx.effective_rp_id,
         rp_name: state.config.rp_name.clone(),
         timeout_ms: 60_000,
     }))
@@ -119,14 +108,19 @@ pub async fn create_register_challenge(
 )]
 pub async fn complete_initial_setup(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<SetupRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
-    let (resp, cookie) = AuthService::setup_initial_admin(&state, req, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::setup_initial_admin(
+        &state,
+        req,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     {
         let mut store = state.privacy_store.write().await;
         if store.is_demo_seed {
@@ -174,14 +168,19 @@ pub async fn preview_invitation(
 )]
 pub async fn verify_invite_registration(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<InviteRegisterRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
-    let (resp, cookie) = AuthService::register_with_invitation(&state, req, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::register_with_invitation(
+        &state,
+        req,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     Ok((
         StatusCode::CREATED,
         [(header::SET_COOKIE, cookie)],
@@ -202,11 +201,10 @@ pub async fn verify_invite_registration(
 )]
 pub async fn create_login_challenge(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     payload: Option<Json<LoginChallengeRequest>>,
 ) -> Result<Json<LoginChallengeResponse>, AppError> {
-    let (_, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
     let email_opt = payload
         .and_then(|Json(p)| p.email)
@@ -216,10 +214,11 @@ pub async fn create_login_challenge(
     let mut allow_credentials = Vec::new();
     let mut user_id_opt = None;
 
-    if let Some(email) = email_opt {
-        let store = state.auth_store.read().await;
-        if let Some(user) = store.users.iter().find(|u| u.email == email && u.is_active) {
+    if let Some(ref email) = email_opt {
+        if let Ok(Some(user)) = AuthService::ensure_user_and_passkeys_by_email(&state, email).await
+        {
             user_id_opt = Some(user.id);
+            let store = state.auth_store.read().await;
             allow_credentials = store
                 .passkeys
                 .iter()
@@ -232,7 +231,7 @@ pub async fn create_login_challenge(
     let challenge = AuthService::create_challenge(&state, user_id_opt).await?;
     Ok(Json(LoginChallengeResponse {
         challenge,
-        rp_id: state.config.rp_id.clone(),
+        rp_id: ctx.effective_rp_id,
         timeout_ms: 60_000,
         allow_credentials,
     }))
@@ -252,14 +251,21 @@ pub async fn create_login_challenge(
 )]
 pub async fn verify_passkey_login(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<PasskeyLoginVerifyRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
-    let (resp, cookie) = AuthService::verify_passkey_login(&state, req, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::verify_passkey_login(
+        &state,
+        req,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        Some(ctx.effective_rp_id),
+        Some(ctx.host),
+        ctx.is_https,
+    )
+    .await?;
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -277,14 +283,19 @@ pub async fn verify_passkey_login(
 )]
 pub async fn login_with_password(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<PasswordLoginRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
-    let (resp, cookie) = AuthService::password_login(&state, req, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::password_login(
+        &state,
+        req,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -294,7 +305,8 @@ pub async fn login_with_password(
     request_body = MagicLinkRequest,
     responses(
         (status = 200, description = "Magic sign-in link generated", body = MagicLinkRequestResponse),
-        (status = 429, description = "Rate limited (max 3 per 15 minutes per email)", body = ErrorResponse)
+        (status = 429, description = "Rate limited (max 3 per 15 minutes per email)", body = ErrorResponse),
+        (status = 503, description = "SMTP email delivery is not configured on this server", body = ErrorResponse)
     ),
     tag = "Auth"
 )]
@@ -320,12 +332,17 @@ pub async fn request_magic_link(
 )]
 pub async fn verify_magic_link_get(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Query(query): Query<MagicLinkQuery>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    let (resp, cookie) = AuthService::verify_magic_link(&state, &query.token, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::verify_magic_link(
+        &state,
+        &query.token,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -341,12 +358,17 @@ pub async fn verify_magic_link_get(
 )]
 pub async fn verify_magic_link_post(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<MagicLinkVerifyRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    let (resp, cookie) = AuthService::verify_magic_link(&state, &req.token, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::verify_magic_link(
+        &state,
+        &req.token,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -363,14 +385,19 @@ pub async fn verify_magic_link_post(
 )]
 pub async fn login_with_recovery_code(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    Extension(ctx): Extension<RequestContext>,
     Json(req): Json<RecoveryCodeLoginRequest>,
 ) -> Result<Response, AppError> {
-    let (ua, ip) = extract_client_meta(&headers);
-    state.rate_limiter.check_auth_ip(&ip).await?;
+    state.rate_limiter.check_auth_ip(&ctx.client_ip).await?;
 
-    let (resp, cookie) = AuthService::login_with_recovery_code(&state, req, ua, Some(ip)).await?;
-    let cookie = AuthService::apply_forwarded_proto_secure_cookie(cookie, &headers);
+    let (resp, cookie) = AuthService::login_with_recovery_code(
+        &state,
+        req,
+        ctx.user_agent,
+        Some(ctx.client_ip),
+        ctx.is_https,
+    )
+    .await?;
     Ok((StatusCode::OK, [(header::SET_COOKIE, cookie)], Json(resp)).into_response())
 }
 
@@ -467,6 +494,7 @@ pub async fn set_me_home_person(
 )]
 pub async fn logout(
     State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     if let Some(token) = extract_session_token(&headers) {
@@ -486,7 +514,17 @@ pub async fn logout(
         }
     }
 
-    let clear_cookie = "session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0".to_string();
+    let is_configured_https = state
+        .config
+        .app_origin
+        .split([',', ';'])
+        .any(|o| o.trim().starts_with("https://"));
+    let secure_flag = if ctx.is_https || is_configured_https {
+        "; Secure"
+    } else {
+        ""
+    };
+    let clear_cookie = format!("session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{secure_flag}");
     Ok((StatusCode::NO_CONTENT, [(header::SET_COOKIE, clear_cookie)]).into_response())
 }
 
@@ -504,13 +542,8 @@ pub async fn list_passkeys(
     headers: HeaderMap,
 ) -> Result<Json<PasskeyListResponse>, AppError> {
     let (user, _) = require_authenticated(&state, &headers).await?;
-    let store = state.auth_store.read().await;
-    let items = store
-        .passkeys
-        .iter()
-        .filter(|p| p.user_id == user.id)
-        .map(AuthService::to_passkey_dto)
-        .collect();
+    let passkeys = AuthService::ensure_passkeys_by_user_id(&state, user.id).await?;
+    let items = passkeys.iter().map(AuthService::to_passkey_dto).collect();
     Ok(Json(PasskeyListResponse { items }))
 }
 
@@ -525,13 +558,14 @@ pub async fn list_passkeys(
 )]
 pub async fn create_add_passkey_challenge(
     State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
     headers: HeaderMap,
 ) -> Result<Json<WebAuthnChallengeResponse>, AppError> {
     let (user, _) = require_authenticated(&state, &headers).await?;
     let challenge = AuthService::create_challenge(&state, Some(user.id)).await?;
     Ok(Json(WebAuthnChallengeResponse {
         challenge,
-        rp_id: state.config.rp_id.clone(),
+        rp_id: ctx.effective_rp_id,
         rp_name: state.config.rp_name.clone(),
         timeout_ms: 60_000,
     }))

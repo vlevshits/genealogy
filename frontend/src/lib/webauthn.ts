@@ -78,6 +78,27 @@ export function rememberPasskeyCredentialId(credentialId: string): void {
   }
 }
 
+export function resolveWebAuthnRpId(challengeRpId?: string): string {
+  if (typeof window === 'undefined') {
+    return challengeRpId || 'localhost';
+  }
+  const host = window.location.hostname;
+  const isHostLocal = host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1';
+
+  if (isHostLocal) {
+    return 'localhost';
+  }
+
+  // Non-localhost origin (e.g. genealogy.levshitsvv.pro):
+  // If challengeRpId is provided and is a valid domain suffix of host (or equals host), return challengeRpId.
+  if (challengeRpId && (host === challengeRpId || host.endsWith(`.${challengeRpId}`))) {
+    return challengeRpId;
+  }
+
+  // Fallback to the current host domain which is guaranteed to be accepted by the browser
+  return host;
+}
+
 export function getRememberedPasskeyCredentialId(): string | null {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -93,9 +114,15 @@ export async function createPasskeyCredential(
   challengeRes: WebAuthnChallengeResponse,
   userEmail: string,
   displayName: string,
-  deviceName?: string
+  deviceName?: string,
+  attachment?: AuthenticatorAttachment
 ): Promise<PasskeyRegistrationInput> {
   const resolvedDeviceName = deviceName?.trim() || detectDefaultDeviceName();
+
+  const isTestEnv =
+    import.meta.env.MODE === 'test' ||
+    typeof window === 'undefined' ||
+    !window.PublicKeyCredential;
 
   if (
     typeof window !== 'undefined' &&
@@ -103,10 +130,12 @@ export async function createPasskeyCredential(
     typeof window.PublicKeyCredential !== 'undefined'
   ) {
     try {
+      const rpId = resolveWebAuthnRpId(challengeRes.rp_id);
+
       const publicKeyOptions: PublicKeyCredentialCreationOptions = {
         challenge: base64UrlToUint8Array(challengeRes.challenge),
         rp: {
-          id: challengeRes.rp_id || window.location.hostname || 'localhost',
+          id: rpId,
           name: challengeRes.rp_name || 'Family Tree Archive',
         },
         user: {
@@ -121,6 +150,7 @@ export async function createPasskeyCredential(
         timeout: challengeRes.timeout_ms || 60000,
         attestation: 'none',
         authenticatorSelection: {
+          ...(attachment ? { authenticatorAttachment: attachment } : {}),
           userVerification: 'preferred',
           residentKey: 'preferred',
         },
@@ -150,10 +180,20 @@ export async function createPasskeyCredential(
           transports,
         };
       }
-    } catch {
+      if (!isTestEnv) {
+        throw new Error('Passkey credential creation returned null');
+      }
+    } catch (err) {
+      if (!isTestEnv) {
+        throw err;
+      }
       // Fall through to deterministic software credential when running in
       // headless browser / automated CI without an OS authenticator attached.
     }
+  }
+
+  if (!isTestEnv) {
+    throw new Error('WebAuthn is not supported in this environment');
   }
 
   const safeSlug = userEmail.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user';
@@ -173,6 +213,11 @@ export async function createPasskeyCredential(
 export async function getPasskeyAssertion(
   challengeRes: LoginChallengeResponse
 ): Promise<PasskeyLoginVerifyRequest> {
+  const isTestEnv =
+    import.meta.env.MODE === 'test' ||
+    typeof window === 'undefined' ||
+    !window.PublicKeyCredential;
+
   if (
     typeof window !== 'undefined' &&
     window.navigator?.credentials &&
@@ -183,9 +228,11 @@ export async function getPasskeyAssertion(
         (id) => Boolean(id) && !id.startsWith('pk-')
       );
 
+      const rpId = resolveWebAuthnRpId(challengeRes.rp_id);
+
       const publicKeyRequest: PublicKeyCredentialRequestOptions = {
         challenge: base64UrlToUint8Array(challengeRes.challenge),
-        rpId: challengeRes.rp_id || window.location.hostname || 'localhost',
+        rpId,
         timeout: challengeRes.timeout_ms || 60000,
         userVerification: 'preferred',
         ...(realAllowCredentials.length > 0
@@ -214,9 +261,19 @@ export async function getPasskeyAssertion(
           signature: bufferToBase64Url(resp.signature),
         };
       }
-    } catch {
+      if (!isTestEnv) {
+        throw new Error('Passkey assertion returned null');
+      }
+    } catch (err) {
+      if (!isTestEnv) {
+        throw err;
+      }
       // Fall through to remembered / allowed credential in headless test environments
     }
+  }
+
+  if (!isTestEnv) {
+    throw new Error('Passkey authentication failed');
   }
 
   const candidateId =

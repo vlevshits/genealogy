@@ -41,6 +41,7 @@ async fn setup_empty_state_with_roles() -> (AppState, String, String, String) {
         },
         None,
         Some("127.0.0.1".to_string()),
+        false,
     )
     .await
     .unwrap();
@@ -71,6 +72,7 @@ async fn setup_empty_state_with_roles() -> (AppState, String, String, String) {
         },
         None,
         Some("127.0.0.1".to_string()),
+        false,
     )
     .await
     .unwrap();
@@ -100,6 +102,7 @@ async fn setup_empty_state_with_roles() -> (AppState, String, String, String) {
         },
         None,
         Some("127.0.0.1".to_string()),
+        false,
     )
     .await
     .unwrap();

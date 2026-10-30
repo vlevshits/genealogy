@@ -9,12 +9,15 @@ import {
   Move,
   Plus,
   RotateCcw,
+  Sparkles,
   Star,
+  UserCheck,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import { FaceTagDto, MediaAssetSummaryDto } from '../../api/client';
-import { Avatar, Badge, Button } from '../ui';
+import { Avatar, Badge, Button, IconButton } from '../ui';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../i18n';
 import {
@@ -22,13 +25,9 @@ import {
   FaceTagCandidatePerson,
   PersonFacePicker,
 } from './PersonFacePicker';
+import { NormalizedBox } from './faceDetection';
 
-export interface NormalizedBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type { NormalizedBox };
 
 export interface FaceTagCanvasProps {
   asset: MediaAssetSummaryDto;
@@ -36,6 +35,12 @@ export interface FaceTagCanvasProps {
   isTaggingMode?: boolean;
   onToggleTaggingMode?: (active: boolean) => void;
   candidates?: FaceTagCandidatePerson[];
+  candidateBoxes?: NormalizedBox[];
+  onDetectFaces?: (imgElement: HTMLImageElement | null) => Promise<void> | void;
+  isDetectingFaces?: boolean;
+  onDismissCandidateBox?: (index: number) => void;
+  targetPersonId?: string | null;
+  onCancelTargetPerson?: () => void;
   highlightedTagId?: string | null;
   onHighlightTag?: (tagId: string | null) => void;
   onCreateFaceTag?: (
@@ -60,6 +65,12 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
   isTaggingMode = false,
   onToggleTaggingMode = () => {},
   candidates = DEFAULT_FACE_CANDIDATES,
+  candidateBoxes = [],
+  onDetectFaces,
+  isDetectingFaces = false,
+  onDismissCandidateBox,
+  targetPersonId = null,
+  onCancelTargetPerson,
   highlightedTagId = null,
   onHighlightTag,
   onCreateFaceTag = () => {},
@@ -68,6 +79,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
 }) => {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   const [zoom, setZoom] = useState<number>(1);
   const [hoveredTagId, setHoveredTagId] = useState<string | null>(null);
@@ -93,6 +105,10 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
     candidates.map((c) => [c.id, c])
   );
 
+  const targetPerson = targetPersonId
+    ? candidateById.get(targetPersonId)
+    : null;
+
   const getNormalizedPointer = (
     clientX: number,
     clientY: number
@@ -105,6 +121,16 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
       x: clamp01((clientX - rect.left) / rect.width),
       y: clamp01((clientY - rect.top) / rect.height),
     };
+  };
+
+  const handleAdoptCandidate = (candBox: NormalizedBox, index: number) => {
+    onDismissCandidateBox?.(index);
+    if (targetPersonId) {
+      void onCreateFaceTag(candBox, targetPersonId, false);
+      onCancelTargetPerson?.();
+    } else {
+      setDraftBox(candBox);
+    }
   };
 
   const handlePointerDownCanvas = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -192,14 +218,22 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
   const handlePointerUpCanvas = () => {
     if (drawStart) {
       setDrawStart(null);
-      if (draftBox && (draftBox.width < 0.06 || draftBox.height < 0.06)) {
-        // Expand very small click into a comfortable default face box
-        setDraftBox({
-          x: clamp01(Math.min(0.8, draftBox.x)),
-          y: clamp01(Math.min(0.8, draftBox.y)),
+      let finalBox = draftBox;
+      if (finalBox && (finalBox.width < 0.06 || finalBox.height < 0.06)) {
+        finalBox = {
+          x: clamp01(Math.min(0.8, finalBox.x)),
+          y: clamp01(Math.min(0.8, finalBox.y)),
           width: 0.18,
           height: 0.22,
-        });
+        };
+      }
+
+      if (targetPersonId && finalBox) {
+        setDraftBox(null);
+        void onCreateFaceTag(finalBox, targetPersonId, false);
+        onCancelTargetPerson?.();
+      } else {
+        setDraftBox(finalBox);
       }
     }
     if (activeDragTag) {
@@ -222,14 +256,71 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-surface-muted/60 rounded-2xl border border-border overflow-hidden">
-      {/* Top Tagging Banner when Tag Faces mode is active */}
-      {canEdit && isTaggingMode && (
-        <div className="flex items-center justify-between gap-2 bg-brand/12 border-b border-brand/30 px-4 py-2 text-xs text-primary">
+      {/* Top Banner when Target Person is Armed */}
+      {canEdit && isTaggingMode && targetPerson && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-brand/15 border-b border-brand/40 px-4 py-2 text-xs text-primary font-medium">
+          <div className="flex items-center gap-2 min-w-0">
+            <UserCheck className="h-4 w-4 text-brand shrink-0" />
+            <span className="break-words">
+              {t('mediaArchive.targetPersonBanner', {
+                name: targetPerson.displayName,
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            {onDetectFaces && isImage && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isDetectingFaces}
+                loading={isDetectingFaces}
+                onClick={() => void onDetectFaces(imgRef.current)}
+                leftIcon={<Sparkles className="h-3.5 w-3.5 text-sky-500" />}
+                className="h-7 min-h-0 px-2.5 text-xs text-sky-950 dark:text-sky-100 bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-700 touch-target-expand"
+              >
+                {isDetectingFaces
+                  ? t('mediaArchive.detectingFacesBtn')
+                  : t('mediaArchive.autoDetectFacesBtn')}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancelTargetPerson}
+              leftIcon={<X className="h-3.5 w-3.5" />}
+              className="h-7 sm:h-6 min-h-0 px-2 text-xs touch-target-expand"
+            >
+              {t('mediaArchive.cancelTargetPerson')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Tagging Banner when standard Tag Faces mode is active without target person */}
+      {canEdit && isTaggingMode && !targetPerson && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-brand/12 border-b border-brand/30 px-4 py-2 text-xs text-primary">
           <span className="inline-flex items-center gap-2 font-medium">
             <Crosshair className="h-4 w-4 text-brand" />
             <span>{t('mediaArchive.taggingModeBanner')}</span>
           </span>
+
           <div className="flex items-center gap-2">
+            {onDetectFaces && isImage && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isDetectingFaces}
+                loading={isDetectingFaces}
+                onClick={() => void onDetectFaces(imgRef.current)}
+                leftIcon={<Sparkles className="h-3.5 w-3.5 text-sky-500" />}
+                className="h-7 min-h-0 px-2.5 text-xs text-sky-950 dark:text-sky-100 bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-700"
+              >
+                {isDetectingFaces
+                  ? t('mediaArchive.detectingFacesBtn')
+                  : t('mediaArchive.autoDetectFacesBtn')}
+              </Button>
+            )}
+
             {!draftBox && (
               <Button
                 variant="secondary"
@@ -248,6 +339,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                 {t('mediaArchive.placeFaceBoxBtn')}
               </Button>
             )}
+
             <Button
               variant="ghost"
               size="sm"
@@ -281,11 +373,73 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
             )}
           >
             <img
+              ref={imgRef}
               src={asset.file_url}
               alt={asset.title}
               draggable={false}
               className="block max-h-[62vh] w-auto rounded-xl border border-border object-contain shadow-md"
             />
+
+            {/* Candidate Suggestion Rectangles from Auto-Detect */}
+            {canEdit &&
+              isTaggingMode &&
+              candidateBoxes.map((candBox, idx) => (
+                <div
+                  key={`cand-${idx}-${candBox.x}-${candBox.y}`}
+                  data-face-tag-interactive="true"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('mediaArchive.candidateFaceHover')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAdoptCandidate(candBox, idx);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleAdoptCandidate(candBox, idx);
+                    }
+                  }}
+                  style={{
+                    left: `${Number((candBox.x * 100).toFixed(2))}%`,
+                    top: `${Number((candBox.y * 100).toFixed(2))}%`,
+                    width: `${Number((candBox.width * 100).toFixed(2))}%`,
+                    height: `${Number((candBox.height * 100).toFixed(2))}%`,
+                  }}
+                  className="absolute rounded-lg border-2 border-dashed border-sky-600 dark:border-sky-400 bg-sky-500/10 hover:bg-sky-500/20 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none transition-all cursor-pointer group z-20 flex flex-col justify-between p-1 shadow-md"
+                >
+                  <div className="flex items-center justify-between w-full pointer-events-auto">
+                    <div className="flex items-center gap-1 self-start rounded-md bg-sky-600/90 text-[10px] font-semibold text-white px-1.5 py-0.5 shadow-xs">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      <span>{t('mediaArchive.suggestedFaceBadge')}</span>
+                    </div>
+                    {onDismissCandidateBox && (
+                      <IconButton
+                        label={t('mediaArchive.dismissCandidateAria')}
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDismissCandidateBox(idx);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onDismissCandidateBox(idx);
+                          }
+                        }}
+                        className="h-5 w-5 min-h-0 min-w-0 p-0 rounded-full bg-surface/90 text-secondary hover:text-danger hover:bg-surface shadow-xs touch-target-expand cursor-pointer"
+                      >
+                        <X className="h-3 w-3" />
+                      </IconButton>
+                    )}
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity self-center rounded-md bg-surface/95 text-primary text-[11px] font-medium px-2 py-0.5 shadow-md border border-border pointer-events-none">
+                    {t('mediaArchive.suggestedFaceTooltip')}
+                  </div>
+                </div>
+              ))}
 
             {/* Existing Face Bounding Boxes */}
             {asset.face_tags.map((tag) => {
@@ -339,7 +493,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                             },
                           });
                         }}
-                        className="absolute top-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface/90 text-primary shadow-xs cursor-move"
+                        className="absolute top-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface/90 text-primary shadow-xs cursor-move touch-target-expand before:absolute before:-inset-2 before:content-['']"
                       >
                         <Move className="h-3 w-3" />
                       </span>
@@ -361,7 +515,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                             },
                           });
                         }}
-                        className="absolute bottom-0.5 right-0.5 inline-flex h-5 w-5 items-center justify-center rounded-md bg-brand text-surface shadow-xs cursor-nwse-resize"
+                        className="absolute bottom-0.5 right-0.5 inline-flex h-5 w-5 items-center justify-center rounded-md bg-brand text-surface shadow-xs cursor-nwse-resize touch-target-expand before:absolute before:-inset-2 before:content-['']"
                       >
                         <Maximize2 className="h-3 w-3" />
                       </span>
@@ -480,10 +634,14 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
               variant={isTaggingMode ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => {
-                if (isTaggingMode) setDraftBox(null);
+                if (isTaggingMode) {
+                  setDraftBox(null);
+                  onCancelTargetPerson?.();
+                }
                 onToggleTaggingMode(!isTaggingMode);
               }}
               leftIcon={<Crosshair className="h-3.5 w-3.5" />}
+              className="h-8 min-h-8 px-3 text-xs touch-target-expand"
             >
               {t('mediaArchive.tagFacesToolBtn')}
             </Button>
@@ -500,7 +658,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                   setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))
                 }
                 aria-label={t('mediaArchive.zoomOutAria')}
-                className="h-8 w-8 min-h-0 p-0"
+                className="h-8 w-8 min-h-0 p-0 touch-target-expand"
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
@@ -514,7 +672,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                   setZoom((z) => Math.min(2.5, Number((z + 0.25).toFixed(2))))
                 }
                 aria-label={t('mediaArchive.zoomInAria')}
-                className="h-8 w-8 min-h-0 p-0"
+                className="h-8 w-8 min-h-0 p-0 touch-target-expand"
               >
                 <ZoomIn className="h-4 w-4" />
               </Button>
@@ -523,7 +681,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
                 size="sm"
                 onClick={() => setZoom(1)}
                 leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
-                className="h-8 min-h-0 px-2 text-xs"
+                className="h-8 min-h-0 px-2 text-xs touch-target-expand"
               >
                 {t('mediaArchive.zoomResetBtn')}
               </Button>
@@ -533,7 +691,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
           <a
             href={asset.file_url}
             download={asset.original_file_name || asset.title}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-xs font-medium text-primary hover:bg-surface-muted"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-xs font-medium text-primary hover:bg-surface-muted touch-target-expand"
           >
             <Download className="h-3.5 w-3.5" />
             <span>{t('mediaArchive.downloadBtn')}</span>

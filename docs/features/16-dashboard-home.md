@@ -57,15 +57,18 @@ Default landing page for authenticated users once the tree has data (`/tree` rem
 | Today   · I. turns 34 (Living)    | Added Пётр Щеглов — 2h ago                     |
 | Nov 2   · Ivan Levshits (1931†)   | Uploaded 6 photos — yesterday                  |
 |          would be 95 — birthday   | Edited E. — 2 days ago                         |
-| Nov 7   · Wedding anniversary     |                               (Read-only,      |
-|          A. & E. Petrov — 90 yrs  |                                zero Undo CTAs) |
 +-----------------------------------+------------------------------------------------+
-| 📊 TREE AT A GLANCE                | 🖼 LATEST PHOTOS                                |
-| 1,420 people · 512 families       | [thumb][thumb][thumb][thumb][thumb][thumb]     |
-| 340 photos · 12 generations       |                                                |
-| Oldest ancestor: b. abt 1702      | (Public deceased media only;                   |
-| (Admin nudge link hidden)         |  clicking prompts login to view full archive)  |
+| 🎂 THIS MONTH                      | 📊 TREE AT A GLANCE                            |
+| Today   · I. turns 34 (Living)    | 1,420 people · 512 families                    |
+| Nov 2   · Ivan Levshits (1931†)   | 340 photos · 12 generations                    |
+|          would be 95 — birthday   | Oldest ancestor: b. abt 1702                   |
+| Nov 7   · Wedding anniversary     | (Admin nudge link hidden)                      |
+|          A. & E. Petrov — 90 yrs  |                                                |
+| (Living dates masked)             |                                                |
 +-----------------------------------+------------------------------------------------+
+| [Activity feed & Photos preview are hidden in public guest mode to preserve        |
+|  transaction log privacy and restrict media previews to authenticated family]      |
++------------------------------------------------------------------------------------+
 ```
 
 ### 4.1 Widgets (fixed set)
@@ -79,14 +82,13 @@ Default landing page for authenticated users once the tree has data (`/tree` rem
    - Shows latest 5 transactions from [14](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/14-change-history-concurrency.md).
    - Admins see full transactional audit feed with Undo buttons.
    - Editors and Viewers see *"Recently added people"* (create operations only, privacy-filtered).
-   - Public guests see read-only additions with living persons masked to single initial; **strictly zero Undo buttons** and zero administrative diff links.
+   - **Public Guest Mode:** **Strictly hidden / omitted from rendering**. The internal transaction log is omitted for unauthenticated guests, avoiding empty placeholder states.
 3. **Tree at a glance**
    - Aggregate counts (people, families, photos, places), generation depth from oldest ancestor to youngest descendant, oldest known birth.
    - Data-quality nudge link (`48 people missing birth dates →`) is visible **strictly to Administrators** ([15](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md)); hidden for Viewers, Editors, and public guests.
 4. **Latest photos**
    - 6 most recent media thumbnails (privacy-filtered).
-   - Public guests see photos of deceased ancestors only; photos of living persons are excluded.
-   - Clicking photos in public guest mode displays a preview dialog or prompts login to access the full `/media` archive.
+   - **Public Guest Mode:** **Strictly hidden / omitted from rendering**. Photo browsing is reserved for authenticated family members to preserve privacy.
 5. **Zero Edit Controls Enforcement:**
    - In unauthenticated mode, no `+ Add Person` button, quick-add dialog, inline edit pencil, or undo trigger may ever be rendered.
 
@@ -117,5 +119,5 @@ Default landing page for authenticated users once the tree has data (`/tree` rem
 - [ ] **Role-Aware Widgets:** Viewers never see edit history details or private records.
 - [ ] **Anti-Marketing Copy:** All onboarding cards, welcome prompts, and dashboard widgets adhere to clean, functional, family-centered copy without promotional buzzwords or tech stack mentions.
 - [ ] **Default Private Gatekeeper:** Unauthenticated visitors to `/` are immediately redirected to `/login` when public mode is disabled.
-- [ ] **Unauthenticated Public Dashboard View:** When public access is enabled (`ENABLE_PUBLIC_ACCESS=true`), `/` renders in strictly read-only mode with zero `+ Add Person` button, living relatives masked to single initial with dot (`И.` / `J.`), zero Undo buttons, and administrative data-quality links hidden.
+- [ ] **Unauthenticated Public Dashboard View:** When public access is enabled (`ENABLE_PUBLIC_ACCESS=true`), `/` renders in strictly read-only mode with zero `+ Add Person` button, living relatives masked to single initial with dot (`И.` / `J.`), zero Undo buttons, administrative data-quality links hidden, and a clean 2-widget grid (`AnniversariesWidget` and `TreeGlanceWidget`; `RecentActivityWidget` and `LatestPhotosWidget` strictly hidden).
 - [ ] **Default Clean Slate & Zero Dummy Data:** Production builds never insert or display hardcoded mock individuals or fake dashboard payloads; an empty database always triggers the genuine empty-tree onboarding card.

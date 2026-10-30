@@ -86,7 +86,7 @@ frontend/src/components/
 | Prop | Values |
 | :--- | :--- |
 | `variant` | `primary` (brand fill) · `secondary` (surface + border) · `ghost` (no border, muted hover) · `danger` (danger fill) · `link` (inline text) |
-| `size` | `sm` · `md` · `lg` |
+| `size` | `xs` · `sm` · `md` · `lg` |
 | `leftIcon` / `rightIcon` | Lucide icon |
 | `loading` | Shows spinner, keeps width, sets `aria-busy`, blocks clicks |
 | `fullWidth`, `asChild` | `asChild` renders as router `Link` |
@@ -237,7 +237,7 @@ Bottom-right (bottom-center on mobile with bottom-nav clearance). Types: success
 | `BottomNav` | Fixed bottom navigation bar (`h-16` + `safe-area-inset-bottom`) with 5 thumb-friendly tabs: Home, Tree, People, Media, More | Mobile (`< 768px`) shell |
 | `NavRail` | Vertical icon rail (`w-16`) with active indicator and tooltips | Tablet (`768px – 1024px`) shell |
 | `PwaInstallBanner` | Discreet, non-intrusive banner or menu item with 2-step guide ([18 §3.3](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/18-progressive-web-app-mobile.md#33-quiet-non-intrusive-install-flow)) | Shell, Settings menu |
-| `AuthLayout` | Centered card layout with language/theme switches | Auth pages |
+| `AuthLayout` | Centered card layout with clickable brand header (navigating to `/`) and language/theme switches | Auth pages |
 | `NavLink` | Top-nav link with active state | Header |
 | `Breadcrumbs` | Hierarchy path; middle items collapse into `⋯` menu when long; last item not a link | Profile, places, media, settings |
 | `PageHeader` | Title (+ count), subtitle, primary action slot, secondary actions | All list/detail pages |
@@ -320,6 +320,7 @@ Two (or three) columns comparing records field by field; differing values highli
 | `FaceTagBox` | Draggable/resizable rectangle with label tooltip on an image (normalized coords) | Lightbox face tagging |
 | `MapView` | MapLibre/Leaflet wrapper: markers, polylines, clustering, click-to-pick; renders nothing when maps are disabled | Life map, place detail, family map |
 | `KinshipLabel` | Localized relationship text with correct gender (*"Двоюродная сестра"*) | Profile hero pill, kinship finder |
+| `ConnectionNavPopover` | Floating HUD / Popover displaying connection type, endpoints with avatars, 1-click camera jump, and kinship trigger | Tree canvas edge selection |
 | `JobProgress` | Subscribes to job SSE; renders `ProgressBar` + step text + result/error | Import, export, PDF, backup |
 | `ConflictDialog` | `Dialog` + `ComparisonTable` for `409 version_conflict` | Any edit form |
 

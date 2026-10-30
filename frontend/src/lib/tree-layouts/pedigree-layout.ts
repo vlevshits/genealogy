@@ -15,6 +15,7 @@ import {
   SPOUSE_GAP,
   TreeLayoutResult,
   V_GAP,
+  createPositionedEdge,
 } from './types';
 
 export function computePedigreeLayout(
@@ -108,18 +109,20 @@ export function computePedigreeLayout(
       const sy = y + CARD_HEIGHT / 2;
       const tx = nextX;
       const ty = fatherY + CARD_HEIGHT / 2;
-      edges.push({
-        id: `ped-edge-${personId}-${fatherId}`,
-        sourceId: personId,
-        targetId: fatherId,
-        kind: 'parent_child',
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
-        pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
-        isDirectLineage: true,
-      });
+      edges.push(
+        createPositionedEdge({
+          id: `ped-edge-${personId}-${fatherId}`,
+          sourceId: personId,
+          targetId: fatherId,
+          kind: 'parent_child',
+          sourceX: sx,
+          sourceY: sy,
+          targetX: tx,
+          targetY: ty,
+          pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
+          isDirectLineage: true,
+        })
+      );
     } else if (gen <= 1) {
       const phId = `ph-father-${personId}`;
       placeholders.push({
@@ -136,17 +139,19 @@ export function computePedigreeLayout(
       const sy = y + CARD_HEIGHT / 2;
       const tx = nextX;
       const ty = fatherY + CARD_HEIGHT / 2;
-      edges.push({
-        id: `ped-ph-edge-${phId}`,
-        sourceId: personId,
-        targetId: phId,
-        kind: 'placeholder',
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
-        pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
-      });
+      edges.push(
+        createPositionedEdge({
+          id: `ped-ph-edge-${phId}`,
+          sourceId: personId,
+          targetId: phId,
+          kind: 'placeholder',
+          sourceX: sx,
+          sourceY: sy,
+          targetX: tx,
+          targetY: ty,
+          pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
+        })
+      );
     }
 
     // Mother slot (2 * slotIdx + 1)
@@ -160,18 +165,20 @@ export function computePedigreeLayout(
       const sy = y + CARD_HEIGHT / 2;
       const tx = nextX;
       const ty = motherY + CARD_HEIGHT / 2;
-      edges.push({
-        id: `ped-edge-${personId}-${motherId}`,
-        sourceId: personId,
-        targetId: motherId,
-        kind: 'parent_child',
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
-        pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
-        isDirectLineage: true,
-      });
+      edges.push(
+        createPositionedEdge({
+          id: `ped-edge-${personId}-${motherId}`,
+          sourceId: personId,
+          targetId: motherId,
+          kind: 'parent_child',
+          sourceX: sx,
+          sourceY: sy,
+          targetX: tx,
+          targetY: ty,
+          pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
+          isDirectLineage: true,
+        })
+      );
     } else if (gen <= 1) {
       const phId = `ph-mother-${personId}`;
       placeholders.push({
@@ -188,17 +195,19 @@ export function computePedigreeLayout(
       const sy = y + CARD_HEIGHT / 2;
       const tx = nextX;
       const ty = motherY + CARD_HEIGHT / 2;
-      edges.push({
-        id: `ped-ph-edge-${phId}`,
-        sourceId: personId,
-        targetId: phId,
-        kind: 'placeholder',
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
-        pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
-      });
+      edges.push(
+        createPositionedEdge({
+          id: `ped-ph-edge-${phId}`,
+          sourceId: personId,
+          targetId: phId,
+          kind: 'placeholder',
+          sourceX: sx,
+          sourceY: sy,
+          targetX: tx,
+          targetY: ty,
+          pathD: buildHorizontalBezierPath(sx, sy, tx, ty),
+        })
+      );
     }
   };
 
@@ -228,17 +237,19 @@ export function computePedigreeLayout(
       const sy = focalNode.y + CARD_HEIGHT;
       const tx = focalNode.x + CARD_WIDTH / 2;
       const ty = spouseY;
-      edges.push({
-        id: `ped-spouse-${focalId}-${spouseId}`,
-        sourceId: focalId,
-        targetId: spouseId,
-        kind: 'spouse',
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
-        pathD: buildSpouseConnectorPath(sx, sy, tx, ty),
-      });
+      edges.push(
+        createPositionedEdge({
+          id: `ped-spouse-${focalId}-${spouseId}`,
+          sourceId: focalId,
+          targetId: spouseId,
+          kind: 'spouse',
+          sourceX: sx,
+          sourceY: sy,
+          targetX: tx,
+          targetY: ty,
+          pathD: buildSpouseConnectorPath(sx, sy, tx, ty),
+        })
+      );
     }
   }
 

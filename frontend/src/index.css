@@ -6,10 +6,11 @@
   --color-bg-surface: #FFFFFF;
   --color-bg-muted: #F1F3F5;
   --color-border-subtle: #E5E7EB;
+  --color-border-card: #CBD5E1;
   --color-border-focus: #3B68A0;
   --color-text-primary: #111827;
   --color-text-secondary: #4B5563;
-  --color-text-tertiary: #9CA3AF;
+  --color-text-tertiary: #6B7280;
 
   /* Semantic & Brand Accents */
   --color-brand-primary: #2D5584;
@@ -45,10 +46,11 @@
   --color-bg-surface: #171B22;
   --color-bg-muted: #212630;
   --color-border-subtle: #2E3542;
+  --color-border-card: #334155;
   --color-border-focus: #5B8AC4;
   --color-text-primary: #F3F4F6;
   --color-text-secondary: #9CA3AF;
-  --color-text-tertiary: #6B7280;
+  --color-text-tertiary: #9CA3AF;
 
   /* Semantic & Brand Accents */
   --color-brand-primary: #4F7EB5;
@@ -81,6 +83,7 @@
   --color-surface: var(--color-bg-surface);
   --color-surface-muted: var(--color-bg-muted);
   --color-border: var(--color-border-subtle);
+  --color-border-card: var(--color-border-card);
   --color-border-ring: var(--color-border-focus);
   --color-focus: var(--color-border-focus);
 

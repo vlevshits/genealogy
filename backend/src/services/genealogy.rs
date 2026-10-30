@@ -939,6 +939,8 @@ pub struct KinshipQuery {
     pub id1: Option<String>,
     #[serde(default)]
     pub id2: Option<String>,
+    #[serde(default)]
+    pub max_traces: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
@@ -946,6 +948,27 @@ pub struct KinshipEdgeStepDto {
     pub from_id: String,
     pub to_id: String,
     pub edge_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct KinshipTraceStepDto {
+    pub person_id: String,
+    pub relation_to_next: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_to_next_ru: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct KinshipTraceDto {
+    pub id: String,
+    pub relationship_key: String,
+    pub label_en: String,
+    pub label_ru: String,
+    pub degree_of_kinship: usize,
+    pub is_blood_relation: bool,
+    pub common_ancestor_ids: Vec<String>,
+    pub path_person_ids: Vec<String>,
+    pub steps: Vec<KinshipTraceStepDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -966,15 +989,799 @@ pub struct KinshipResponse {
     pub path_person_ids: Vec<String>,
     pub steps: Vec<KinshipEdgeStepDto>,
     pub path_nodes: Vec<TreePersonNodeDto>,
+    #[serde(default)]
+    pub traces_count: usize,
+    #[serde(default)]
+    pub traces: Vec<KinshipTraceDto>,
 }
 
-/// Full Phase 2 Kinship Finder (`GET /api/v1/kinship?from={id1}&to={id2}`, `04-tree-visualizations.md §7.5`).
-/// Uses cycle-safe LCA + bidirectional BFS across parent, child, and spouse edges.
+fn classify_blood_relation(
+    u: usize,
+    d: usize,
+    path: &[String],
+    person_by_id: &HashMap<&str, &TreePersonNodeDto>,
+    parents_of: &HashMap<&str, Vec<&str>>,
+) -> (String, String, String) {
+    let to_id = path.last().map(|s| s.as_str()).unwrap_or_default();
+    let target_sex = person_by_id
+        .get(to_id)
+        .map(|p| p.sex.trim().to_ascii_uppercase())
+        .unwrap_or_default();
+    let is_male = target_sex == "M";
+    let is_female = target_sex == "F";
+
+    let first_up_sex = if u >= 1 && path.len() >= 2 {
+        person_by_id
+            .get(path[1].as_str())
+            .map(|p| p.sex.trim().to_ascii_uppercase())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let is_paternal = first_up_sex == "M";
+    let is_maternal = first_up_sex == "F";
+
+    match (u, d) {
+        (1, 0) => (
+            if is_male {
+                "father".to_string()
+            } else if is_female {
+                "mother".to_string()
+            } else {
+                "parent".to_string()
+            },
+            if is_male {
+                "Father".to_string()
+            } else if is_female {
+                "Mother".to_string()
+            } else {
+                "Parent".to_string()
+            },
+            if is_male {
+                "Отец".to_string()
+            } else if is_female {
+                "Мать".to_string()
+            } else {
+                "Родитель".to_string()
+            },
+        ),
+        (0, 1) => (
+            if is_male {
+                "son".to_string()
+            } else if is_female {
+                "daughter".to_string()
+            } else {
+                "child".to_string()
+            },
+            if is_male {
+                "Son".to_string()
+            } else if is_female {
+                "Daughter".to_string()
+            } else {
+                "Child".to_string()
+            },
+            if is_male {
+                "Сын".to_string()
+            } else if is_female {
+                "Дочь".to_string()
+            } else {
+                "Ребёнок".to_string()
+            },
+        ),
+        (1, 1) => {
+            let p0_parents = parents_of
+                .get(path[0].as_str())
+                .cloned()
+                .unwrap_or_default();
+            let p2_parents = parents_of
+                .get(path[2].as_str())
+                .cloned()
+                .unwrap_or_default();
+            let common_parents_count = p0_parents.iter().filter(|p| p2_parents.contains(p)).count();
+
+            if common_parents_count >= 2 {
+                (
+                    if is_male {
+                        "brother".to_string()
+                    } else if is_female {
+                        "sister".to_string()
+                    } else {
+                        "sibling".to_string()
+                    },
+                    if is_male {
+                        "Brother".to_string()
+                    } else if is_female {
+                        "Sister".to_string()
+                    } else {
+                        "Sibling".to_string()
+                    },
+                    if is_male {
+                        "Брат".to_string()
+                    } else if is_female {
+                        "Сестра".to_string()
+                    } else {
+                        "Брат / Сестра".to_string()
+                    },
+                )
+            } else {
+                let parent_sex = person_by_id
+                    .get(path[1].as_str())
+                    .map(|p| p.sex.trim().to_ascii_uppercase())
+                    .unwrap_or_default();
+                if parent_sex == "M" {
+                    (
+                        if is_male {
+                            "half_brother_paternal".to_string()
+                        } else if is_female {
+                            "half_sister_paternal".to_string()
+                        } else {
+                            "half_sibling_paternal".to_string()
+                        },
+                        if is_male {
+                            "Half-brother (paternal)".to_string()
+                        } else if is_female {
+                            "Half-sister (paternal)".to_string()
+                        } else {
+                            "Half-sibling (paternal)".to_string()
+                        },
+                        if is_male {
+                            "Единокровный брат (по отцу)".to_string()
+                        } else if is_female {
+                            "Единокровная сестра (по отцу)".to_string()
+                        } else {
+                            "Единокровный брат / сестра (по отцу)".to_string()
+                        },
+                    )
+                } else if parent_sex == "F" {
+                    (
+                        if is_male {
+                            "half_brother_maternal".to_string()
+                        } else if is_female {
+                            "half_sister_maternal".to_string()
+                        } else {
+                            "half_sibling_maternal".to_string()
+                        },
+                        if is_male {
+                            "Half-brother (maternal)".to_string()
+                        } else if is_female {
+                            "Half-sister (maternal)".to_string()
+                        } else {
+                            "Half-sibling (maternal)".to_string()
+                        },
+                        if is_male {
+                            "Единоутробный брат (по матери)".to_string()
+                        } else if is_female {
+                            "Единоутробная сестра (по матери)".to_string()
+                        } else {
+                            "Единоутробный брат / сестра (по матери)".to_string()
+                        },
+                    )
+                } else {
+                    (
+                        if is_male {
+                            "half_brother".to_string()
+                        } else if is_female {
+                            "half_sister".to_string()
+                        } else {
+                            "half_sibling".to_string()
+                        },
+                        if is_male {
+                            "Half-brother".to_string()
+                        } else if is_female {
+                            "Half-sister".to_string()
+                        } else {
+                            "Half-sibling".to_string()
+                        },
+                        if is_male {
+                            "Неполнородный брат".to_string()
+                        } else if is_female {
+                            "Неполнородная сестра".to_string()
+                        } else {
+                            "Неполнородный брат / сестра".to_string()
+                        },
+                    )
+                }
+            }
+        }
+        (2, 0) => {
+            let side_prefix = if is_paternal {
+                "paternal_"
+            } else if is_maternal {
+                "maternal_"
+            } else {
+                ""
+            };
+            let base = if is_male {
+                "grandfather"
+            } else if is_female {
+                "grandmother"
+            } else {
+                "grandparent"
+            };
+            (
+                format!("{side_prefix}{base}"),
+                if is_male {
+                    "Grandfather".to_string()
+                } else if is_female {
+                    "Grandmother".to_string()
+                } else {
+                    "Grandparent".to_string()
+                },
+                if is_male {
+                    "Дедушка".to_string()
+                } else if is_female {
+                    "Бабушка".to_string()
+                } else {
+                    "Дедушка / Бабушка".to_string()
+                },
+            )
+        }
+        (0, 2) => (
+            if is_male {
+                "grandson".to_string()
+            } else if is_female {
+                "granddaughter".to_string()
+            } else {
+                "grandchild".to_string()
+            },
+            if is_male {
+                "Grandson".to_string()
+            } else if is_female {
+                "Granddaughter".to_string()
+            } else {
+                "Grandchild".to_string()
+            },
+            if is_male {
+                "Внук".to_string()
+            } else if is_female {
+                "Внучка".to_string()
+            } else {
+                "Внук / Внучка".to_string()
+            },
+        ),
+        (2, 1) => {
+            let side_prefix = if is_paternal {
+                "paternal_"
+            } else if is_maternal {
+                "maternal_"
+            } else {
+                ""
+            };
+            let base = if is_male {
+                "uncle"
+            } else if is_female {
+                "aunt"
+            } else {
+                "pibling"
+            };
+            (
+                format!("{side_prefix}{base}"),
+                if is_male {
+                    "Uncle".to_string()
+                } else if is_female {
+                    "Aunt".to_string()
+                } else {
+                    "Uncle / Aunt".to_string()
+                },
+                if is_male {
+                    "Дядя".to_string()
+                } else if is_female {
+                    "Тётя".to_string()
+                } else {
+                    "Дядя / Тётя".to_string()
+                },
+            )
+        }
+        (1, 2) => (
+            if is_male {
+                "nephew".to_string()
+            } else if is_female {
+                "niece".to_string()
+            } else {
+                "nibling".to_string()
+            },
+            if is_male {
+                "Nephew".to_string()
+            } else if is_female {
+                "Niece".to_string()
+            } else {
+                "Nephew / Niece".to_string()
+            },
+            if is_male {
+                "Племянник".to_string()
+            } else if is_female {
+                "Племянница".to_string()
+            } else {
+                "Племянник / Племянница".to_string()
+            },
+        ),
+        (u_val, 0) if u_val >= 3 => (
+            if is_male {
+                "great_grandfather".to_string()
+            } else if is_female {
+                "great_grandmother".to_string()
+            } else {
+                "great_grandparent".to_string()
+            },
+            if is_male {
+                "Great-grandfather".to_string()
+            } else if is_female {
+                "Great-grandmother".to_string()
+            } else {
+                "Great-grandparent".to_string()
+            },
+            if is_male {
+                "Прадедушка".to_string()
+            } else if is_female {
+                "Прабабушка".to_string()
+            } else {
+                "Прародитель".to_string()
+            },
+        ),
+        (0, d_val) if d_val >= 3 => (
+            if is_male {
+                "great_grandson".to_string()
+            } else if is_female {
+                "great_granddaughter".to_string()
+            } else {
+                "great_grandchild".to_string()
+            },
+            "Great-grandchild".to_string(),
+            "Правнук / Правнучка".to_string(),
+        ),
+        (u_val, d_val) if u_val >= 2 && d_val >= 2 => {
+            let cousin_deg = u_val.min(d_val) - 1;
+            let removed = u_val.abs_diff(d_val);
+            let deg_word = match cousin_deg {
+                1 => "first_cousin",
+                2 => "second_cousin",
+                3 => "third_cousin",
+                _ => "cousin",
+            };
+            let key = match removed {
+                0 => deg_word.to_string(),
+                1 => format!("{deg_word}_once_removed"),
+                2 => format!("{deg_word}_twice_removed"),
+                r => format!("{deg_word}_{r}_times_removed"),
+            };
+            let label_en = if removed == 0 {
+                format!(
+                    "{} cousin",
+                    match cousin_deg {
+                        1 => "First",
+                        2 => "Second",
+                        3 => "Third",
+                        _ => "Distant",
+                    }
+                )
+            } else {
+                format!("Cousin ({cousin_deg} degree, {removed}x removed)")
+            };
+            let label_ru = if cousin_deg == 1 && removed == 0 {
+                if is_male {
+                    "Двоюродный брат".to_string()
+                } else if is_female {
+                    "Двоюродная сестра".to_string()
+                } else {
+                    "Двоюродный брат / сестра".to_string()
+                }
+            } else {
+                "Кровный родственник".to_string()
+            };
+            (key, label_en, label_ru)
+        }
+        _ => (
+            "blood_relative".to_string(),
+            "Blood relative".to_string(),
+            "Кровный родственник".to_string(),
+        ),
+    }
+}
+
+fn classify_affinal_relation(
+    edge_types: &[&str],
+    path: &[String],
+    person_by_id: &HashMap<&str, &TreePersonNodeDto>,
+) -> (String, String, String) {
+    let to_id = path.last().map(|s| s.as_str()).unwrap_or_default();
+    let target_sex = person_by_id
+        .get(to_id)
+        .map(|p| p.sex.trim().to_ascii_uppercase())
+        .unwrap_or_default();
+    let is_male = target_sex == "M";
+    let is_female = target_sex == "F";
+
+    if edge_types == ["spouse"] {
+        (
+            if is_male {
+                "husband".to_string()
+            } else if is_female {
+                "wife".to_string()
+            } else {
+                "spouse".to_string()
+            },
+            if is_male {
+                "Husband".to_string()
+            } else if is_female {
+                "Wife".to_string()
+            } else {
+                "Spouse".to_string()
+            },
+            if is_male {
+                "Муж".to_string()
+            } else if is_female {
+                "Жена".to_string()
+            } else {
+                "Супруг(а)".to_string()
+            },
+        )
+    } else if edge_types == ["parent", "spouse"] {
+        (
+            if is_male {
+                "stepfather".to_string()
+            } else if is_female {
+                "stepmother".to_string()
+            } else {
+                "stepparent".to_string()
+            },
+            if is_male {
+                "Stepfather".to_string()
+            } else if is_female {
+                "Stepmother".to_string()
+            } else {
+                "Step-parent".to_string()
+            },
+            if is_male {
+                "Отчим".to_string()
+            } else if is_female {
+                "Мачеха".to_string()
+            } else {
+                "Отчим / Мачеха".to_string()
+            },
+        )
+    } else if edge_types == ["spouse", "child"] {
+        (
+            if is_male {
+                "stepson".to_string()
+            } else if is_female {
+                "stepdaughter".to_string()
+            } else {
+                "stepchild".to_string()
+            },
+            if is_male {
+                "Stepson".to_string()
+            } else if is_female {
+                "Stepdaughter".to_string()
+            } else {
+                "Stepchild".to_string()
+            },
+            if is_male {
+                "Пасынок".to_string()
+            } else if is_female {
+                "Падчерица".to_string()
+            } else {
+                "Пасынок / Падчерица".to_string()
+            },
+        )
+    } else if edge_types == ["parent", "spouse", "child"] && path.len() >= 4 {
+        let parent_sex = person_by_id
+            .get(path[1].as_str())
+            .map(|p| p.sex.trim().to_ascii_uppercase())
+            .unwrap_or_default();
+        if parent_sex == "F" {
+            (
+                if is_male {
+                    "step_brother_maternal_marriage".to_string()
+                } else if is_female {
+                    "step_sister_maternal_marriage".to_string()
+                } else {
+                    "step_sibling_maternal_marriage".to_string()
+                },
+                if is_male {
+                    "Step-brother (via mother's marriage)".to_string()
+                } else if is_female {
+                    "Step-sister (via mother's marriage)".to_string()
+                } else {
+                    "Step-sibling (via mother's marriage)".to_string()
+                },
+                if is_male {
+                    "Сводный брат (по браку матери)".to_string()
+                } else if is_female {
+                    "Сводная сестра (по браку матери)".to_string()
+                } else {
+                    "Сводный брат / сестра (по браку матери)".to_string()
+                },
+            )
+        } else if parent_sex == "M" {
+            (
+                if is_male {
+                    "step_brother_paternal_marriage".to_string()
+                } else if is_female {
+                    "step_sister_paternal_marriage".to_string()
+                } else {
+                    "step_sibling_paternal_marriage".to_string()
+                },
+                if is_male {
+                    "Step-brother (via father's marriage)".to_string()
+                } else if is_female {
+                    "Step-sister (via father's marriage)".to_string()
+                } else {
+                    "Step-sibling (via father's marriage)".to_string()
+                },
+                if is_male {
+                    "Сводный брат (по браку отца)".to_string()
+                } else if is_female {
+                    "Сводная сестра (по браку отца)".to_string()
+                } else {
+                    "Сводный брат / сестра (по браку отца)".to_string()
+                },
+            )
+        } else {
+            (
+                if is_male {
+                    "step_brother".to_string()
+                } else if is_female {
+                    "step_sister".to_string()
+                } else {
+                    "step_sibling".to_string()
+                },
+                if is_male {
+                    "Step-brother".to_string()
+                } else if is_female {
+                    "Step-sister".to_string()
+                } else {
+                    "Step-sibling".to_string()
+                },
+                if is_male {
+                    "Сводный брат".to_string()
+                } else if is_female {
+                    "Сводная сестра".to_string()
+                } else {
+                    "Сводный брат / сестра".to_string()
+                },
+            )
+        }
+    } else if edge_types == ["spouse", "parent"] {
+        (
+            if is_male {
+                "father_in_law".to_string()
+            } else if is_female {
+                "mother_in_law".to_string()
+            } else {
+                "parent_in_law".to_string()
+            },
+            if is_male {
+                "Father-in-law".to_string()
+            } else if is_female {
+                "Mother-in-law".to_string()
+            } else {
+                "Parent-in-law".to_string()
+            },
+            if is_male {
+                "Тесть / Свёкор".to_string()
+            } else if is_female {
+                "Тёща / Свекровь".to_string()
+            } else {
+                "Родитель супруга(и)".to_string()
+            },
+        )
+    } else if edge_types == ["child", "spouse"] {
+        (
+            if is_male {
+                "son_in_law".to_string()
+            } else if is_female {
+                "daughter_in_law".to_string()
+            } else {
+                "child_in_law".to_string()
+            },
+            if is_male {
+                "Son-in-law".to_string()
+            } else if is_female {
+                "Daughter-in-law".to_string()
+            } else {
+                "Child-in-law".to_string()
+            },
+            if is_male {
+                "Зять".to_string()
+            } else if is_female {
+                "Невестка".to_string()
+            } else {
+                "Зять / Невестка".to_string()
+            },
+        )
+    } else if edge_types == ["spouse", "parent", "child"]
+        || edge_types == ["parent", "child", "spouse"]
+    {
+        (
+            if is_male {
+                "brother_in_law".to_string()
+            } else if is_female {
+                "sister_in_law".to_string()
+            } else {
+                "sibling_in_law".to_string()
+            },
+            if is_male {
+                "Brother-in-law".to_string()
+            } else if is_female {
+                "Sister-in-law".to_string()
+            } else {
+                "Sibling-in-law".to_string()
+            },
+            if is_male {
+                "Деверь / Зять / Шурин".to_string()
+            } else if is_female {
+                "Золовка / Невестка / Свояченица".to_string()
+            } else {
+                "Родственник(ца) по браку".to_string()
+            },
+        )
+    } else {
+        (
+            "relative_by_marriage".to_string(),
+            "Relative by marriage".to_string(),
+            "Родственник по браку".to_string(),
+        )
+    }
+}
+
+fn build_trace_from_path(
+    path: &[String],
+    trace_id: String,
+    person_by_id: &HashMap<&str, &TreePersonNodeDto>,
+    parents_of: &HashMap<&str, Vec<&str>>,
+    spouses_of: &HashMap<&str, Vec<&str>>,
+) -> KinshipTraceDto {
+    let mut steps = Vec::new();
+    for i in 0..path.len() {
+        let curr = &path[i];
+        let (relation_to_next, relation_to_next_ru) = if i + 1 < path.len() {
+            let next = &path[i + 1];
+            let next_sex = person_by_id
+                .get(next.as_str())
+                .map(|p| p.sex.trim().to_ascii_uppercase())
+                .unwrap_or_default();
+            let next_is_male = next_sex == "M";
+            let next_is_female = next_sex == "F";
+
+            if parents_of
+                .get(curr.as_str())
+                .is_some_and(|ps| ps.contains(&next.as_str()))
+            {
+                if next_is_male {
+                    (Some("Father".to_string()), Some("Отец".to_string()))
+                } else if next_is_female {
+                    (Some("Mother".to_string()), Some("Мать".to_string()))
+                } else {
+                    (Some("Parent".to_string()), Some("Родитель".to_string()))
+                }
+            } else if parents_of
+                .get(next.as_str())
+                .is_some_and(|ps| ps.contains(&curr.as_str()))
+            {
+                if next_is_male {
+                    (Some("Son".to_string()), Some("Сын".to_string()))
+                } else if next_is_female {
+                    (Some("Daughter".to_string()), Some("Дочь".to_string()))
+                } else {
+                    (Some("Child".to_string()), Some("Ребёнок".to_string()))
+                }
+            } else if spouses_of
+                .get(curr.as_str())
+                .is_some_and(|ss| ss.contains(&next.as_str()))
+            {
+                if next_is_male {
+                    (Some("Husband".to_string()), Some("Муж".to_string()))
+                } else if next_is_female {
+                    (Some("Wife".to_string()), Some("Жена".to_string()))
+                } else {
+                    (Some("Spouse".to_string()), Some("Супруг(а)".to_string()))
+                }
+            } else {
+                (
+                    Some("Relative".to_string()),
+                    Some("Родственник".to_string()),
+                )
+            }
+        } else {
+            (None, None)
+        };
+
+        steps.push(KinshipTraceStepDto {
+            person_id: curr.clone(),
+            relation_to_next,
+            relation_to_next_ru,
+        });
+    }
+
+    let mut edge_types: Vec<&'static str> = Vec::new();
+    for i in 0..path.len().saturating_sub(1) {
+        let p_curr = path[i].as_str();
+        let p_next = path[i + 1].as_str();
+        if parents_of
+            .get(p_curr)
+            .is_some_and(|ps| ps.contains(&p_next))
+        {
+            edge_types.push("parent");
+        } else if parents_of
+            .get(p_next)
+            .is_some_and(|ps| ps.contains(&p_curr))
+        {
+            edge_types.push("child");
+        } else if spouses_of
+            .get(p_curr)
+            .is_some_and(|ss| ss.contains(&p_next))
+        {
+            edge_types.push("spouse");
+        } else {
+            edge_types.push("other");
+        }
+    }
+
+    let mut is_blood = false;
+    let mut u_steps = 0usize;
+    let mut d_steps = 0usize;
+
+    if !edge_types.contains(&"spouse") && !edge_types.contains(&"other") {
+        let first_child_idx = edge_types.iter().position(|e| *e == "child");
+        let all_parents_before = match first_child_idx {
+            Some(idx) => edge_types[..idx].iter().all(|e| *e == "parent"),
+            None => edge_types.iter().all(|e| *e == "parent"),
+        };
+        let all_children_after = match first_child_idx {
+            Some(idx) => edge_types[idx..].iter().all(|e| *e == "child"),
+            None => true,
+        };
+        if all_parents_before && all_children_after {
+            is_blood = true;
+            u_steps = match first_child_idx {
+                Some(idx) => idx,
+                None => edge_types.len(),
+            };
+            d_steps = edge_types.len() - u_steps;
+        }
+    }
+
+    if is_blood {
+        let common_ancestor_id = path[u_steps].clone();
+        let (rel_key, label_en, label_ru) =
+            classify_blood_relation(u_steps, d_steps, path, person_by_id, parents_of);
+        KinshipTraceDto {
+            id: trace_id,
+            relationship_key: rel_key,
+            label_en,
+            label_ru,
+            degree_of_kinship: u_steps + d_steps,
+            is_blood_relation: true,
+            common_ancestor_ids: vec![common_ancestor_id],
+            path_person_ids: path.to_vec(),
+            steps,
+        }
+    } else {
+        let (rel_key, label_en, label_ru) =
+            classify_affinal_relation(&edge_types, path, person_by_id);
+        KinshipTraceDto {
+            id: trace_id,
+            relationship_key: rel_key,
+            label_en,
+            label_ru,
+            degree_of_kinship: edge_types.len(),
+            is_blood_relation: false,
+            common_ancestor_ids: vec![],
+            path_person_ids: path.to_vec(),
+            steps,
+        }
+    }
+}
+
+/// Full Phase 2 Kinship Finder (`GET /api/v1/kinship?from={id1}&to={id2}&max_traces={n}`, `04-tree-visualizations.md §2.5, §7.5`).
+/// Discovers up to `max_traces` distinct minimal genealogical paths across multiple marriages, remarriages,
+/// and collateral branches, ranking biological blood relationships first, followed by affinal/step paths.
 pub fn compute_kinship_path(
     from_id: &str,
     to_id: &str,
     persons: &[TreePersonNodeDto],
     families: &[FamilyDto],
+    max_traces: usize,
 ) -> KinshipResponse {
     let person_by_id: HashMap<&str, &TreePersonNodeDto> =
         persons.iter().map(|p| (p.id.as_str(), p)).collect();
@@ -984,6 +1791,21 @@ pub fn compute_kinship_path(
             .get(from_id)
             .map(|p| vec![(*p).clone()])
             .unwrap_or_default();
+        let trace = KinshipTraceDto {
+            id: "trace-1".to_string(),
+            relationship_key: "self".to_string(),
+            label_en: "Self".to_string(),
+            label_ru: "Сам(а) (исходная персона)".to_string(),
+            degree_of_kinship: 0,
+            is_blood_relation: true,
+            common_ancestor_ids: vec![from_id.to_string()],
+            path_person_ids: vec![from_id.to_string()],
+            steps: vec![KinshipTraceStepDto {
+                person_id: from_id.to_string(),
+                relation_to_next: None,
+                relation_to_next_ru: None,
+            }],
+        };
         return KinshipResponse {
             connected: true,
             from_id: from_id.to_string(),
@@ -1001,12 +1823,15 @@ pub fn compute_kinship_path(
             path_person_ids: vec![from_id.to_string()],
             steps: vec![],
             path_nodes: node_vec,
+            traces_count: 1,
+            traces: vec![trace],
         };
     }
 
     let mut parents_of: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut children_of: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut spouses_of: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut all_neighbors: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
 
     for fam in families {
         let p1 = fam
@@ -1021,6 +1846,8 @@ pub fn compute_kinship_path(
         if let (Some(a), Some(b)) = (p1, p2) {
             spouses_of.entry(a).or_default().push(b);
             spouses_of.entry(b).or_default().push(a);
+            all_neighbors.entry(a).or_default().push((b, "spouse"));
+            all_neighbors.entry(b).or_default().push((a, "spouse"));
         }
 
         for ch in &fam.children {
@@ -1031,22 +1858,25 @@ pub fn compute_kinship_path(
             for parent in [p1, p2].into_iter().flatten() {
                 parents_of.entry(cid).or_default().push(parent);
                 children_of.entry(parent).or_default().push(cid);
+                all_neighbors
+                    .entry(cid)
+                    .or_default()
+                    .push((parent, "parent"));
+                all_neighbors
+                    .entry(parent)
+                    .or_default()
+                    .push((cid, "child"));
             }
         }
     }
 
-    let target_sex = person_by_id
-        .get(to_id)
-        .map(|p| p.sex.trim().to_ascii_uppercase())
-        .unwrap_or_default();
-    let is_male = target_sex == "M";
-    let is_female = target_sex == "F";
+    let mut candidate_paths: Vec<Vec<String>> = Vec::new();
 
-    // 1. Check blood relationship via Lowest Common Ancestor (LCA) up to 10 generations
-    let build_ancestors = |start_id: &str| -> HashMap<String, (usize, Vec<String>)> {
-        let mut result: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+    // 1. Discover all minimal biological paths via common ancestors (up to 10 generations)
+    let build_ancestor_paths = |start_id: &str| -> HashMap<String, Vec<Vec<String>>> {
+        let mut result: HashMap<String, Vec<Vec<String>>> = HashMap::new();
         let mut queue: VecDeque<(String, usize, Vec<String>)> = VecDeque::new();
-        result.insert(start_id.to_string(), (0, vec![start_id.to_string()]));
+        result.insert(start_id.to_string(), vec![vec![start_id.to_string()]]);
         queue.push_back((start_id.to_string(), 0, vec![start_id.to_string()]));
 
         while let Some((curr, depth, path)) = queue.pop_front() {
@@ -1055,10 +1885,13 @@ pub fn compute_kinship_path(
             }
             if let Some(parents) = parents_of.get(curr.as_str()) {
                 for &p_id in parents {
-                    if !result.contains_key(p_id) {
+                    if !path.iter().any(|n| n == p_id) {
                         let mut next_path = path.clone();
                         next_path.push(p_id.to_string());
-                        result.insert(p_id.to_string(), (depth + 1, next_path.clone()));
+                        let list = result.entry(p_id.to_string()).or_default();
+                        if !list.contains(&next_path) {
+                            list.push(next_path.clone());
+                        }
                         queue.push_back((p_id.to_string(), depth + 1, next_path));
                     }
                 }
@@ -1067,493 +1900,246 @@ pub fn compute_kinship_path(
         result
     };
 
-    let from_anc = build_ancestors(from_id);
-    let to_anc = build_ancestors(to_id);
+    let from_anc = build_ancestor_paths(from_id);
+    let to_anc = build_ancestor_paths(to_id);
 
-    let mut best_lca: Option<(usize, usize, String, Vec<String>)> = None;
-    for (anc_id, (u_steps, path_u)) in &from_anc {
-        if let Some((d_steps, path_d)) = to_anc.get(anc_id) {
-            let total = *u_steps + *d_steps;
-            let better = match &best_lca {
-                None => true,
-                Some((bu, bd, _, _)) => total < (*bu + *bd),
-            };
-            if better {
-                let mut combined = path_u.clone();
-                for node in path_d.iter().rev().skip(1) {
-                    combined.push(node.clone());
+    for (anc_id, paths_from) in &from_anc {
+        if let Some(paths_to) = to_anc.get(anc_id) {
+            for pu in paths_from {
+                for pd in paths_to {
+                    let pu_sub = &pu[0..pu.len().saturating_sub(1)];
+                    let pd_sub = &pd[0..pd.len().saturating_sub(1)];
+                    let has_common_lower = pu_sub.iter().any(|node| pd_sub.contains(node));
+                    if !has_common_lower {
+                        let mut combined = pu.clone();
+                        for node in pd.iter().rev().skip(1) {
+                            combined.push(node.clone());
+                        }
+                        if !candidate_paths.contains(&combined) {
+                            candidate_paths.push(combined);
+                        }
+                    }
                 }
-                best_lca = Some((*u_steps, *d_steps, anc_id.clone(), combined));
             }
         }
     }
 
-    if let Some((up, down, lca_id, path)) = best_lca {
-        let mut common_ancestors = vec![lca_id.clone()];
-        for (aid, (u, _)) in &from_anc {
-            if let Some((d, _)) = to_anc.get(aid) {
-                if *u == up && *d == down && !common_ancestors.contains(aid) {
-                    common_ancestors.push(aid.clone());
+    // 2. Discover shortest paths across all edges (including marital/affinal) using Yen's loopless K-shortest paths
+    let find_shortest = |start: &str,
+                         dest: &str,
+                         excluded_edges: &HashSet<(&str, &str)>,
+                         excluded_nodes: &HashSet<&str>|
+     -> Option<Vec<String>> {
+        let mut q: VecDeque<Vec<String>> = VecDeque::new();
+        let mut visited: HashSet<String> = HashSet::new();
+        visited.insert(start.to_string());
+        q.push_back(vec![start.to_string()]);
+
+        while let Some(path) = q.pop_front() {
+            let curr = path.last()?.as_str();
+            if curr == dest {
+                return Some(path);
+            }
+            if path.len() >= 12 {
+                continue;
+            }
+            if let Some(neighbors) = all_neighbors.get(curr) {
+                for &(next, _) in neighbors {
+                    if excluded_nodes.contains(next) {
+                        continue;
+                    }
+                    if excluded_edges.contains(&(curr, next))
+                        || excluded_edges.contains(&(next, curr))
+                    {
+                        continue;
+                    }
+                    if !visited.contains(next) {
+                        visited.insert(next.to_string());
+                        let mut next_path = path.clone();
+                        next_path.push(next.to_string());
+                        q.push_back(next_path);
+                    }
+                }
+            }
+        }
+        None
+    };
+
+    let mut yen_result: Vec<Vec<String>> = Vec::new();
+    let mut yen_candidates: Vec<Vec<String>> = Vec::new();
+
+    if let Some(p0) = find_shortest(from_id, to_id, &HashSet::new(), &HashSet::new()) {
+        yen_result.push(p0);
+    }
+
+    let target_yen_count = max_traces + 3;
+    for k in 1..=target_yen_count {
+        if k > yen_result.len() {
+            break;
+        }
+        let prev_path = &yen_result[k - 1];
+        for i in 0..(prev_path.len().saturating_sub(1)) {
+            let spur_node = &prev_path[i];
+            let root_path = &prev_path[0..=i];
+
+            let mut excluded_edges: HashSet<(&str, &str)> = HashSet::new();
+            for p in &yen_result {
+                if p.len() > i + 1 && &p[0..=i] == root_path {
+                    excluded_edges.insert((p[i].as_str(), p[i + 1].as_str()));
+                    excluded_edges.insert((p[i + 1].as_str(), p[i].as_str()));
+                }
+            }
+
+            let mut excluded_nodes: HashSet<&str> = HashSet::new();
+            for node in &root_path[0..i] {
+                excluded_nodes.insert(node.as_str());
+            }
+
+            if let Some(spur_path) =
+                find_shortest(spur_node, to_id, &excluded_edges, &excluded_nodes)
+            {
+                let mut total_path = root_path.to_vec();
+                for node in &spur_path[1..] {
+                    total_path.push(node.clone());
+                }
+                if !yen_candidates.contains(&total_path) && !yen_result.contains(&total_path) {
+                    yen_candidates.push(total_path);
                 }
             }
         }
 
-        // Determine paternal vs maternal side from the first step upward (`path[1]`)
-        let first_up_sex = if up >= 1 && path.len() >= 2 {
-            person_by_id
-                .get(path[1].as_str())
-                .map(|p| p.sex.trim().to_ascii_uppercase())
-                .unwrap_or_default()
-        } else {
-            String::new()
-        };
-        let is_paternal = first_up_sex == "M";
-        let is_maternal = first_up_sex == "F";
-
-        let (rel_key, label_en, label_ru) = match (up, down) {
-            (1, 0) => (
-                if is_male {
-                    "father".to_string()
-                } else if is_female {
-                    "mother".to_string()
-                } else {
-                    "parent".to_string()
-                },
-                if is_male {
-                    "Father".to_string()
-                } else if is_female {
-                    "Mother".to_string()
-                } else {
-                    "Parent".to_string()
-                },
-                if is_male {
-                    "Отец".to_string()
-                } else if is_female {
-                    "Мать".to_string()
-                } else {
-                    "Родитель".to_string()
-                },
-            ),
-            (0, 1) => (
-                if is_male {
-                    "son".to_string()
-                } else if is_female {
-                    "daughter".to_string()
-                } else {
-                    "child".to_string()
-                },
-                if is_male {
-                    "Son".to_string()
-                } else if is_female {
-                    "Daughter".to_string()
-                } else {
-                    "Child".to_string()
-                },
-                if is_male {
-                    "Сын".to_string()
-                } else if is_female {
-                    "Дочь".to_string()
-                } else {
-                    "Ребёнок".to_string()
-                },
-            ),
-            (1, 1) => (
-                if is_male {
-                    "brother".to_string()
-                } else if is_female {
-                    "sister".to_string()
-                } else {
-                    "sibling".to_string()
-                },
-                if is_male {
-                    "Brother".to_string()
-                } else if is_female {
-                    "Sister".to_string()
-                } else {
-                    "Sibling".to_string()
-                },
-                if is_male {
-                    "Брат".to_string()
-                } else if is_female {
-                    "Сестра".to_string()
-                } else {
-                    "Брат / Сестра".to_string()
-                },
-            ),
-            (2, 0) => {
-                let side_prefix = if is_paternal {
-                    "paternal_"
-                } else if is_maternal {
-                    "maternal_"
-                } else {
-                    ""
-                };
-                let base = if is_male {
-                    "grandfather"
-                } else if is_female {
-                    "grandmother"
-                } else {
-                    "grandparent"
-                };
-                (
-                    format!("{side_prefix}{base}"),
-                    if is_male {
-                        "Grandfather".to_string()
-                    } else if is_female {
-                        "Grandmother".to_string()
-                    } else {
-                        "Grandparent".to_string()
-                    },
-                    if is_male {
-                        "Дедушка".to_string()
-                    } else if is_female {
-                        "Бабушка".to_string()
-                    } else {
-                        "Дедушка / Бабушка".to_string()
-                    },
-                )
-            }
-            (0, 2) => (
-                if is_male {
-                    "grandson".to_string()
-                } else if is_female {
-                    "granddaughter".to_string()
-                } else {
-                    "grandchild".to_string()
-                },
-                if is_male {
-                    "Grandson".to_string()
-                } else if is_female {
-                    "Granddaughter".to_string()
-                } else {
-                    "Grandchild".to_string()
-                },
-                if is_male {
-                    "Внук".to_string()
-                } else if is_female {
-                    "Внучка".to_string()
-                } else {
-                    "Внук / Внучка".to_string()
-                },
-            ),
-            (2, 1) => {
-                let side_prefix = if is_paternal {
-                    "paternal_"
-                } else if is_maternal {
-                    "maternal_"
-                } else {
-                    ""
-                };
-                let base = if is_male {
-                    "uncle"
-                } else if is_female {
-                    "aunt"
-                } else {
-                    "pibling"
-                };
-                (
-                    format!("{side_prefix}{base}"),
-                    if is_male {
-                        "Uncle".to_string()
-                    } else if is_female {
-                        "Aunt".to_string()
-                    } else {
-                        "Uncle / Aunt".to_string()
-                    },
-                    if is_male {
-                        "Дядя".to_string()
-                    } else if is_female {
-                        "Тётя".to_string()
-                    } else {
-                        "Дядя / Тётя".to_string()
-                    },
-                )
-            }
-            (1, 2) => (
-                if is_male {
-                    "nephew".to_string()
-                } else if is_female {
-                    "niece".to_string()
-                } else {
-                    "nibling".to_string()
-                },
-                if is_male {
-                    "Nephew".to_string()
-                } else if is_female {
-                    "Niece".to_string()
-                } else {
-                    "Nephew / Niece".to_string()
-                },
-                if is_male {
-                    "Племянник".to_string()
-                } else if is_female {
-                    "Племянница".to_string()
-                } else {
-                    "Племянник / Племянница".to_string()
-                },
-            ),
-            (u, 0) if u >= 3 => (
-                if is_male {
-                    "great_grandfather".to_string()
-                } else if is_female {
-                    "great_grandmother".to_string()
-                } else {
-                    "great_grandparent".to_string()
-                },
-                if is_male {
-                    "Great-grandfather".to_string()
-                } else if is_female {
-                    "Great-grandmother".to_string()
-                } else {
-                    "Great-grandparent".to_string()
-                },
-                if is_male {
-                    "Прадедушка".to_string()
-                } else if is_female {
-                    "Прабабушка".to_string()
-                } else {
-                    "Прародитель".to_string()
-                },
-            ),
-            (0, d) if d >= 3 => (
-                if is_male {
-                    "great_grandchild".to_string()
-                } else if is_female {
-                    "great_granddaughter".to_string()
-                } else {
-                    "great_grandchild".to_string()
-                },
-                "Great-grandchild".to_string(),
-                "Правнук / Правнучка".to_string(),
-            ),
-            (u, d) if u >= 2 && d >= 2 => {
-                let cousin_deg = u.min(d) - 1;
-                let removed = u.abs_diff(d);
-                let deg_word = match cousin_deg {
-                    1 => "first_cousin",
-                    2 => "second_cousin",
-                    3 => "third_cousin",
-                    _ => "cousin",
-                };
-                let key = match removed {
-                    0 => deg_word.to_string(),
-                    1 => format!("{deg_word}_once_removed"),
-                    2 => format!("{deg_word}_twice_removed"),
-                    r => format!("{deg_word}_{r}_times_removed"),
-                };
-                let label_en = if removed == 0 {
-                    format!(
-                        "{} cousin",
-                        match cousin_deg {
-                            1 => "First",
-                            2 => "Second",
-                            3 => "Third",
-                            _ => "Distant",
-                        }
-                    )
-                } else {
-                    format!("Cousin ({cousin_deg} degree, {removed}x removed)")
-                };
-                let label_ru = if cousin_deg == 1 && removed == 0 {
-                    if is_male {
-                        "Двоюродный брат".to_string()
-                    } else if is_female {
-                        "Двоюродная сестра".to_string()
-                    } else {
-                        "Двоюродный брат / сестра".to_string()
-                    }
-                } else {
-                    "Кровный родственник".to_string()
-                };
-                (key, label_en, label_ru)
-            }
-            _ => (
-                "blood_relative".to_string(),
-                "Blood relative".to_string(),
-                "Кровный родственник".to_string(),
-            ),
-        };
-
-        let mut steps_vec = Vec::new();
-        for idx in 0..(path.len().saturating_sub(1)) {
-            let edge_type = if idx < up { "parent" } else { "child" };
-            steps_vec.push(KinshipEdgeStepDto {
-                from_id: path[idx].clone(),
-                to_id: path[idx + 1].clone(),
-                edge_type: edge_type.to_string(),
-            });
+        if yen_candidates.is_empty() {
+            break;
         }
+        yen_candidates.sort_by_key(|p| p.len());
+        let best_next = yen_candidates.remove(0);
+        yen_result.push(best_next);
+    }
 
-        let path_nodes: Vec<TreePersonNodeDto> = path
-            .iter()
-            .filter_map(|id| person_by_id.get(id.as_str()).map(|p| (*p).clone()))
-            .collect();
+    for p in yen_result {
+        if !candidate_paths.contains(&p) {
+            candidate_paths.push(p);
+        }
+    }
 
+    if candidate_paths.is_empty() {
         return KinshipResponse {
-            connected: true,
+            connected: false,
             from_id: from_id.to_string(),
             to_id: to_id.to_string(),
-            relationship_key: rel_key.clone(),
-            relation_key: rel_key,
-            label_en,
-            label_ru,
-            degree_of_kinship: up + down,
-            steps_count: steps_vec.len(),
-            up_steps: up,
-            down_steps: down,
-            is_blood_relation: true,
-            common_ancestor_ids: common_ancestors,
-            path_person_ids: path,
-            steps: steps_vec,
-            path_nodes,
+            relationship_key: "unconnected".to_string(),
+            relation_key: "unconnected".to_string(),
+            label_en: "No known relationship".to_string(),
+            label_ru: "Родственная связь не найдена".to_string(),
+            degree_of_kinship: 0,
+            steps_count: 0,
+            up_steps: 0,
+            down_steps: 0,
+            is_blood_relation: false,
+            common_ancestor_ids: vec![],
+            path_person_ids: vec![],
+            steps: vec![],
+            path_nodes: vec![],
+            traces_count: 0,
+            traces: vec![],
         };
     }
 
-    // 2. Fallback: General shortest-path BFS across parent, child, and spouse edges (affinal / in-law relations)
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut queue: VecDeque<(String, Vec<String>, Vec<KinshipEdgeStepDto>)> = VecDeque::new();
-    visited.insert(from_id.to_string());
-    queue.push_back((from_id.to_string(), vec![from_id.to_string()], vec![]));
+    // Convert candidate paths to traces
+    let mut traces: Vec<KinshipTraceDto> = candidate_paths
+        .into_iter()
+        .map(|path| {
+            build_trace_from_path(
+                &path,
+                "temp".to_string(),
+                &person_by_id,
+                &parents_of,
+                &spouses_of,
+            )
+        })
+        .collect();
 
-    while let Some((curr, path, edge_steps)) = queue.pop_front() {
-        if edge_steps.len() >= 12 {
-            continue;
-        }
-        if curr == to_id {
-            let (rel_key, label_en, label_ru) =
-                if edge_steps.len() == 1 && edge_steps[0].edge_type == "spouse" {
-                    (
-                        if is_male {
-                            "husband".to_string()
-                        } else if is_female {
-                            "wife".to_string()
-                        } else {
-                            "spouse".to_string()
-                        },
-                        if is_male {
-                            "Husband".to_string()
-                        } else if is_female {
-                            "Wife".to_string()
-                        } else {
-                            "Spouse".to_string()
-                        },
-                        if is_male {
-                            "Муж".to_string()
-                        } else if is_female {
-                            "Жена".to_string()
-                        } else {
-                            "Супруг(а)".to_string()
-                        },
-                    )
-                } else if edge_steps.len() == 2
-                    && edge_steps[0].edge_type == "spouse"
-                    && edge_steps[1].edge_type == "parent"
-                {
-                    (
-                        if is_male {
-                            "father_in_law".to_string()
-                        } else if is_female {
-                            "mother_in_law".to_string()
-                        } else {
-                            "parent_in_law".to_string()
-                        },
-                        if is_male {
-                            "Father-in-law".to_string()
-                        } else if is_female {
-                            "Mother-in-law".to_string()
-                        } else {
-                            "Parent-in-law".to_string()
-                        },
-                        if is_male {
-                            "Тесть / Свёкор".to_string()
-                        } else if is_female {
-                            "Тёща / Свекровь".to_string()
-                        } else {
-                            "Родитель супруга(и)".to_string()
-                        },
-                    )
-                } else {
-                    (
-                        "relative_by_marriage".to_string(),
-                        "Relative by marriage".to_string(),
-                        "Родственник по браку".to_string(),
-                    )
-                };
+    // Rank traces: biological blood relationships first, then sorted by degree/steps count
+    traces.sort_by(|a, b| {
+        b.is_blood_relation
+            .cmp(&a.is_blood_relation)
+            .then_with(|| a.degree_of_kinship.cmp(&b.degree_of_kinship))
+            .then_with(|| a.steps.len().cmp(&b.steps.len()))
+            .then_with(|| a.relationship_key.cmp(&b.relationship_key))
+    });
 
-            let path_nodes: Vec<TreePersonNodeDto> = path
-                .iter()
-                .filter_map(|id| person_by_id.get(id.as_str()).map(|p| (*p).clone()))
-                .collect();
+    traces.truncate(max_traces);
 
-            return KinshipResponse {
-                connected: true,
-                from_id: from_id.to_string(),
-                to_id: to_id.to_string(),
-                relationship_key: rel_key.clone(),
-                relation_key: rel_key,
-                label_en,
-                label_ru,
-                degree_of_kinship: edge_steps.len(),
-                steps_count: edge_steps.len(),
-                up_steps: 0,
-                down_steps: 0,
-                is_blood_relation: false,
-                common_ancestor_ids: vec![],
-                path_person_ids: path,
-                steps: edge_steps,
-                path_nodes,
-            };
-        }
-
-        let mut neighbors: Vec<(&str, &str)> = Vec::new();
-        if let Some(ps) = parents_of.get(curr.as_str()) {
-            for &p in ps {
-                neighbors.push((p, "parent"));
-            }
-        }
-        if let Some(cs) = children_of.get(curr.as_str()) {
-            for &c in cs {
-                neighbors.push((c, "child"));
-            }
-        }
-        if let Some(ss) = spouses_of.get(curr.as_str()) {
-            for &s in ss {
-                neighbors.push((s, "spouse"));
-            }
-        }
-
-        for (next_id, edge_kind) in neighbors {
-            if visited.insert(next_id.to_string()) {
-                let mut next_path = path.clone();
-                next_path.push(next_id.to_string());
-                let mut next_edges = edge_steps.clone();
-                next_edges.push(KinshipEdgeStepDto {
-                    from_id: curr.clone(),
-                    to_id: next_id.to_string(),
-                    edge_type: edge_kind.to_string(),
-                });
-                queue.push_back((next_id.to_string(), next_path, next_edges));
-            }
-        }
+    for (idx, trace) in traces.iter_mut().enumerate() {
+        trace.id = format!("trace-{}", idx + 1);
     }
 
+    let primary = &traces[0];
+    let path_nodes: Vec<TreePersonNodeDto> = primary
+        .path_person_ids
+        .iter()
+        .filter_map(|id| person_by_id.get(id.as_str()).map(|p| (*p).clone()))
+        .collect();
+
+    let mut steps_vec = Vec::new();
+    for idx in 0..primary.path_person_ids.len().saturating_sub(1) {
+        let p_curr = &primary.path_person_ids[idx];
+        let p_next = &primary.path_person_ids[idx + 1];
+        let edge_type = if parents_of
+            .get(p_curr.as_str())
+            .is_some_and(|ps| ps.contains(&p_next.as_str()))
+        {
+            "parent"
+        } else if parents_of
+            .get(p_next.as_str())
+            .is_some_and(|ps| ps.contains(&p_curr.as_str()))
+        {
+            "child"
+        } else if spouses_of
+            .get(p_curr.as_str())
+            .is_some_and(|ss| ss.contains(&p_next.as_str()))
+        {
+            "spouse"
+        } else {
+            "relative"
+        };
+        steps_vec.push(KinshipEdgeStepDto {
+            from_id: p_curr.clone(),
+            to_id: p_next.clone(),
+            edge_type: edge_type.to_string(),
+        });
+    }
+
+    let (up_steps, down_steps) = if primary.is_blood_relation {
+        let u = steps_vec
+            .iter()
+            .take_while(|s| s.edge_type == "parent")
+            .count();
+        let d = steps_vec.len().saturating_sub(u);
+        (u, d)
+    } else {
+        (0, 0)
+    };
+
     KinshipResponse {
-        connected: false,
+        connected: true,
         from_id: from_id.to_string(),
         to_id: to_id.to_string(),
-        relationship_key: "unconnected".to_string(),
-        relation_key: "unconnected".to_string(),
-        label_en: "No known relationship".to_string(),
-        label_ru: "Родственная связь не найдена".to_string(),
-        degree_of_kinship: 0,
-        steps_count: 0,
-        up_steps: 0,
-        down_steps: 0,
-        is_blood_relation: false,
-        common_ancestor_ids: vec![],
-        path_person_ids: vec![],
-        steps: vec![],
-        path_nodes: vec![],
+        relationship_key: primary.relationship_key.clone(),
+        relation_key: primary.relationship_key.clone(),
+        label_en: primary.label_en.clone(),
+        label_ru: primary.label_ru.clone(),
+        degree_of_kinship: primary.degree_of_kinship,
+        steps_count: steps_vec.len(),
+        up_steps,
+        down_steps,
+        is_blood_relation: primary.is_blood_relation,
+        common_ancestor_ids: primary.common_ancestor_ids.clone(),
+        path_person_ids: primary.path_person_ids.clone(),
+        steps: steps_vec,
+        path_nodes,
+        traces_count: traces.len(),
+        traces,
     }
 }
 

@@ -14,7 +14,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::config::AppConfig;
 use crate::routes::create_router;
 use crate::services::{
-    backup::BackupService, db_init::connect_and_migrate, scheduler::spawn_background_scheduler,
+    auth::AuthService, backup::BackupService, db_init::connect_and_migrate,
+    scheduler::spawn_background_scheduler,
 };
 use crate::state::AppState;
 
@@ -51,6 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Initialize application state, background scheduler, and router
     let state = AppState::new_empty(pool, config.clone());
+    if let Err(e) = AuthService::hydrate_from_db(&state).await {
+        tracing::error!("Failed to hydrate auth state from database: {e}");
+    }
     spawn_background_scheduler(state.clone());
     let app = create_router(state);
 

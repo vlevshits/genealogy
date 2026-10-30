@@ -38,6 +38,7 @@ const DEFAULT_SETUP_STATUS: SetupStatusResponse = {
   default_locale: 'en',
   enable_public_access: false,
   auth_password_enabled: true,
+  smtp_enabled: false,
   rp_id: 'localhost',
   rp_name: 'Levshits Family Archive',
 };

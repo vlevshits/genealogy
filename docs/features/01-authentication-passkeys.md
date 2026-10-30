@@ -31,11 +31,31 @@ Since this is a self-hosted single-tree instance, authentication must balance hi
 2. Backend validates the signature, origin, challenge, and signature counter.
 3. Upon success, a server-side session is created and an opaque `HttpOnly`, `Secure`, `SameSite=Lax` session cookie is issued (sessions are revocable; see [17 §3.1](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md#31-sessions)).
 
+#### 2.3.1 Post-Authentication Redirection & `returnUrl`
+- When arriving on `/login` with `?returnUrl=<encoded_path>` (e.g. following a deep link or redirected from a restricted section):
+  - **Open-Redirect Protection:** The client strictly sanitizes `returnUrl`. The target must begin with a single `/` and must not start with `//` or specify an external protocol scheme (`http:`, `https:`, `javascript:`, etc.). Disallowed or malformed targets default to `/`.
+  - **Successful Authentication:** Upon completing sign-in via Passkey, password fallback, or recovery code, the client navigates to the sanitized `returnUrl` instead of hardcoding `/`.
+
+#### 2.3.2 Exit Navigation & Public Guest Return
+- **Public Tree Mode (`enable_public_access: true`):**
+  - Unauthenticated visitors on `/login` can return to the public archive at any time by clicking the interactive brand logo/title in the `AuthLayout` header (navigates to `/`) or by clicking the prominent "Browse Public Archive / Back to Family Tree" action on `LoginCard`.
+  - If `returnUrl` refers to a permitted public route (`/`, `/tree`, `/persons/:id`), guest return navigates to that route; if `returnUrl` is empty or an authenticated-only restricted route, it safely falls back to `/`.
+- **Default Private Posture (`enable_public_access: false`):**
+  - Unauthenticated visitors have no access to browse genealogical records.
+  - The "Browse Public Archive" action is completely omitted from `LoginCard`.
+  - Clicking the brand logo/title in `AuthLayout` routes to `/`, which is intercepted by the router/middleware gatekeeper and securely retains the visitor on `/login` without exposing tree data.
+
+
 ### 2.4 Email Magic Link Fallback (for older/non-passkey devices)
-1. On the login screen, a discreet option is available: **"Sign in with Email Link"**.
+1. On the login screen, an option is available: **"Sign in with Email Link"**.
 2. User enters their registered email address.
-3. Backend generates a cryptographically secure, time-limited (15 minutes), single-use token and sends an email with a clickable login button.
-4. Clicking the magic link validates the token, issues the authentication session, and offers an optional prompt: *"Would you like to register this device with Touch ID / Face ID for faster sign-in next time?"*.
+3. Backend validates input format and enforces sliding-window rate limiting (3 requests per 15 minutes per email; 10 requests per minute per IP).
+4. **Zero Token Leakage:** The backend response payload strictly returns `{ "status": "sent", "message": "..." }`. Under **no environment** (production, development, test, or debug) are `preview_url` or `preview_token` returned to the client or written to system logs.
+5. **Anti-Enumeration Protection:** If the requested email address does not exist or is inactive, the endpoint returns the exact same success response (`200 OK`) and sends no email, preventing user enumeration attacks.
+6. **SMTP Requirement & Non-SMTP Behavior:**
+   - If `SMTP_ENABLED=true` (and SMTP is properly configured): the backend generates a cryptographically random, 15-minute, single-use token, stores only its SHA-256 hash in `magic_links` (`token_hash`), and sends a transactional email via SMTP with a clickable login button linking to `${APP_ORIGIN}/magic-link/verify?token=${raw_token}`.
+   - If `SMTP_ENABLED=false` (or SMTP unconfigured): the endpoint returns `503 Service Unavailable` with error code `smtp_not_configured`. The UI displays a clear localized message that email delivery is not configured, directing users to sign in with their passkey, password fallback, or an admin-generated sign-in link.
+7. Clicking the magic link from the email validates the token against `magic_links`, marks it `used_at = NOW()`, establishes an active session cookie (`SameSite=Lax`), and redirects into the archive (navigating to the validated `returnUrl` if provided, otherwise `/`) with an optional prompt: *"Would you like to register this device with Touch ID / Face ID for faster sign-in next time?"*.
 
 ### 2.5 Managing Passkeys & Devices
 1. In `User Profile > Security`, users can:
@@ -50,8 +70,9 @@ Since this is a self-hosted single-tree instance, authentication must balance hi
 ### 2.7 Password & Admin Sign-In Link Fallback (Local Hosting)
 Passkeys require HTTPS (or `localhost`), and magic links require SMTP. Typical home installs (`http://192.168.x.x`, no SMTP) would otherwise lock relatives out. Therefore:
 - **Optional password login** controlled by `AUTH_PASSWORD_ENABLED` (`auto` | `true` | `false`; `auto` enables it when not served over HTTPS or SMTP is disabled). Argon2id, rate-limited.
-- **Admin-generated sign-in link**: one-time 24 h link created in *Settings → Family Members* and shared via messenger — no SMTP needed.
+- **Admin-generated sign-in link**: one-time 24 h link created in *Settings → Family Members* (`POST /api/v1/admin/users/:id/sign-in-link`) and shared via messenger (WhatsApp/Telegram) — no SMTP needed.
 - The UI hides passkey options when `window.isSecureContext` is false and explains why.
+- **Strict Out-of-Band Security:** Magic link tokens are never leaked into the browser UI as a fallback. If SMTP is disabled, magic link login cannot be used; users must rely on Passkeys, Passwords, or Admin-generated links.
 - Details: [17 §3.5](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/17-api-security-operations.md).
 
 ---
@@ -125,15 +146,17 @@ CREATE TABLE auth_challenges (
 
 ## 4. API Endpoints
 
+### 4.1 Endpoint Catalog
+
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/v1/auth/setup/status` | Checks whether the instance has an initial admin registered. |
+| `GET` | `/api/v1/auth/setup/status` | Instance initialization status, RP config, and capability flags (`auth_password_enabled`, `smtp_enabled`, `enable_public_access`). |
 | `POST` | `/api/v1/auth/register/challenge` | Generates WebAuthn creation options (challenge, rp, user info). |
 | `POST` | `/api/v1/auth/register/verify` | Validates client attestation response and saves public key. |
 | `POST` | `/api/v1/auth/login/challenge` | Generates WebAuthn request options (challenge, allowCredentials). |
 | `POST` | `/api/v1/auth/login/verify` | Validates client assertion response, updates sign counter, issues session. |
-| `POST` | `/api/v1/auth/magic-link/request` | Generates and emails a single-use 15-minute login magic link. |
-| `GET` | `/api/v1/auth/magic-link/verify` | Validates magic link token from email and establishes active session. |
+| `POST` | `/api/v1/auth/magic-link/request` | Requests a single-use 15-minute login magic link via SMTP. Zero token leakage. |
+| `GET` | `/api/v1/auth/magic-link/verify` | Validates magic link token from email link, burns token, and establishes session. |
 | `POST` | `/api/v1/auth/recovery-code` | Validates a single-use recovery code and grants a temporary recovery session. |
 | `GET` | `/api/v1/auth/passkeys` | Lists all registered passkeys for the current user. |
 | `POST` | `/api/v1/auth/passkeys/add/challenge` | Starts passkey registration for an additional device. |
@@ -145,6 +168,51 @@ CREATE TABLE auth_challenges (
 | `DELETE` | `/api/v1/auth/sessions/:id` | Revoke a session (sign out a device). |
 | `POST` | `/api/v1/admin/users/:id/sign-in-link` | Admin creates a one-time 24 h sign-in link for a user. |
 
+### 4.2 Endpoint Schemas & Contracts
+
+#### `GET /api/v1/auth/setup/status`
+Returns public instance parameters to initialize the authentication UI:
+```json
+{
+  "is_initialized": true,
+  "tree_title": "Levshits Family Archive",
+  "default_locale": "en",
+  "enable_public_access": false,
+  "auth_password_enabled": true,
+  "smtp_enabled": true,
+  "rp_id": "localhost",
+  "rp_name": "Family Tree"
+}
+```
+
+#### `POST /api/v1/auth/magic-link/request`
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com"
+  }
+  ```
+- **Response (`200 OK`):**
+  ```json
+  {
+    "status": "sent",
+    "message": "If an active account exists for this email address, a sign-in link has been sent."
+  }
+  ```
+  > [!CAUTION] Zero Token Leakage Contract:
+  > The fields `preview_url` and `preview_token` are permanently deleted from `MagicLinkRequestResponse`. The API must never return the raw token or verification URL in HTTP responses under any environment (production, staging, development, or test).
+- **Error Responses:**
+  - `503 Service Unavailable`: `{"error":{"code":"smtp_not_configured","message":"Email delivery is not configured on this server"}}` when `SMTP_ENABLED=false` or SMTP credentials are unconfigured.
+  - `429 Too Many Requests`: `{"error":{"code":"rate_limited","message":"Rate limit exceeded"}}` when exceeding 3 requests per 15 minutes per email, or 10 requests per minute per IP.
+  - `400 Bad Request`: `{"error":{"code":"validation_failed","message":"Invalid email format"}}` on malformed email.
+
+#### `GET /api/v1/auth/magic-link/verify?token=<token>`
+- Validates the single-use token against SHA-256 hash in `magic_links`.
+- Checks `expires_at > NOW()` and `used_at IS NULL`.
+- Sets `used_at = NOW()`, creates a server-side session, and sets `session` cookie (`HttpOnly; Secure; SameSite=Lax`).
+- Redirects to `/` (or target path) or returns `200 OK` with user details.
+- Error: `400 Bad Request` (`{"error":{"code":"invalid_or_expired_token"}}`) if invalid, already used, or expired.
+
 ---
 
 ## 5. Definition of Done (DoD)
@@ -152,10 +220,15 @@ CREATE TABLE auth_challenges (
 - [ ] **First-Run Wizard:** Clean instance detects zero users and walks admin through passkey creation and displays downloadable emergency recovery codes.
 - [ ] **Passkey Registration:** User can successfully register a Passkey using biometric sensors (TouchID/FaceID) or USB/NFC hardware security keys.
 - [ ] **WebAuthn Autofill:** Login screen supports browser conditional UI autofill where selecting a username prompts instant biometric authentication.
-- [ ] **Email Magic Link Delivery:** Users can request a magic link; backend validates the token, marks it used, and signs the user in.
+- [ ] **Zero Token Leakage:** `MagicLinkRequestResponse` contains exclusively `status` and `message`; `preview_url` and `preview_token` are permanently eliminated from backend DTOs and client bundles. Neither API responses nor frontend UI displays tokens or preview sign-in links under any environment.
+- [ ] **SMTP Email Delivery:** When `SMTP_ENABLED=true`, requesting a magic link delivers a transactional multipart (HTML and plaintext) email containing the single-use 15-minute link using the configured SMTP server (`lettre`).
+- [ ] **Non-SMTP Fallback Behavior:** When `SMTP_ENABLED=false`, `POST /api/v1/auth/magic-link/request` returns HTTP 503 `smtp_not_configured`, and the UI displays localized guidance directing to Passkeys, Password login, or Admin sign-in links.
+- [ ] **Anti-Enumeration Protection:** Requesting a magic link for an unregistered email returns an identical HTTP 200 `status: "sent"` response without dispatching email.
 - [ ] **Multi-device Enrollment:** User can add a second passkey (e.g., adding phone from laptop) via an authenticated session.
 - [ ] **Passkey Revocation:** User can remove an old passkey, with validation preventing removal of the last remaining authentication method.
 - [ ] **Recovery Flow:** Validated recovery code successfully signs the user in and prompts immediate registration of a replacement passkey.
-- [ ] **Security Checks:** Challenges and magic tokens are cryptographically random, expire within safety limits, are strictly single-use, and sign counters prevent replay attacks.
+- [ ] **Security Checks:** Challenges and magic tokens are cryptographically random, expire within safety limits (15 minutes for magic links), are strictly single-use, and sign counters prevent replay attacks.
 - [ ] **LAN Fallback:** On a plain-HTTP LAN install without SMTP, an invited relative can register and sign in with a password or an admin-generated sign-in link.
 - [ ] **Session Revocation:** Users can see and revoke their active sessions; admins can revoke all sessions of a user.
+- [ ] **Post-Authentication Return URL Redirection:** Successful authentication via any method (Passkey, password fallback, recovery code, magic link) navigates to the sanitized relative `returnUrl` (starting with a single `/`); open-redirect attacks (external URLs or protocol-relative `//`) are strictly neutralized to `/`.
+- [ ] **Public Archive Return Navigation:** On public instances (`enable_public_access: true`), unauthenticated visitors on `/login` can navigate back to the public archive (`/` or public `returnUrl`) via the header brand or the public action button. On private instances (`enable_public_access: false`), egress to the archive remains strictly blocked.

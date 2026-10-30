@@ -32,6 +32,12 @@ export function getLocalizedErrorMessage(
 ): string {
   if (err instanceof ApiError) {
     if (err.code) {
+      if (err.code === 'user_verification_required') {
+        return t('errors.user_verification_required');
+      }
+      if (err.code === 'passkey_verification_failed') {
+        return t('errors.passkey_verification_failed');
+      }
       const fromCode = tryTranslateErrorCode(err.code, t);
       if (fromCode) return fromCode;
     }
@@ -41,9 +47,38 @@ export function getLocalizedErrorMessage(
       const fromStatus = tryTranslateErrorCode(mappedKey, t);
       if (fromStatus) return fromStatus;
     }
-  } else if (err && typeof err === 'object') {
+  } else if (
+    (typeof DOMException !== 'undefined' && err instanceof DOMException) ||
+    (err && typeof err === 'object' && 'name' in err)
+  ) {
+    const domErr = err as { name?: string };
+    if (
+      domErr.name === 'NotAllowedError' ||
+      domErr.name === 'TimeoutError' ||
+      domErr.name === 'AbortError'
+    ) {
+      return t('errors.webauthn_not_allowed');
+    }
+    if (domErr.name === 'InvalidStateError') {
+      return t('errors.webauthn_already_registered');
+    }
+    if (domErr.name === 'SecurityError') {
+      return t('errors.webauthn_security_error');
+    }
+    if (domErr.name === 'NotSupportedError') {
+      return t('errors.webauthn_not_supported');
+    }
+  }
+
+  if (err && typeof err === 'object' && !(err instanceof ApiError)) {
     const maybeCode = (err as { code?: unknown }).code;
     if (typeof maybeCode === 'string' && maybeCode) {
+      if (maybeCode === 'user_verification_required') {
+        return t('errors.user_verification_required');
+      }
+      if (maybeCode === 'passkey_verification_failed') {
+        return t('errors.passkey_verification_failed');
+      }
       const fromCode = tryTranslateErrorCode(maybeCode, t);
       if (fromCode) return fromCode;
     }

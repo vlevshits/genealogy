@@ -41,6 +41,12 @@ pub enum AppError {
     #[error("Passkey signature counter replay detected")]
     PasskeyReplayDetected,
 
+    #[error("User verification (biometrics or device PIN) is required.")]
+    UserVerificationRequired,
+
+    #[error("Passkey assertion verification failed.")]
+    PasskeyVerificationFailed,
+
     #[error("Invalid or expired WebAuthn challenge")]
     InvalidOrExpiredChallenge,
 
@@ -122,6 +128,9 @@ pub enum AppError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
 
+    #[error("Email delivery is not configured on this server")]
+    SmtpNotConfigured,
+
     #[error("Internal server error: {0}")]
     Internal(String),
 }
@@ -134,6 +143,8 @@ impl AppError {
             Self::SessionExpired => "session_expired",
             Self::InvalidCredentials => "invalid_credentials",
             Self::PasskeyReplayDetected => "passkey_replay_detected",
+            Self::UserVerificationRequired => "user_verification_required",
+            Self::PasskeyVerificationFailed => "passkey_verification_failed",
             Self::InvalidOrExpiredChallenge => "invalid_or_expired_challenge",
             Self::InvalidOrExpiredInvite => "invalid_or_expired_invite",
             Self::InvalidOrExpiredToken => "invalid_or_expired_token",
@@ -159,6 +170,7 @@ impl AppError {
             Self::DecompressionLimitExceeded(_) => "decompression_limit_exceeded",
             Self::PayloadTooLarge(_) => "upload_too_large",
             Self::UnsupportedArchiveFormat(_) => "unsupported_archive_format",
+            Self::SmtpNotConfigured => "smtp_not_configured",
             Self::DatabaseError(_) => "database_error",
             Self::Internal(_) => "internal_error",
         }
@@ -167,6 +179,8 @@ impl AppError {
     pub fn status_code(&self) -> StatusCode {
         match self {
             Self::ValidationFailed(_, _)
+            | Self::UserVerificationRequired
+            | Self::PasskeyVerificationFailed
             | Self::InvalidOrExpiredChallenge
             | Self::InvalidOrExpiredToken
             | Self::LastAuthMethod
@@ -196,6 +210,7 @@ impl AppError {
             | Self::AlreadyOnboarded
             | Self::PlaceInUse => StatusCode::CONFLICT,
             Self::RateLimited | Self::AccountLocked => StatusCode::TOO_MANY_REQUESTS,
+            Self::SmtpNotConfigured => StatusCode::SERVICE_UNAVAILABLE,
             Self::DatabaseError(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Fingerprint, UserPlus } from 'lucide-react';
 import {
   Alert,
@@ -56,6 +56,15 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (submitError && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      errorRef.current.focus();
+    }
+  }, [submitError]);
 
   const secureContext = isSecureContextAvailable();
 
@@ -179,7 +188,16 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
         </div>
       </Alert>
 
-      {submitError && <Alert variant="danger">{submitError}</Alert>}
+      {submitError && (
+        <Alert
+          ref={errorRef}
+          variant="danger"
+          tabIndex={-1}
+          className="focus:outline-none"
+        >
+          {submitError}
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField

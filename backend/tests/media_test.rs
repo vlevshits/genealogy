@@ -47,6 +47,7 @@ async fn setup_state_and_admin() -> (AppState, String) {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -84,6 +85,7 @@ async fn create_role_user(
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -724,4 +726,314 @@ async fn media_rbac_and_living_person_privacy_shield_work() {
     let tags = group_json["face_tags"].as_array().unwrap();
     assert_eq!(tags.len(), 1);
     assert_eq!(tags[0]["is_living"], false);
+}
+
+#[tokio::test]
+async fn test_media_associated_people_avatar_and_unlinking() {
+    let (state, admin_auth) = setup_state_and_admin().await;
+    let app = create_router(state.clone());
+
+    // Enable public access so we can verify AnonymousPublic masking
+    let settings_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/admin/settings")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::from(
+                    json!({ "enable_public_access": true }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(settings_resp.status(), StatusCode::OK);
+
+    // 1. Upload a media asset
+    let upload_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/media")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::from(
+                    json!({
+                        "file_name": "family_reunion_1975.webp",
+                        "mime_type": "image/webp",
+                        "title": "Family Reunion 1975"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload_resp.status(), StatusCode::CREATED);
+    let media_json = read_json(upload_resp).await;
+    let media_id = media_json["id"].as_str().unwrap().to_string();
+
+    // 2. Individual with avatar_media_id == media.id appears in linked_person_ids and links without a face tag
+    // Set Nikolai (I0001, deceased) avatar_media_id to media_id and sync
+    let nikolai_id = {
+        let mut store = state.privacy_store.write().await;
+        let nikolai = store.persons.iter_mut().find(|p| p.gid == "I0001").unwrap();
+        nikolai.avatar_media_id = Some(media_id.clone());
+        let nid = nikolai.id.clone();
+        genealogy_backend::routes::rbac::sync_media_links_and_living(&mut store, &media_id);
+        nid
+    };
+
+    let media_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/media/{media_id}"))
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media_resp.status(), StatusCode::OK);
+    let media_detail = read_json(media_resp).await;
+
+    // Face tags should be empty
+    let face_tags = media_detail["face_tags"].as_array().unwrap();
+    assert!(face_tags.is_empty());
+
+    // linked_person_ids should contain Nikolai
+    let linked_pids = media_detail["linked_person_ids"].as_array().unwrap();
+    assert!(linked_pids.iter().any(|v| v.as_str() == Some(&nikolai_id)));
+
+    // links should contain a primary_avatar link for Nikolai
+    let links = media_detail["links"].as_array().unwrap();
+    let nikolai_link = links
+        .iter()
+        .find(|l| l["entity_type"] == "individual" && l["entity_id"] == nikolai_id)
+        .expect("Nikolai must be in media.links");
+    assert_eq!(nikolai_link["role"], "primary_avatar");
+
+    // 3. Tag a living person Elena (I0042) with a face tag (not primary avatar)
+    let tag_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/media/{media_id}/tags"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::from(
+                    json!({
+                        "person_id": "I0042",
+                        "x": 0.2,
+                        "y": 0.2,
+                        "w": 0.15,
+                        "h": 0.2,
+                        "is_primary_avatar": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(tag_resp.status(), StatusCode::CREATED);
+    let tag_json = read_json(tag_resp).await;
+    let elena_tag_id = tag_json["id"].as_str().unwrap().to_string();
+    let elena_id = tag_json["person_id"].as_str().unwrap().to_string();
+
+    // 4. Deleting a face tag preserves the person in linked_person_ids and links (with role depicted)
+    let del_tag_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/media/{media_id}/tags/{elena_tag_id}"))
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(del_tag_resp.status(), StatusCode::NO_CONTENT);
+
+    // Verify media detail for admin:
+    let media_after_del_tag = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/media/{media_id}"))
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media_after_del_tag.status(), StatusCode::OK);
+    let media_del_tag_json = read_json(media_after_del_tag).await;
+
+    // Face tags has NO tags now
+    assert!(media_del_tag_json["face_tags"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    // But Elena is still in linked_person_ids and links!
+    let pids = media_del_tag_json["linked_person_ids"].as_array().unwrap();
+    assert!(pids.iter().any(|v| v.as_str() == Some(&elena_id)));
+
+    let links_after_del = media_del_tag_json["links"].as_array().unwrap();
+    let elena_link = links_after_del
+        .iter()
+        .find(|l| l["entity_type"] == "individual" && l["entity_id"] == elena_id)
+        .expect("Elena must be preserved in media.links");
+    assert_eq!(elena_link["role"], "depicted");
+    let elena_link_id = elena_link["id"].as_str().unwrap().to_string();
+
+    // 5. Explicit unlink via DELETE /api/v1/media/{id}/links/{link_id} removes them
+    let unlink_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/media/{media_id}/links/{elena_link_id}"))
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unlink_resp.status(), StatusCode::NO_CONTENT);
+
+    let media_after_unlink = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/media/{media_id}"))
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(media_after_unlink.status(), StatusCode::OK);
+    let media_unlink_json = read_json(media_after_unlink).await;
+
+    // Elena is now removed from linked_person_ids and links
+    let pids_after = media_unlink_json["linked_person_ids"].as_array().unwrap();
+    assert!(!pids_after.iter().any(|v| v.as_str() == Some(&elena_id)));
+    let links_after = media_unlink_json["links"].as_array().unwrap();
+    assert!(!links_after.iter().any(|l| l["entity_id"] == elena_id));
+
+    // 6. AnonymousPublic guest access masks all living associated individuals
+    // Re-link living person Elena explicitly as an associated person (role depicted)
+    let re_link_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/media/{media_id}/links"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::from(
+                    json!({
+                        "entity_type": "individual",
+                        "entity_id": "I0042",
+                        "role": "depicted"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(re_link_resp.status(), StatusCode::CREATED);
+
+    // Verify admin sees both Nikolai (deceased) and Elena (living) in links and linked_person_ids
+    let admin_view = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/media/{media_id}"))
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(admin_view.status(), StatusCode::OK);
+    let admin_json = read_json(admin_view).await;
+    assert_eq!(admin_json["linked_person_ids"].as_array().unwrap().len(), 2);
+    assert_eq!(admin_json["links"].as_array().unwrap().len(), 2);
+
+    // Anonymous request (guest public access)
+    let anon_view = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/api/v1/media/{media_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(anon_view.status(), StatusCode::OK);
+    let anon_json = read_json(anon_view).await;
+
+    // Elena (living) must be masked from both linked_person_ids and links
+    let anon_pids = anon_json["linked_person_ids"].as_array().unwrap();
+    assert_eq!(anon_pids.len(), 1);
+    assert_eq!(anon_pids[0], nikolai_id);
+
+    let anon_links = anon_json["links"].as_array().unwrap();
+    assert_eq!(anon_links.len(), 1);
+    assert_eq!(anon_links[0]["entity_id"], nikolai_id);
+    assert_eq!(anon_links[0]["role"], "primary_avatar");
+
+    // 7. Explicit unlink of Nikolai removes association and resets avatar_media_id on person
+    let nikolai_link_id = nikolai_link["id"].as_str().unwrap();
+    let unlink_nikolai_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/media/{media_id}/links/{nikolai_link_id}"))
+                .header("x-requested-with", "genealogy")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unlink_nikolai_resp.status(), StatusCode::NO_CONTENT);
+
+    let nikolai_profile = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/persons/I0001")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(nikolai_profile.status(), StatusCode::OK);
+    let nikolai_json = read_json(nikolai_profile).await;
+    assert!(nikolai_json["avatar_media_id"].is_null());
 }

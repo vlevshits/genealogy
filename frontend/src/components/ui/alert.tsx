@@ -47,9 +47,9 @@ export const Alert: React.FC<AlertProps> = ({
       )}
       {...props}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 min-w-0 flex-1">
         {icon ?? defaultIcons[variant]}
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0 flex-1">
           {title && <div className="font-semibold text-primary">{title}</div>}
           {children && <div className="text-secondary leading-relaxed">{children}</div>}
         </div>

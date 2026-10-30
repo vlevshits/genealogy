@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calendar,
   ExternalLink,
@@ -8,6 +8,9 @@ import {
   Save,
   Star,
   Trash2,
+  UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import {
@@ -23,6 +26,7 @@ import {
   Switch,
   Textarea,
   TextInput,
+  useConfirm,
 } from '../ui';
 import { FormField } from '../form';
 import { cn } from '../../lib/utils';
@@ -38,6 +42,8 @@ export interface MediaMetadataPanelProps {
   candidates?: FaceTagCandidatePerson[];
   highlightedTagId?: string | null;
   onHighlightTag?: (tagId: string | null) => void;
+  targetPersonId?: string | null;
+  onSelectTargetPerson?: (personId: string | null) => void;
   onSaveMetadata: (patch: UpdateMediaInput) => Promise<void> | void;
   onDeleteAsset?: () => Promise<void> | void;
   onTogglePrimaryAvatar?: (
@@ -46,6 +52,8 @@ export interface MediaMetadataPanelProps {
   ) => Promise<void> | void;
   onDeleteFaceTag?: (tagId: string) => Promise<void> | void;
   onStartTaggingAnotherFace?: () => void;
+  onLinkPersonClick?: () => void;
+  onUnlinkPerson?: (personId: string) => Promise<void> | void;
   onOpenPerson?: (personId: string) => void;
 }
 
@@ -55,14 +63,19 @@ export const MediaMetadataPanel: React.FC<MediaMetadataPanelProps> = ({
   candidates = DEFAULT_FACE_CANDIDATES,
   highlightedTagId = null,
   onHighlightTag,
+  targetPersonId = null,
+  onSelectTargetPerson,
   onSaveMetadata,
   onDeleteAsset,
   onTogglePrimaryAvatar = () => {},
   onDeleteFaceTag = () => {},
   onStartTaggingAnotherFace = () => {},
+  onLinkPersonClick = () => {},
+  onUnlinkPerson = () => {},
   onOpenPerson = () => {},
 }) => {
   const { t } = useI18n();
+  const confirm = useConfirm();
 
   const [title, setTitle] = useState<string>(asset.title);
   const [dateTaken, setDateTaken] = useState<string>(asset.date_taken ?? '');
@@ -83,12 +96,46 @@ export const MediaMetadataPanel: React.FC<MediaMetadataPanelProps> = ({
     setIsPrivate(asset.is_private);
   }, [asset]);
 
-  const candidateById = new Map<string, FaceTagCandidatePerson>(
-    candidates.map((c) => [c.id, c])
+  const candidateById = useMemo(
+    () => new Map<string, FaceTagCandidatePerson>(candidates.map((c) => [c.id, c])),
+    [candidates]
   );
 
-  const formatPersonVitals = (tag: FaceTagDto): string => {
-    const cand = candidateById.get(tag.person_id);
+  // Partition people into Tagged faces and Untagged associated individuals
+  const taggedPersonIds = useMemo(
+    () => new Set<string>((asset.face_tags || []).map((t) => t.person_id)),
+    [asset.face_tags]
+  );
+
+  const associatedPersonIds = useMemo(() => {
+    const list: string[] = [];
+    const seen = new Set<string>();
+
+    for (const id of asset.linked_person_ids || []) {
+      if (!taggedPersonIds.has(id) && !seen.has(id)) {
+        seen.add(id);
+        list.push(id);
+      }
+    }
+
+    for (const link of asset.links || []) {
+      if (
+        link.entity_type === 'individual' &&
+        !taggedPersonIds.has(link.entity_id) &&
+        !seen.has(link.entity_id)
+      ) {
+        seen.add(link.entity_id);
+        list.push(link.entity_id);
+      }
+    }
+
+    return list;
+  }, [asset.linked_person_ids, asset.links, taggedPersonIds]);
+
+  const totalPeopleCount = (asset.face_tags?.length || 0) + associatedPersonIds.length;
+
+  const formatPersonVitals = (personId: string): string => {
+    const cand = candidateById.get(personId);
     if (!cand) return '';
     const parts: string[] = [];
     if (cand.birthYear) {
@@ -199,10 +246,20 @@ export const MediaMetadataPanel: React.FC<MediaMetadataPanelProps> = ({
                   type="button"
                   variant="danger"
                   size="sm"
-                  onClick={() => {
-                    void onDeleteAsset();
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: t('mediaArchive.deleteConfirmTitle'),
+                      description: t('mediaArchive.deleteConfirmMessage'),
+                      confirmLabel: t('common.delete'),
+                      cancelLabel: t('common.cancel'),
+                      destructive: true,
+                    });
+                    if (ok) {
+                      void onDeleteAsset();
+                    }
                   }}
                   leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+                  className="h-8 min-h-8 px-3 text-xs touch-target-expand"
                 >
                   {t('mediaArchive.deleteMediaBtn')}
                 </Button>
@@ -245,133 +302,281 @@ export const MediaMetadataPanel: React.FC<MediaMetadataPanelProps> = ({
         )}
       </div>
 
-      {/* Section 2: Tagged People List & Primary Avatar Controls */}
-      <div className="border-t border-border pt-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
+      {/* Section 2: Unified People in this Media Section */}
+      <div className="border-t border-border pt-4 space-y-4">
+        {/* Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-secondary">
             <Users className="h-3.5 w-3.5 text-brand" />
             <span>
-              {t('mediaArchive.taggedPeopleHeading', {
-                count: asset.face_tags.length,
+              {t('mediaArchive.peopleInMediaHeading', {
+                count: totalPeopleCount,
               })}
             </span>
           </h3>
 
-          {canEdit && asset.mime_type.startsWith('image/') && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onStartTaggingAnotherFace}
-              leftIcon={<Plus className="h-3.5 w-3.5" />}
-              className="h-7 min-h-0 px-2.5 text-xs"
-            >
-              {t('mediaArchive.tagAnotherFaceBtn')}
-            </Button>
+          {canEdit && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onLinkPersonClick}
+                leftIcon={<UserPlus className="h-3 w-3" />}
+                className="h-8 min-h-8 px-2.5 text-xs touch-target-expand"
+              >
+                {t('mediaArchive.linkPersonBtn')}
+              </Button>
+              {asset.mime_type.startsWith('image/') && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onStartTaggingAnotherFace}
+                  leftIcon={<Plus className="h-3 w-3" />}
+                  className="h-8 min-h-8 px-2.5 text-xs touch-target-expand"
+                >
+                  {t('mediaArchive.tagAnotherFaceBtn')}
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
-        {asset.face_tags.length === 0 ? (
+        {totalPeopleCount === 0 ? (
           <p className="text-xs text-secondary py-2">
             {t('mediaArchive.noFacesTaggedYet')}
           </p>
         ) : (
-          <div className="space-y-2">
-            {asset.face_tags.map((tag) => {
-              const isHighlighted = highlightedTagId === tag.id;
-              const vitals = formatPersonVitals(tag);
-              const cand = candidateById.get(tag.person_id);
-              const cropPreviewUrl = tag.is_primary_avatar
-                ? getMediaCropUrl(asset.id, {
-                    x: tag.x,
-                    y: tag.y,
-                    width: tag.width,
-                    height: tag.height,
-                  })
-                : cand?.avatarUrl ?? undefined;
+          <div className="space-y-4">
+            {/* Subsection A: Tagged Faces */}
+            {(asset.face_tags || []).length > 0 && (
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-tertiary px-1">
+                  {t('mediaArchive.taggedGroupHeading', {
+                    count: asset.face_tags.length,
+                  })}
+                </div>
+                <div className="space-y-2">
+                  {asset.face_tags.map((tag) => {
+                    const isHighlighted = highlightedTagId === tag.id;
+                    const vitals = formatPersonVitals(tag.person_id);
+                    const cand = candidateById.get(tag.person_id);
+                    const cropPreviewUrl = getMediaCropUrl(asset.id, {
+                      x: tag.x,
+                      y: tag.y,
+                      width: tag.width,
+                      height: tag.height,
+                    });
 
-              return (
-                <div
-                  key={tag.id}
-                  onMouseEnter={() => onHighlightTag?.(tag.id)}
-                  onMouseLeave={() => onHighlightTag?.(null)}
-                  className={cn(
-                    'rounded-xl border p-2.5 transition-colors space-y-2',
-                    isHighlighted
-                      ? 'border-brand bg-brand/8'
-                      : 'border-border bg-surface-muted/40'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar
-                        name={tag.person_name}
-                        src={cropPreviewUrl}
-                        size="sm"
-                      />
-                      <div className="min-w-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onOpenPerson(tag.person_id)}
-                          rightIcon={<ExternalLink className="h-3 w-3" />}
-                          className="h-auto min-h-0 p-0 text-left text-sm font-semibold text-primary hover:text-brand"
-                        >
-                          {tag.person_name}
-                        </Button>
-                        {vitals && (
-                          <div className="text-xs text-secondary truncate">
-                            {vitals}
+                    return (
+                      <div
+                        key={tag.id}
+                        onMouseEnter={() => onHighlightTag?.(tag.id)}
+                        onMouseLeave={() => onHighlightTag?.(null)}
+                        className={cn(
+                          'rounded-xl border p-2.5 transition-colors space-y-2',
+                          isHighlighted
+                            ? 'border-brand bg-brand/8 ring-1 ring-brand/30'
+                            : 'border-border bg-surface-muted/40'
+                        )}
+                      >
+                        <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <Avatar
+                              name={tag.person_name}
+                              src={cropPreviewUrl || cand?.avatarUrl || undefined}
+                              size="sm"
+                              className="shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onOpenPerson(tag.person_id)}
+                                rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+                                className="h-auto min-h-0 p-0 text-left text-sm font-semibold text-primary hover:text-brand whitespace-normal break-words"
+                              >
+                                {tag.person_name}
+                              </Button>
+                              {vitals && (
+                                <div className="text-xs text-secondary truncate">
+                                  {vitals}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {tag.is_primary_avatar && (
+                            <Badge
+                              variant="brand"
+                              icon={<Star className="h-3 w-3" />}
+                              className="shrink-0 self-start sm:self-center"
+                            >
+                              {t('mediaArchive.primaryAvatarBadge')}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {canEdit && (
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                            <Button
+                              variant={tag.is_primary_avatar ? 'secondary' : 'ghost'}
+                              size="sm"
+                              onClick={() => {
+                                void onTogglePrimaryAvatar(
+                                  tag,
+                                  !tag.is_primary_avatar
+                                );
+                              }}
+                              leftIcon={<Star className="h-3 w-3" />}
+                              className="h-8 min-h-8 px-2.5 text-xs touch-target-expand"
+                            >
+                              {tag.is_primary_avatar
+                                ? t('mediaArchive.clearPrimaryAvatarBtn')
+                                : t('mediaArchive.setAsPrimaryAvatarBtn')}
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                void onDeleteFaceTag(tag.id);
+                              }}
+                              leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
+                              aria-label={t('mediaArchive.removeFaceTagAria')}
+                              className="h-8 min-h-8 px-2.5 text-xs text-danger hover:bg-danger/10 touch-target-expand"
+                            >
+                              {t('mediaArchive.removeFaceTagBtn')}
+                            </Button>
                           </div>
                         )}
                       </div>
-                    </div>
-
-                    {tag.is_primary_avatar && (
-                      <Badge
-                        variant="brand"
-                        icon={<Star className="h-3 w-3" />}
-                      >
-                        {t('mediaArchive.primaryAvatarBadge')}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {canEdit && (
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
-                      <Button
-                        variant={tag.is_primary_avatar ? 'secondary' : 'ghost'}
-                        size="sm"
-                        onClick={() => {
-                          void onTogglePrimaryAvatar(
-                            tag,
-                            !tag.is_primary_avatar
-                          );
-                        }}
-                        leftIcon={<Star className="h-3 w-3" />}
-                        className="h-7 min-h-0 px-2 text-xs"
-                      >
-                        {tag.is_primary_avatar
-                          ? t('mediaArchive.clearPrimaryAvatarBtn')
-                          : t('mediaArchive.setAsPrimaryAvatarBtn')}
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          void onDeleteFaceTag(tag.id);
-                        }}
-                        leftIcon={<Trash2 className="h-3 w-3 text-danger" />}
-                        aria-label={t('mediaArchive.removeFaceTagAria')}
-                        className="h-7 min-h-0 px-2 text-xs text-danger hover:bg-danger/10"
-                      >
-                        {t('mediaArchive.removeFaceTagBtn')}
-                      </Button>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* Subsection B: Associated Untagged Relatives */}
+            {associatedPersonIds.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-tertiary px-1">
+                  {t('mediaArchive.associatedGroupHeading', {
+                    count: associatedPersonIds.length,
+                  })}
+                </div>
+                <div className="space-y-2">
+                  {associatedPersonIds.map((personId) => {
+                    const cand = candidateById.get(personId);
+                    const displayName = cand?.displayName || personId;
+                    const vitals = formatPersonVitals(personId);
+                    const matchingLink = asset.links?.find(
+                      (l) => l.entity_type === 'individual' && l.entity_id === personId
+                    );
+                    const isProfilePhoto =
+                      matchingLink?.role === 'primary_avatar' ||
+                      (cand?.avatarUrl && cand.avatarUrl.includes(asset.id));
+                    const isTargetArmed = targetPersonId === personId;
+
+                    return (
+                      <div
+                        key={personId}
+                        className={cn(
+                          'rounded-xl border p-2.5 transition-colors space-y-2',
+                          isTargetArmed
+                            ? 'border-brand bg-brand/10 ring-2 ring-brand'
+                            : 'border-border bg-surface-muted/30'
+                        )}
+                      >
+                        <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <Avatar
+                              name={displayName}
+                              src={cand?.avatarUrl || undefined}
+                              size="sm"
+                              className="shrink-0"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onOpenPerson(personId)}
+                                rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+                                className="h-auto min-h-0 p-0 text-left text-sm font-semibold text-primary hover:text-brand whitespace-normal break-words"
+                              >
+                                {displayName}
+                              </Button>
+                              {vitals && (
+                                <div className="text-xs text-secondary truncate">
+                                  {vitals}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {isProfilePhoto ? (
+                            <Badge
+                              variant="brand"
+                              icon={<Star className="h-3 w-3" />}
+                              className="shrink-0 self-start sm:self-center"
+                            >
+                              {t('mediaArchive.profilePhotoBadge')}
+                            </Badge>
+                          ) : (
+                            <Badge variant="neutral" className="shrink-0 self-start sm:self-center">
+                              {t('mediaArchive.associatedBadge')}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {canEdit && (
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                            {asset.mime_type.startsWith('image/') && (
+                              <Button
+                                variant={isTargetArmed ? 'primary' : 'secondary'}
+                                size="sm"
+                                onClick={() => {
+                                  if (isTargetArmed) {
+                                    onSelectTargetPerson?.(null);
+                                  } else {
+                                    onSelectTargetPerson?.(personId);
+                                    onStartTaggingAnotherFace();
+                                  }
+                                }}
+                                leftIcon={
+                                  isTargetArmed ? (
+                                    <UserCheck className="h-3 w-3" />
+                                  ) : (
+                                    <Plus className="h-3 w-3" />
+                                  )
+                                }
+                                className="h-8 min-h-8 px-2.5 text-xs touch-target-expand"
+                              >
+                                {t('mediaArchive.tagFaceQuickBtn')}
+                              </Button>
+                            )}
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                void onUnlinkPerson(personId);
+                              }}
+                              leftIcon={<UserMinus className="h-3 w-3 text-tertiary" />}
+                              aria-label={t('mediaArchive.unlinkPersonAria', {
+                                name: displayName,
+                              })}
+                              className="h-8 min-h-8 px-2.5 text-xs text-secondary hover:text-danger hover:bg-danger/10 touch-target-expand"
+                            >
+                              {t('mediaArchive.unlinkPersonBtn')}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -462,6 +462,10 @@ pub struct TreePersonNodeDto {
     pub version: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tx_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_direct_lineage: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
@@ -492,6 +496,47 @@ pub struct FamilyDto {
     pub external_ids: HashMap<String, String>,
     #[serde(default = "default_version")]
     pub version: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marriage_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marriage_place: Option<String>,
+}
+
+/// Extracts marriage date and place from family events (matching "marriage" or "marr").
+pub fn find_family_marriage_facts(
+    events: &[LifeEventDto],
+    family_id: &str,
+) -> (Option<String>, Option<String>) {
+    let ev = events.iter().find(|e| {
+        e.family_id.as_deref() == Some(family_id)
+            && (e.event_type.eq_ignore_ascii_case("marriage")
+                || e.event_type.eq_ignore_ascii_case("marr"))
+    });
+    if let Some(e) = ev {
+        let date = e
+            .date
+            .as_ref()
+            .map(|d| d.text.clone())
+            .or_else(|| e.gedcom_date.clone());
+        let place = e.place_full_name.clone();
+        (date, place)
+    } else {
+        (None, None)
+    }
+}
+
+/// Enriches a FamilyDto with marriage date and place if not already set.
+pub fn enrich_family_dto_marriage(mut fam: FamilyDto, events: &[LifeEventDto]) -> FamilyDto {
+    if fam.marriage_date.is_none() || fam.marriage_place.is_none() {
+        let (d, p) = find_family_marriage_facts(events, &fam.id);
+        if fam.marriage_date.is_none() {
+            fam.marriage_date = d;
+        }
+        if fam.marriage_place.is_none() {
+            fam.marriage_place = p;
+        }
+    }
+    fam
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
@@ -744,6 +789,8 @@ pub fn redact_person_for_caller(
             external_ids: HashMap::new(),
             version: person.version,
             tx_id: None,
+            generation: person.generation,
+            is_direct_lineage: person.is_direct_lineage,
         });
     }
 
@@ -801,6 +848,8 @@ pub fn redact_person_for_tree_view(
             external_ids: HashMap::new(),
             version: person.version,
             tx_id: None,
+            generation: person.generation,
+            is_direct_lineage: person.is_direct_lineage,
         });
     }
 
@@ -811,6 +860,7 @@ pub fn redact_person_for_tree_view(
 pub fn redact_media_for_caller(
     media: &MediaAssetSummaryDto,
     access: &CallerAccess,
+    store: &GenealogyPrivacyStore,
 ) -> Option<MediaAssetSummaryDto> {
     if media.is_private && !access.can_view_private() {
         return None;
@@ -822,6 +872,28 @@ pub fn redact_media_for_caller(
         }
         let mut cloned = media.clone();
         cloned.face_tags.retain(|ft| !ft.is_living);
+
+        let is_living_person = |pid: &str| -> bool {
+            store
+                .persons
+                .iter()
+                .find(|p| p.id == pid || p.gid.eq_ignore_ascii_case(pid))
+                .map(|p| p.is_living)
+                .unwrap_or(true)
+        };
+
+        cloned
+            .linked_person_ids
+            .retain(|pid| !is_living_person(pid));
+
+        cloned.links.retain(|l| {
+            if l.entity_type == "individual" {
+                !is_living_person(&l.entity_id)
+            } else {
+                true
+            }
+        });
+
         return Some(cloned);
     }
 
@@ -945,6 +1017,8 @@ impl GenealogyPrivacyStore {
             external_ids: HashMap::new(),
             version: 1,
             tx_id: None,
+            generation: None,
+            is_direct_lineage: None,
         };
 
         let living_relative = TreePersonNodeDto {
@@ -980,6 +1054,8 @@ impl GenealogyPrivacyStore {
             external_ids: HashMap::new(),
             version: 1,
             tx_id: None,
+            generation: None,
+            is_direct_lineage: None,
         };
 
         let private_record = TreePersonNodeDto {
@@ -1015,6 +1091,8 @@ impl GenealogyPrivacyStore {
             external_ids: HashMap::new(),
             version: 1,
             tx_id: None,
+            generation: None,
+            is_direct_lineage: None,
         };
 
         let deceased_media = MediaAssetSummaryDto {
@@ -1066,7 +1144,22 @@ impl GenealogyPrivacyStore {
                     is_primary_avatar: false,
                 },
             ],
-            links: vec![],
+            links: vec![
+                MediaLinkDto {
+                    id: "link-01".to_string(),
+                    media_id: "00000000-0000-0000-0000-000000000101".to_string(),
+                    entity_type: "individual".to_string(),
+                    entity_id: "00000000-0000-0000-0000-000000000001".to_string(),
+                    role: Some("primary_avatar".to_string()),
+                },
+                MediaLinkDto {
+                    id: "link-02".to_string(),
+                    media_id: "00000000-0000-0000-0000-000000000101".to_string(),
+                    entity_type: "individual".to_string(),
+                    entity_id: "c7a8b9d0-1234-5678-90ab-cdef12345678".to_string(),
+                    role: Some("depicted".to_string()),
+                },
+            ],
             version: 1,
         };
 
@@ -1103,7 +1196,13 @@ impl GenealogyPrivacyStore {
                 height: 0.30,
                 is_primary_avatar: true,
             }],
-            links: vec![],
+            links: vec![MediaLinkDto {
+                id: "link-03".to_string(),
+                media_id: "00000000-0000-0000-0000-000000000102".to_string(),
+                entity_type: "individual".to_string(),
+                entity_id: "c7a8b9d0-1234-5678-90ab-cdef12345678".to_string(),
+                role: Some("primary_avatar".to_string()),
+            }],
             version: 1,
         };
 
@@ -1130,7 +1229,13 @@ impl GenealogyPrivacyStore {
             only_living_persons: true,
             linked_person_ids: vec!["00000000-0000-0000-0000-000000000099".to_string()],
             face_tags: vec![],
-            links: vec![],
+            links: vec![MediaLinkDto {
+                id: "link-04".to_string(),
+                media_id: "00000000-0000-0000-0000-000000000103".to_string(),
+                entity_type: "individual".to_string(),
+                entity_id: "00000000-0000-0000-0000-000000000099".to_string(),
+                role: Some("primary_avatar".to_string()),
+            }],
             version: 1,
         };
 

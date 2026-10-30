@@ -19,9 +19,10 @@ export function buildVerticalBusPath(
   sourceX: number,
   sourceY: number,
   targetX: number,
-  targetY: number
+  targetY: number,
+  customMidY?: number
 ): string {
-  const midY = (sourceY + targetY) / 2;
+  const midY = customMidY ?? (sourceY + targetY) / 2;
   return `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;
 }
 

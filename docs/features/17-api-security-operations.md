@@ -32,7 +32,8 @@ Cross-cutting rules every endpoint and background task must follow. Other specs 
 | 404 | `not_found` *(also returned for privacy-hidden records — never reveal existence)* |
 | 409 | `version_conflict`, `ancestor_cycle`, `place_in_use` |
 | 413 | `upload_too_large` |
-| 429 | `rate_limited` |
+| 429 | `rate_limited`, `account_locked` |
+| 503 | `smtp_not_configured` |
 
 > [!IMPORTANT] Client-Side Error Localization:
 > The `message` field is intended strictly for backend server logs and debugging. The frontend client must **never** display `error.message` directly in non-English locales; it must resolve `error.code` (or HTTP status) via the localized dictionary under `errors.<code_or_status>` per [00 §2.7](00-internationalization-localization.md#27-error-code-localization-architecture-api--network-failures). Browser fetch failures (e.g. `TypeError: Failed to fetch`) must similarly map to `errors.network_error`.
@@ -72,6 +73,8 @@ Cross-cutting rules every endpoint and background task must follow. Other specs 
 WebAuthn passkeys only work in a **secure context**: `https://…` or `http://localhost`. A family member opening `http://192.168.1.20:8080` on their phone **cannot use passkeys**, and many home installs have **no SMTP** for magic links. Without a fallback, nobody but the server owner could sign in.
 
 Therefore:
+- **Zero Token Leakage Guarantee:** The application enforces zero token leakage across all environments (production, staging, development, test). Under no circumstance may the API return magic link tokens (`preview_token`) or clickable login URLs (`preview_url`) in HTTP responses, nor may the UI render sign-in links on screen.
+- **Strict Non-SMTP Behavior:** When `SMTP_ENABLED=false` or SMTP credentials are unconfigured, `POST /api/v1/auth/magic-link/request` fails securely with `503 Service Unavailable` (`smtp_not_configured`). The application never falls back to displaying the sign-in link in the browser UI. Relatives on LAN installs without SMTP must authenticate using WebAuthn passkeys (if HTTPS/localhost), password fallback (`AUTH_PASSWORD_ENABLED`), or an admin-generated one-time 24-hour sign-in link delivered out-of-band.
 - **Optional password login** (`AUTH_PASSWORD_ENABLED`, default `auto` = enabled when the app is not served over HTTPS **or** SMTP is disabled). Argon2id hashes, min 10 characters, rate limited. Users can set a password in *Settings → Security*; invite registration offers *"Create passkey"* or *"Set password"* depending on what the browser supports.
 - **Admin-generated one-time login links** (no SMTP needed): admin clicks *"Create sign-in link"* for a user and sends it via WhatsApp/Telegram (same mechanism as invites, 24 h validity).
 - Login page detects `window.isSecureContext === false` and hides passkey buttons with a hint: *"Passkeys require HTTPS. Ask your admin to enable HTTPS, or sign in with your password."*
@@ -136,7 +139,7 @@ Therefore:
 - Release notes state the minimum version to upgrade from.
 
 ### 6.3 Logging
-- Structured JSON logs to stdout (`RUST_LOG`). Never log session tokens, magic-link tokens, recovery codes, or personal data payloads; log record IDs only.
+- Structured JSON logs to stdout (`RUST_LOG`). Never log session tokens, magic-link tokens, recovery codes, or personal data payloads; log record IDs only. Email transport logs (`lettre`) must never print transactional token parameters.
 
 ### 6.4 Backup Contents (clarifies [08 §4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/08-deployment-single-instance.md#4-disaster-recovery--cli-operations))
 - `database.dump` (pg_dump custom format), `media/originals/` (thumbnails are regenerated), `manifest.json` (app version, schema version, counts, sha256 list).
@@ -150,6 +153,7 @@ Therefore:
 - [ ] **Consistent Errors:** Every non-2xx response uses the standard error envelope with a stable `code`.
 - [ ] **Privacy 404:** Requests for hidden (living/private) records return `404`, indistinguishable from missing.
 - [ ] **CSRF Protection:** State-changing requests without the custom header or with a foreign `Origin` are rejected.
+- [ ] **Zero Token Leakage:** Magic link request responses never contain raw tokens or verification links under any environment (`preview_url` and `preview_token` permanently deleted). Requesting a magic link on an instance with `SMTP_ENABLED=false` returns `503 smtp_not_configured`.
 - [ ] **LAN Login Works:** On `http://<LAN-IP>` without SMTP, a family member can register via invite and sign in with a password.
 - [ ] **Secure Media:** No media file is reachable without passing the privacy check; direct paths under `/app/data/media` are not web-exposed.
 - [ ] **Upload Safety & 500MB Limit:** SVG/HTML uploads are rejected; payloads up to 500MB are accepted by Nginx (`client_max_body_size 500M;`) and Axum (`DefaultBodyLimit::max(500 * 1024 * 1024)`); payloads $> 500\text{ MB}$ return `413 Payload Too Large`.

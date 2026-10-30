@@ -6,6 +6,7 @@ import {
   Home,
   Maximize2,
   Minus,
+  Network,
   Plus,
   Route,
   Workflow,
@@ -24,6 +25,9 @@ export interface TreeToolbarProps {
   onModeChange: (mode: TreeProjectionMode) => void;
   generations: number;
   onGenerationsChange: (generations: number) => void;
+  collateral?: boolean;
+  onCollateralChange?: (collateral: boolean) => void;
+  totalVisible?: number;
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -38,6 +42,9 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
   onModeChange,
   generations,
   onGenerationsChange,
+  collateral = true,
+  onCollateralChange,
+  totalVisible,
   zoom,
   onZoomIn,
   onZoomOut,
@@ -59,40 +66,73 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
   return (
     <>
       {/* Top Floating Bar: stacks vertically on narrow mobile (< 640px) so mode switcher & depth controls never collide */}
-      <div className="pointer-events-none absolute top-3 inset-x-3 sm:top-4 sm:inset-x-6 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        {/* Projection Mode Switcher */}
-        <div
-          onPointerDown={(e) => e.stopPropagation()}
-          className="pointer-events-auto self-start max-w-full overflow-x-auto rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
-        >
-          <SegmentedControl<TreeProjectionMode>
-            ariaLabel={t('tree.toolbar.modeSwitcherAria')}
-            value={mode}
-            onChange={onModeChange}
-            size="md"
-            options={[
-              {
-                value: 'hourglass',
-                label: t('tree.modes.hourglass'),
-                icon: <GitFork className="h-3.5 w-3.5" />,
-              },
-              {
-                value: 'pedigree',
-                label: t('tree.modes.pedigree'),
-                icon: <GitBranch className="h-3.5 w-3.5" />,
-              },
-              {
-                value: 'descendant',
-                label: t('tree.modes.descendants'),
-                icon: <Workflow className="h-3.5 w-3.5" />,
-              },
-              {
-                value: 'fan',
-                label: t('tree.modes.fan'),
-                icon: <Disc className="h-3.5 w-3.5" />,
-              },
-            ]}
-          />
+      <div className="pointer-events-none absolute top-3 inset-x-3 sm:top-4 sm:inset-x-6 z-20 flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap sm:items-center sm:justify-between gap-2">
+        {/* Projection Mode Switcher & Wide/Compact Selector */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            className="pointer-events-auto self-start max-w-full overflow-x-auto rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
+          >
+            <SegmentedControl<TreeProjectionMode>
+              ariaLabel={t('tree.toolbar.modeSwitcherAria')}
+              value={mode}
+              onChange={onModeChange}
+              size="md"
+              options={[
+                {
+                  value: 'hourglass',
+                  label: t('tree.modes.hourglass'),
+                  icon: <GitFork className="h-3.5 w-3.5" />,
+                },
+                {
+                  value: 'pedigree',
+                  label: t('tree.modes.pedigree'),
+                  icon: <GitBranch className="h-3.5 w-3.5" />,
+                },
+                {
+                  value: 'descendant',
+                  label: t('tree.modes.descendants'),
+                  icon: <Workflow className="h-3.5 w-3.5" />,
+                },
+                {
+                  value: 'fan',
+                  label: t('tree.modes.fan'),
+                  icon: <Disc className="h-3.5 w-3.5" />,
+                },
+                {
+                  value: 'all',
+                  label: t('tree.modes.all'),
+                  icon: <Network className="h-3.5 w-3.5" />,
+                },
+              ]}
+            />
+          </div>
+
+          {mode === 'hourglass' && onCollateralChange && (
+            <div
+              onPointerDown={(e) => e.stopPropagation()}
+              data-testid="hourglass-collateral-toggle"
+              title={t('tree.view_options.collateral_subtitle')}
+              className="pointer-events-auto self-start max-w-full overflow-x-auto rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md"
+            >
+              <SegmentedControl<'wide' | 'compact'>
+                ariaLabel={t('tree.view_options.collateral_toggle')}
+                value={collateral ? 'wide' : 'compact'}
+                onChange={(val) => onCollateralChange(val === 'wide')}
+                size="md"
+                options={[
+                  {
+                    value: 'wide',
+                    label: t('tree.view_options.wide_hourglass'),
+                  },
+                  {
+                    value: 'compact',
+                    label: t('tree.view_options.compact_hourglass'),
+                  },
+                ]}
+              />
+            </div>
+          )}
         </div>
 
         {/* Depth & Framing Controls */}
@@ -100,14 +140,28 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
           onPointerDown={(e) => e.stopPropagation()}
           className="pointer-events-auto self-start sm:self-auto flex items-center gap-1.5 sm:gap-2 rounded-xl border border-border bg-surface/90 p-1.5 shadow-sm backdrop-blur-md"
         >
-          <div className="w-36 sm:w-44">
-            <Select
-              ariaLabel={t('tree.toolbar.generationsAria')}
-              value={String(generations)}
-              onChange={(val) => onGenerationsChange(Number(val))}
-              options={generationOptions}
-            />
-          </div>
+          {mode === 'all' ? (
+            <div
+              data-testid="tree-all-nodes-badge"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-surface-muted/60 text-xs font-medium text-secondary"
+            >
+              <Network className="h-3.5 w-3.5 text-brand shrink-0" />
+              <span>
+                {t('tree.toolbar.allNodesCount', {
+                  count: totalVisible ?? 0,
+                })}
+              </span>
+            </div>
+          ) : (
+            <div className="w-36 sm:w-44">
+              <Select
+                ariaLabel={t('tree.toolbar.generationsAria')}
+                value={String(generations)}
+                onChange={(val) => onGenerationsChange(Number(val))}
+                options={generationOptions}
+              />
+            </div>
+          )}
 
           {onOpenKinshipFinder && (
             <Button

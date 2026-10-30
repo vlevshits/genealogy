@@ -169,6 +169,37 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
     expect(htmlGuest).not.toContain('Elena Volkova');
   });
 
+  it('Milestone 2.6: public guest dashboard renders only AnniversariesWidget and TreeGlanceWidget, strictly omitting RecentActivityWidget and LatestPhotosWidget', () => {
+    const defaultPayload = buildDefaultDashboardPayload();
+    // 1. In public_anonymous access tier, only Anniversaries and Tree at a Glance are shown
+    const guestHtml = renderWithProviders(
+      <DashboardPage
+        initialDashboard={defaultPayload}
+        accessTier="public_anonymous"
+      />,
+      'en',
+      null
+    );
+    expect(guestHtml).toContain('Upcoming Anniversaries');
+    expect(guestHtml).toContain('Tree at a Glance');
+    expect(guestHtml).not.toContain('Recent Tree Changes');
+    expect(guestHtml).not.toContain('Latest Tagged Photographs');
+
+    // 2. In authenticated tier (admin / editor), all 4 widgets are rendered
+    const adminHtml = renderWithProviders(
+      <DashboardPage
+        initialDashboard={defaultPayload}
+        accessTier="admin"
+      />,
+      'en',
+      'admin'
+    );
+    expect(adminHtml).toContain('Upcoming Anniversaries');
+    expect(adminHtml).toContain('Tree at a Glance');
+    expect(adminHtml).toContain('Recent Tree Changes');
+    expect(adminHtml).toContain('Latest Tagged Photographs');
+  });
+
   it('renders RecentActivityWidget, TreeGlanceWidget, and LatestPhotosWidget cleanly', () => {
     const htmlWidgets = renderWithProviders(
       <div>

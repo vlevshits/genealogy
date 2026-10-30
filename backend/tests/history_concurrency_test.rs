@@ -43,6 +43,7 @@ async fn setup_test_env() -> (axum::Router, String, String, String, String) {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -79,6 +80,7 @@ async fn setup_test_env() -> (axum::Router, String, String, String, String) {
                 },
                 None,
                 None,
+                false,
             )
             .await
             .unwrap();

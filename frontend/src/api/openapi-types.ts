@@ -6,6 +6,23 @@
 
 import { GenDate } from '../types/gendate';
 
+export interface SetupStatusResponse {
+  is_initialized: boolean;
+  tree_title: string;
+  default_locale: string;
+  enable_public_access: boolean;
+  auth_password_enabled: boolean;
+  smtp_enabled: boolean;
+  rp_id: string;
+  rp_name: string;
+}
+
+export interface MagicLinkRequestResponse {
+  status: string;
+  message: string;
+  expires_in_seconds?: number;
+}
+
 export type SexCode = 'M' | 'F' | 'U';
 
 export type AltNameType =
@@ -109,6 +126,8 @@ export interface FamilyDto {
   events: LifeEventDto[];
   is_private: boolean;
   version: number;
+  marriage_date?: string | null;
+  marriage_place?: string | null;
 }
 
 export interface CreateFamilyInput {
@@ -332,7 +351,8 @@ export type TreeProjectionMode =
   | 'hourglass'
   | 'pedigree'
   | 'descendant'
-  | 'fan';
+  | 'fan'
+  | 'all';
 
 export interface TreePersonNodeDto {
   id: string;
@@ -360,6 +380,8 @@ export interface TreePersonNodeDto {
   has_death_event?: boolean;
   alt_names?: IndividualAltNameDto[];
   version?: number;
+  generation?: number | null;
+  is_direct_lineage?: boolean | null;
 }
 
 export interface TreeEdgeDto {
@@ -368,12 +390,14 @@ export interface TreeEdgeDto {
   target: string;
   kind: 'spouse' | 'parent_child' | string;
   family_id: string;
+  is_direct_lineage?: boolean | null;
 }
 
 export interface TreeViewQuery {
   focal_id?: string;
   mode?: TreeProjectionMode | string;
   generations?: number;
+  collateral?: boolean;
 }
 
 export interface TreeViewResponse {
@@ -382,6 +406,7 @@ export interface TreeViewResponse {
   focal_id: string | null;
   mode: TreeProjectionMode | string;
   generations: number;
+  collateral?: boolean;
   nodes: TreePersonNodeDto[];
   families: FamilyDto[];
   edges: TreeEdgeDto[];

@@ -440,7 +440,8 @@ pub fn compute_upcoming_anniversaries(
             .iter()
             .find(|e| {
                 e.family_id.as_deref() == Some(fam.id.as_str())
-                    && e.event_type.eq_ignore_ascii_case("marriage")
+                    && (e.event_type.eq_ignore_ascii_case("marriage")
+                        || e.event_type.eq_ignore_ascii_case("marr"))
             })
             .and_then(|e| {
                 e.date
@@ -545,7 +546,7 @@ pub fn compute_tree_stats(
     let visible_media_count = store
         .media
         .iter()
-        .filter_map(|m| redact_media_for_caller(m, access))
+        .filter_map(|m| redact_media_for_caller(m, access, store))
         .count();
 
     let visible_notes_count = store
@@ -646,13 +647,19 @@ pub fn build_dashboard_response(
 
     let stats = compute_tree_stats(store, access, locale);
 
-    let mut latest_photos: Vec<MediaAssetSummaryDto> = store
-        .media
-        .iter()
-        .filter_map(|m| redact_media_for_caller(m, access))
-        .collect();
-    latest_photos.reverse();
-    latest_photos.truncate(6);
+    let latest_photos = match access {
+        CallerAccess::AnonymousPublic => vec![],
+        _ => {
+            let mut photos: Vec<MediaAssetSummaryDto> = store
+                .media
+                .iter()
+                .filter_map(|m| redact_media_for_caller(m, access, store))
+                .collect();
+            photos.reverse();
+            photos.truncate(6);
+            photos
+        }
+    };
 
     let quality_summary = if *access == CallerAccess::Admin {
         let q = build_quality_summary(store);
@@ -677,5 +684,61 @@ pub fn build_dashboard_response(
         stats,
         latest_photos,
         quality_summary,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::privacy::GenealogyPrivacyStore;
+
+    #[test]
+    fn test_latest_photos_suppressed_for_public_anonymous() {
+        let mut store = GenealogyPrivacyStore::default();
+        store.media.push(MediaAssetSummaryDto {
+            id: "m1".to_string(),
+            gid: "M0001".to_string(),
+            title: "Old Photo".to_string(),
+            mime_type: "image/jpeg".to_string(),
+            file_url: "/api/v1/media/m1/file".to_string(),
+            file_name: None,
+            original_file_name: None,
+            file_size_bytes: None,
+            sha256: None,
+            width: None,
+            height: None,
+            description: None,
+            date_taken: None,
+            date_sort: None,
+            place_id: None,
+            place_full_name: None,
+            is_missing: false,
+            external_path: None,
+            is_private: false,
+            only_living_persons: false,
+            linked_person_ids: vec![],
+            face_tags: vec![],
+            links: vec![],
+            version: 1,
+        });
+
+        let query = AnniversariesQuery::default();
+        let admin_resp = build_dashboard_response(&store, &CallerAccess::Admin, "en", None, &query);
+        assert_eq!(admin_resp.latest_photos.len(), 1);
+
+        let editor_resp =
+            build_dashboard_response(&store, &CallerAccess::Editor, "en", None, &query);
+        assert_eq!(editor_resp.latest_photos.len(), 1);
+
+        let viewer_resp =
+            build_dashboard_response(&store, &CallerAccess::Viewer, "en", None, &query);
+        assert_eq!(viewer_resp.latest_photos.len(), 1);
+
+        let guest_resp =
+            build_dashboard_response(&store, &CallerAccess::AnonymousPublic, "en", None, &query);
+        assert!(
+            guest_resp.latest_photos.is_empty(),
+            "Guest dashboard must not expose latest_photos"
+        );
     }
 }

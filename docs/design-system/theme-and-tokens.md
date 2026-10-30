@@ -59,6 +59,22 @@ These tokens are applied to card accent borders, avatar badges, and connector pa
 
 ---
 
+### 2.4 Tree Connection Lines & WCAG 2.2 AA Contrast Standards
+Connector paths and node borders adhere to strict contrast standards to guarantee readability and eliminate perceptual blurriness:
+
+| Connector / Element | Token Name | Light Mode Hex | Dark Mode Hex | Min Contrast Ratio | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Marriage / Union Bar** | `--color-brand-accent` | `#C68A34` (Warm Ochre) | `#D9A04B` | $\ge 3.0:1$ vs canvas | High-warmth marital partnership connection; midpoint anchor dot |
+| **Direct Biological Lineage** | `--color-brand-primary` | `#2D5584` (Deep Indigo) | `#4F7EB5` | $\ge 4.5:1$ vs canvas | Biological ancestry spine through focal individual; elevated z-index |
+| **Collateral Parent-Child** | `--color-lineage-neutral` | `#64748B` (Neutral Slate) | `#8896AB` | $\ge 3.0:1$ vs canvas | Aunts, uncles, cousins, siblings, nieces/nephews (fully opaque, no `/40` fade) |
+| **Active Selected Edge** | `--color-brand-accent` / glow | `#C68A34` + glow halo | `#D9A04B` + glow halo | High visibility | Highlights selected edge ($3.5\text{px}$) and focus rings on endpoint cards |
+| **Kinship Path Highlighter** | `--color-brand-primary` | `#2D5584` | `#60A5FA` | $\ge 4.5:1$ vs canvas | Topmost genealogical path between two queried persons |
+| **Node Card Border** | `--color-border-card` | `#CBD5E1` (Slate 300) | `#334155` (Slate 700) | $\ge 3.0:1$ vs canvas | Crisp solid border preventing indistinct or blurry card edges |
+| **Card Body Text** | `--color-text-primary` | `#111827` | `#F3F4F6` | $\ge 7.0:1$ vs surface | Individual primary names and patronymics |
+| **Card Metadata Dates/Places**| `--color-text-secondary` | `#4B5563` | `#9CA3AF` | $\ge 4.5:1$ vs surface | Vital dates, places, living masked initials (`И.` / `J.`) |
+
+---
+
 ## 3. Typography System
 
 ### 3.1 Primary UI Font: **Plus Jakarta Sans** or **Inter**
@@ -77,6 +93,12 @@ These tokens are applied to card accent borders, avatar badges, and connector pa
 
 ### 3.3 Monospace: **JetBrains Mono**
 - **Usage:** Exact genealogical dates, map coordinates, GEDCOM tags, single-use recovery codes.
+
+### 3.4 Crisp Rendering & Subpixel Anti-Aliasing Standards
+To eliminate blurry text and fuzzy borders across browsers (WebKit/Blink):
+1. **Integer Coordinate Snapping:** During canvas pan/zoom, CSS translate offsets snap to whole device pixels (`Math.round(pan.x)`, `Math.round(pan.y)`) on gesture completion. Fractional subpixel translations (e.g. `translate(10.37px, 45.82px)`) cause GPU rasterization interpolation that blurs text and 1px borders.
+2. **Vector Line Sharpness:** Orthogonal SVG lines (marriage and parent-child stems) specify `shape-rendering="geometricPrecision"` (or `crispEdges` on 1px/1.5px orthogonal straight stems), preventing fractional anti-aliasing fuzziness.
+3. **Font Smoothing Baseline:** All card typography specifies `-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;`.
 
 ---
 

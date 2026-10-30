@@ -50,7 +50,7 @@ Every view in the application (with the exception of isolated full-screen auth p
 ### 3.1 Top Navigation Bar (Header)
 - **Brand Identity:** Subtle leaf/tree icon + Instance Tree Name (e.g. *"Levshits Family Archive"*). Clicking navigates to `/` (Home).
 - **Public Guest Header (`ENABLE_PUBLIC_ACCESS=true`, Unauthenticated):**
-  - Renders a minimal read-only bar: Brand Logo/Title, permitted navigation links (`Home` [`/`] and `Tree` [`/tree`]), Language toggle (`RU/EN`), Theme switch, and a prominent **"Sign In"** button.
+  - Renders a minimal read-only bar: Brand Logo/Title, permitted navigation links (`Home` [`/`] and `Tree` [`/tree`]), Language toggle (`RU/EN`), Theme switch, and a prominent **"Sign In"** button (navigating to `/login?returnUrl=<current_path_and_query>` to preserve context).
   - All restricted module links (`People`, `Media`, `Places`, `More ▾`), the `+ Add` creation menu, and global Omnibox search are strictly hidden.
 - **Authenticated Primary Navigation Links (Viewers, Editors, Admins):**
   - `Home` (`/`): Dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/16-dashboard-home.md)).

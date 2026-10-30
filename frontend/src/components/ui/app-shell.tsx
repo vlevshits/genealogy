@@ -23,6 +23,7 @@ import { BottomNav } from './bottom-nav';
 import { Breadcrumbs, BreadcrumbItem } from './breadcrumbs';
 import { OmniboxDialog } from '../search';
 import { PwaInstallPrompt, PwaOfflineBanner } from '../pwa';
+import { buildLoginUrl } from '../../lib/navigation-utils';
 
 export interface AppShellProps {
   currentPath?: string;
@@ -101,7 +102,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             </a>
 
             {/* Primary Nav Links */}
-            <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1 ml-3">
+            <nav aria-label={t('nav.mainNav')} className="hidden md:flex items-center gap-1 ml-3">
               <NavLink
                 href="/"
                 active={currentPath === '/'}
@@ -208,7 +209,14 @@ export const AppShell: React.FC<AppShellProps> = ({
                 variant="primary"
                 size="md"
                 leftIcon={<LogIn className="h-4 w-4" />}
-                onClick={() => navigate('/login')}
+                onClick={() =>
+                  navigate(
+                    buildLoginUrl(
+                      currentPath,
+                      typeof window !== 'undefined' ? window.location.search : undefined
+                    )
+                  )
+                }
               >
                 {t('nav.signIn')}
               </Button>
@@ -297,7 +305,14 @@ export const AppShell: React.FC<AppShellProps> = ({
                 variant="primary"
                 size="md"
                 leftIcon={<LogIn className="h-4 w-4" />}
-                onClick={() => navigate('/login')}
+                onClick={() =>
+                  navigate(
+                    buildLoginUrl(
+                      currentPath,
+                      typeof window !== 'undefined' ? window.location.search : undefined
+                    )
+                  )
+                }
                 className="w-full justify-center"
               >
                 {t('nav.signIn')}

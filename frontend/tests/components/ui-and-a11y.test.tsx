@@ -310,5 +310,61 @@ describe('Component Library, Accessibility & Design Token Verification', () => {
     expect(ruHtml).toContain('Произошла непредвиденная ошибка при отображении страницы.');
     expect(ruHtml).toContain('Обновить страницу');
   });
+
+  it('Milestone 2.6: verifies --color-text-tertiary meets WCAG 2.2 AA (>= 4.5:1) in both light and dark themes', () => {
+    const indexCss = fs.readFileSync(path.resolve(__dirname, '../../src/index.css'), 'utf-8');
+
+    // Extract light mode tokens
+    const lightTertiaryMatch = indexCss.match(/--color-text-tertiary:\s*(#[0-9a-fA-F]{6});/);
+    const lightSurfaceMatch = indexCss.match(/--color-bg-surface:\s*(#[0-9a-fA-F]{6});/);
+    expect(lightTertiaryMatch).not.toBeNull();
+    expect(lightSurfaceMatch).not.toBeNull();
+
+    // Extract dark mode tokens
+    const darkBlock = indexCss.slice(indexCss.indexOf('.dark {'));
+    const darkTertiaryMatch = darkBlock.match(/--color-text-tertiary:\s*(#[0-9a-fA-F]{6});/);
+    const darkSurfaceMatch = darkBlock.match(/--color-bg-surface:\s*(#[0-9a-fA-F]{6});/);
+    const darkCanvasMatch = darkBlock.match(/--color-bg-canvas:\s*(#[0-9a-fA-F]{6});/);
+    expect(darkTertiaryMatch).not.toBeNull();
+    expect(darkSurfaceMatch).not.toBeNull();
+    expect(darkCanvasMatch).not.toBeNull();
+
+    function sRgbToLuminance(hex: string): number {
+      const clean = hex.replace('#', '');
+      const r = parseInt(clean.substring(0, 2), 16) / 255;
+      const g = parseInt(clean.substring(2, 4), 16) / 255;
+      const b = parseInt(clean.substring(4, 6), 16) / 255;
+      const [lr, lg, lb] = [r, g, b].map((c) =>
+        c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+      );
+      return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+    }
+
+    function calculateContrast(hex1: string, hex2: string): number {
+      const l1 = sRgbToLuminance(hex1);
+      const l2 = sRgbToLuminance(hex2);
+      const lighter = Math.max(l1, l2);
+      const darker = Math.min(l1, l2);
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    const lightContrast = calculateContrast(lightTertiaryMatch![1], lightSurfaceMatch![1]);
+    expect(
+      lightContrast,
+      `Light mode tertiary text (${lightTertiaryMatch![1]}) on surface (${lightSurfaceMatch![1]}) must be >= 4.5:1, got ${lightContrast.toFixed(2)}:1`
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const darkSurfaceContrast = calculateContrast(darkTertiaryMatch![1], darkSurfaceMatch![1]);
+    expect(
+      darkSurfaceContrast,
+      `Dark mode tertiary text (${darkTertiaryMatch![1]}) on surface (${darkSurfaceMatch![1]}) must be >= 4.5:1, got ${darkSurfaceContrast.toFixed(2)}:1`
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const darkCanvasContrast = calculateContrast(darkTertiaryMatch![1], darkCanvasMatch![1]);
+    expect(
+      darkCanvasContrast,
+      `Dark mode tertiary text (${darkTertiaryMatch![1]}) on canvas (${darkCanvasMatch![1]}) must be >= 4.5:1, got ${darkCanvasContrast.toFixed(2)}:1`
+    ).toBeGreaterThanOrEqual(4.5);
+  });
 });
 

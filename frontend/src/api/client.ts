@@ -150,6 +150,7 @@ export interface SetupStatusResponse {
   default_locale: string;
   enable_public_access: boolean;
   auth_password_enabled: boolean;
+  smtp_enabled: boolean;
   rp_id: string;
   rp_name: string;
 }
@@ -243,9 +244,8 @@ export interface MagicLinkRequestInput {
 
 export interface MagicLinkRequestResponse {
   status: string;
-  expires_in_seconds: number;
-  preview_url?: string | null;
-  preview_token?: string | null;
+  message: string;
+  expires_in_seconds?: number;
 }
 
 export interface MagicLinkVerifyInput {
@@ -395,6 +395,8 @@ export interface TreePersonNodeDto {
   has_death_event?: boolean;
   alt_names?: import('./openapi-types').IndividualAltNameDto[];
   version?: number;
+  generation?: number | null;
+  is_direct_lineage?: boolean | null;
 }
 
 export interface TreeDataResponse {
@@ -1088,6 +1090,9 @@ export async function fetchTreeView(
   if (params?.mode) search.set('mode', params.mode);
   if (params?.generations !== undefined) {
     search.set('generations', String(params.generations));
+  }
+  if (params?.collateral !== undefined) {
+    search.set('collateral', String(params.collateral));
   }
   const qs = search.toString();
   return apiFetch<TreeViewResponse>(`/tree/view${qs ? `?${qs}` : ''}`);
@@ -2123,6 +2128,24 @@ export interface KinshipStepDto {
   is_mrca?: boolean;
 }
 
+export interface KinshipTraceStepDto {
+  person_id: string;
+  relation_to_next?: string | null;
+  relation_to_next_ru?: string | null;
+}
+
+export interface KinshipTraceDto {
+  id: string;
+  relationship_key: string;
+  label_en: string;
+  label_ru: string;
+  degree_of_kinship: number;
+  is_blood_relation: boolean;
+  common_ancestor_ids: string[];
+  path_person_ids: string[];
+  steps: KinshipTraceStepDto[];
+}
+
 export interface KinshipPathResponseDto {
   from_id?: string;
   to_id?: string;
@@ -2142,6 +2165,8 @@ export interface KinshipPathResponseDto {
       surname?: string;
     }
   >;
+  traces_count?: number;
+  traces?: KinshipTraceDto[];
 }
 
 export interface PlaceMapPinDto {
@@ -2324,18 +2349,30 @@ export const treeApi = {
   },
 };
 
+export async function fetchKinshipPath(
+  fromId: string,
+  toId: string,
+  maxTraces?: number
+): Promise<KinshipPathResponseDto> {
+  const search = new URLSearchParams({
+    from: fromId,
+    to: toId,
+    a: fromId,
+    b: toId,
+  });
+  if (maxTraces !== undefined && maxTraces !== null) {
+    search.set('max_traces', String(maxTraces));
+  }
+  return apiFetch<KinshipPathResponseDto>(`/kinship?${search.toString()}`);
+}
+
 export const kinshipApi = {
   async getKinship(
     fromId: string,
-    toId: string
+    toId: string,
+    maxTraces?: number
   ): Promise<KinshipPathResponseDto> {
-    const search = new URLSearchParams({
-      from: fromId,
-      to: toId,
-      a: fromId,
-      b: toId,
-    });
-    return apiFetch<KinshipPathResponseDto>(`/kinship?${search.toString()}`);
+    return fetchKinshipPath(fromId, toId, maxTraces);
   },
 };
 

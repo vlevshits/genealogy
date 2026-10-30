@@ -1229,6 +1229,8 @@ pub fn import_gedcom_into_store(
                 external_ids,
                 version: 1,
                 tx_id: None,
+                generation: None,
+                is_direct_lineage: None,
             });
             new_pid
         };
@@ -1462,6 +1464,8 @@ pub fn import_gedcom_into_store(
             children,
             external_ids,
             version: 1,
+            marriage_date: None,
+            marriage_place: None,
         });
 
         for child in &node.children {
@@ -1613,6 +1617,8 @@ pub fn import_gedcom_into_store(
                     }],
                     external_ids: HashMap::new(),
                     version: 1,
+                    marriage_date: None,
+                    marriage_place: None,
                 });
                 dialect.synthesized_single_parent_families_count += 1;
             }

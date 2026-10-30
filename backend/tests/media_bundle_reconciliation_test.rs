@@ -38,6 +38,7 @@ async fn setup_test_env() -> (axum::Router, String, String, String) {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -73,6 +74,7 @@ async fn setup_test_env() -> (axum::Router, String, String, String) {
                 },
                 None,
                 None,
+                false,
             )
             .await
             .unwrap();
@@ -267,7 +269,8 @@ async fn test_media_bundle_security_zip_slip_and_bomb() {
     let mut buf = std::io::Cursor::new(Vec::new());
     {
         let mut zip = zip::ZipWriter::new(&mut buf);
-        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         for (name, content) in &many_entries {
             zip.start_file(name, options).unwrap();
             use std::io::Write;
@@ -293,7 +296,8 @@ async fn test_media_bundle_security_zip_slip_and_bomb() {
     let webp_bytes = b"RIFF\x24\x00\x00\x00WEBPVP8 \x18\x00\x00\x000\x01\x00\x9d\x01\x2a\x01\x00\x01\x00\x02\x004\x25\xa4\x00\x03\x70\x00\xfe\xfb\xfd\x00\x00";
     let avif_bytes = b"\x00\x00\x00\x20ftypavif\x00\x00\x00\x00avifmif1miafMA1B";
     let tiff_bytes = b"II*\x00\x08\x00\x00\x00\x00\x00";
-    let pdf_bytes = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\nxref\ntrailer<</Root 1 0 R>>\n%%EOF";
+    let pdf_bytes =
+        b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\nxref\ntrailer<</Root 1 0 R>>\n%%EOF";
     let html_bytes = b"<!DOCTYPE html><html><body><script>alert(1)</script></body></html>";
 
     let formats_zip = create_custom_zip(vec![
@@ -454,8 +458,8 @@ async fn test_gramps_web_media_bundle_reconciliation_end_to_end() {
 #[test]
 fn test_media_bundle_helpers_and_security_checks() {
     use genealogy_backend::services::media_bundle::{
-        check_zip_slip, detect_allowed_media_mime, extract_basename,
-        MAX_ARCHIVE_BYTES, MAX_COMPRESSION_RATIO, MAX_ENTRY_COUNT, MAX_TOTAL_UNCOMPRESSED_BYTES,
+        check_zip_slip, detect_allowed_media_mime, extract_basename, MAX_ARCHIVE_BYTES,
+        MAX_COMPRESSION_RATIO, MAX_ENTRY_COUNT, MAX_TOTAL_UNCOMPRESSED_BYTES,
     };
 
     // Constants check
@@ -482,18 +486,45 @@ fn test_media_bundle_helpers_and_security_checks() {
     assert_eq!(extract_basename("file.webp"), "file.webp");
 
     // MIME detection
-    assert_eq!(detect_allowed_media_mime(b"\xFF\xD8\xFF\xE0"), Some("image/jpeg"));
-    assert_eq!(detect_allowed_media_mime(b"\x89PNG\r\n\x1a\n\x00"), Some("image/png"));
-    assert_eq!(detect_allowed_media_mime(b"RIFF\x24\x00\x00\x00WEBP"), Some("image/webp"));
-    assert_eq!(detect_allowed_media_mime(b"\x00\x00\x00\x20ftypavif"), Some("image/avif"));
-    assert_eq!(detect_allowed_media_mime(b"II*\x00\x08"), Some("image/tiff"));
-    assert_eq!(detect_allowed_media_mime(b"MM\x00*\x08"), Some("image/tiff"));
-    assert_eq!(detect_allowed_media_mime(b"%PDF-1.7"), Some("application/pdf"));
+    assert_eq!(
+        detect_allowed_media_mime(b"\xFF\xD8\xFF\xE0"),
+        Some("image/jpeg")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"\x89PNG\r\n\x1a\n\x00"),
+        Some("image/png")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"RIFF\x24\x00\x00\x00WEBP"),
+        Some("image/webp")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"\x00\x00\x00\x20ftypavif"),
+        Some("image/avif")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"II*\x00\x08"),
+        Some("image/tiff")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"MM\x00*\x08"),
+        Some("image/tiff")
+    );
+    assert_eq!(
+        detect_allowed_media_mime(b"%PDF-1.7"),
+        Some("application/pdf")
+    );
 
     // Explicitly forbidden MIME / content
-    assert_eq!(detect_allowed_media_mime(b"<svg xmlns=\"http://www.w3.org/2000/svg\">"), None);
+    assert_eq!(
+        detect_allowed_media_mime(b"<svg xmlns=\"http://www.w3.org/2000/svg\">"),
+        None
+    );
     assert_eq!(detect_allowed_media_mime(b"<!DOCTYPE html><html>"), None);
     assert_eq!(detect_allowed_media_mime(b"<html><head>"), None);
-    assert_eq!(detect_allowed_media_mime(b"<script>alert(1)</script>"), None);
+    assert_eq!(
+        detect_allowed_media_mime(b"<script>alert(1)</script>"),
+        None
+    );
     assert_eq!(detect_allowed_media_mime(b"random plain text"), None);
 }

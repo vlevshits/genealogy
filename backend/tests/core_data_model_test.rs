@@ -51,6 +51,7 @@ async fn setup_test_app() -> (axum::Router, String) {
         },
         None,
         None,
+        false,
     )
     .await
     .unwrap();

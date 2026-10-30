@@ -248,6 +248,10 @@ describe('Phase 1.9 — Media Archive, Gallery, Face Tagging & Avatar Synchroniz
         __dirname,
         '../../src/components/media/PersonFacePicker.tsx'
       ),
+      path.resolve(
+        __dirname,
+        '../../src/components/media/LinkPersonDialog.tsx'
+      ),
       path.resolve(__dirname, '../../src/components/media/FaceTagCanvas.tsx'),
       path.resolve(
         __dirname,

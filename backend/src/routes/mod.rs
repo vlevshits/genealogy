@@ -106,8 +106,8 @@ use crate::{
         },
         genealogy::{
             FanChartNodeDto, FanChartQuery, FanChartResponse, KinshipEdgeStepDto, KinshipQuery,
-            KinshipResponse, PlaceMapMarkerDto, PlaceMapMarkerPersonDto, PlacesMapResponse,
-            ProfileKinshipDto,
+            KinshipResponse, KinshipTraceDto, KinshipTraceStepDto, PlaceMapMarkerDto,
+            PlaceMapMarkerPersonDto, PlacesMapResponse, ProfileKinshipDto,
         },
         history::{
             ChangeLogTransactionGroupDto, CreateSnapshotRequest, EntityVersionResponse,
@@ -131,7 +131,7 @@ use crate::{
             QualitySeverityCountsDto, QualitySummaryResponse, QualityWarningDto,
             QualityWarningPersonRefDto, QualityWarningsFilterQuery, QualityWarningsListResponse,
         },
-        security::csrf_protection_middleware,
+        security::{csrf_protection_middleware, request_context_middleware},
     },
     state::{AppState, InstanceSettingsDto, UpdateInstanceSettingsRequest},
 };
@@ -363,6 +363,8 @@ use crate::{
             FanChartResponse,
             KinshipQuery,
             KinshipEdgeStepDto,
+            KinshipTraceStepDto,
+            KinshipTraceDto,
             KinshipResponse,
             PersonProfileQuery,
             ProfileKinshipDto,
@@ -694,6 +696,10 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .nest("/api/v1", api_v1)
         .merge(SwaggerUi::new("/swagger-ui").url("/api/v1/openapi.json", ApiDoc::openapi()))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            request_context_middleware,
+        ))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

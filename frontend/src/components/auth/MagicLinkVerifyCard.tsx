@@ -43,6 +43,7 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
   );
   const [enrolling, setEnrolling] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialVerifiedUser !== undefined) return;
@@ -81,6 +82,7 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
 
   const handleEnrollPasskey = async () => {
     if (!verifiedUser || enrolling) return;
+    setEnrollError(null);
     setEnrolling(true);
     try {
       const challenge = await requestAddPasskeyChallenge();
@@ -91,8 +93,8 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
       );
       await verifyAddPasskey(cred);
       onComplete?.();
-    } catch {
-      onComplete?.();
+    } catch (err) {
+      setEnrollError(getLocalizedErrorMessage(err, t));
     } finally {
       setEnrolling(false);
     }
@@ -120,6 +122,12 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
       >
         {t('auth.magicVerify.enrollPromptDesc')}
       </Alert>
+
+      {enrollError && (
+        <Alert variant="danger" role="alert">
+          {enrollError}
+        </Alert>
+      )}
 
       <Button
         variant="primary"

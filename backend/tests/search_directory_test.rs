@@ -47,6 +47,7 @@ async fn setup_search_dataset() -> (axum::Router, String) {
         },
         None,
         Some("127.0.0.1".to_string()),
+        false,
     )
     .await
     .unwrap();
