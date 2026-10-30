@@ -500,6 +500,13 @@ describe('i18n Key Parity & Localization Helpers', () => {
       expect(ruVal, `ru mediaArchive.${rk} must not have emoji`).not.toMatch(emojiRegex);
     }
   });
+
+  it('localizes marriage_license and other GEDCOM event types in both locales', () => {
+    expect(translate('ru', 'domain.events.marriage_license')).toBe('Регистрация брака / ЗАГС');
+    expect(translate('en', 'domain.events.marriage_license')).toBe('Marriage License / Civil Registration');
+    expect(formatVitalEventLabel('marriage_license', 'M', { locale: 'ru' })).toBe('регистрация брака');
+    expect(formatVitalEventLabel('marriage_license', 'M', { locale: 'en' })).toBe('marriage license');
+  });
 });
 
 

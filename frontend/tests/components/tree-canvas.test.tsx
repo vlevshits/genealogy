@@ -1141,6 +1141,11 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       expect(spouse.generation).toBe(0);
       expect(spouse.y).toBe(focal.y);
 
+      // Verify edge midpoints match shifted source/target coordinates (prevents detached spouse union dots in all-nodes mode)
+      for (const e of result.edges) {
+        expect(e.midX).toBe(Math.round((e.sourceX + e.targetX) / 2));
+      }
+
       // Secondary component positioning
       const secFather = result.nodes.find((n) => n.id === 'p-sec-father')!;
       const secSon = result.nodes.find((n) => n.id === 'p-sec-son')!;

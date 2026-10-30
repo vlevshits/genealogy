@@ -192,6 +192,9 @@ export function formatVitalEventLabel(
       case 'marriage':
       case 'marr':
         return 'брак';
+      case 'marriage_license':
+      case 'marl':
+        return 'регистрация брака';
       case 'divorce':
       case 'div':
         return 'развод';
@@ -218,6 +221,9 @@ export function formatVitalEventLabel(
     case 'marriage':
     case 'marr':
       return compact ? 'm.' : 'married';
+    case 'marriage_license':
+    case 'marl':
+      return compact ? 'lic.' : 'marriage license';
     case 'divorce':
     case 'div':
       return compact ? 'div.' : 'divorced';

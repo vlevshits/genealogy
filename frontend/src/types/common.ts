@@ -23,16 +23,21 @@ export type PersonEventType =
   | 'occupation'
   | 'education'
   | 'military'
+  | 'military_service'
   | 'emigration'
   | 'immigration'
   | 'naturalization'
   | 'census'
   | 'religion'
+  | 'adoption'
+  | 'graduation'
+  | 'retirement'
   | 'custom';
 
 export type FamilyEventType =
   | 'engagement'
   | 'marriage'
+  | 'marriage_license'
   | 'divorce'
   | 'residence'
   | 'custom';

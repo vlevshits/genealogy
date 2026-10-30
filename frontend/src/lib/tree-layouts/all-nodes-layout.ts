@@ -908,6 +908,7 @@ export function computeAllNodesLayout(
         for (const e of compEdges) {
           e.sourceX += shiftX;
           e.targetX += shiftX;
+          e.midX += shiftX;
           if (e.yBus !== undefined) {
             e.pathD = buildVerticalBusPath(e.sourceX, e.sourceY, e.targetX, e.targetY, e.yBus);
           } else {

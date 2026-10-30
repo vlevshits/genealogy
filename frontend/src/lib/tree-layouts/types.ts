@@ -75,10 +75,7 @@ export function createPositionedEdge(edge: {
   let midY = edge.midY;
 
   if (midX === undefined || midY === undefined) {
-    if (edge.kind === 'spouse') {
-      midX = Math.round((edge.sourceX + edge.targetX) / 2);
-      midY = Math.round((edge.sourceY + edge.targetY) / 2);
-    } else if (edge.yBus !== undefined) {
+    if (edge.yBus !== undefined) {
       if (Math.abs(edge.sourceX - edge.targetX) < 1) {
         midX = Math.round(edge.sourceX);
         midY = Math.round((edge.sourceY + edge.targetY) / 2);

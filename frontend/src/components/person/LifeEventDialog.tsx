@@ -115,6 +115,7 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
     { value: 'birth', label: t('domain.events.birth') },
     { value: 'baptism', label: t('domain.events.baptism') },
     { value: 'marriage', label: t('domain.events.marriage') },
+    { value: 'marriage_license', label: t('domain.events.marriage_license') },
     { value: 'divorce', label: t('domain.events.divorce') },
     { value: 'death', label: t('domain.events.death') },
     { value: 'burial', label: t('domain.events.burial') },

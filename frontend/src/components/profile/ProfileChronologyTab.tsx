@@ -166,7 +166,8 @@ export const ProfileChronologyTab: React.FC<ProfileChronologyTabProps> = ({
                 const dotColor =
                   ev.event_type === 'birth' || ev.event_type === 'baptism'
                     ? 'bg-brand border-brand'
-                    : ev.event_type === 'marriage'
+                    : ev.event_type === 'marriage' ||
+                      ev.event_type === 'marriage_license'
                     ? 'bg-accent border-accent'
                     : ev.event_type === 'death' || ev.event_type === 'burial'
                     ? 'bg-secondary border-secondary'
