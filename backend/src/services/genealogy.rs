@@ -1773,6 +1773,103 @@ fn build_trace_from_path(
     }
 }
 
+/// Validates that a genealogical candidate path does not contain artificial detours,
+/// spurious inversions (e.g. descending to a child and ascending back up to a spouse),
+/// or fake step-family classifications when biological relationships exist.
+fn is_valid_kinship_path(
+    path: &[String],
+    parents_of: &HashMap<&str, Vec<&str>>,
+    spouses_of: &HashMap<&str, Vec<&str>>,
+) -> bool {
+    if path.len() <= 2 {
+        return true;
+    }
+
+    let mut edge_types: Vec<&'static str> = Vec::with_capacity(path.len() - 1);
+    for i in 0..path.len() - 1 {
+        let curr = path[i].as_str();
+        let next = path[i + 1].as_str();
+        if parents_of.get(curr).is_some_and(|ps| ps.contains(&next)) {
+            edge_types.push("parent");
+        } else if parents_of.get(next).is_some_and(|ps| ps.contains(&curr)) {
+            edge_types.push("child");
+        } else if spouses_of.get(curr).is_some_and(|ss| ss.contains(&next)) {
+            edge_types.push("spouse");
+        } else {
+            edge_types.push("other");
+        }
+    }
+
+    // Rule 1: No Ascent after Descent (Never go child -> parent)
+    // In genealogy, a path can ascend to ancestors or in-laws, and then descend to descendants.
+    // It can never descend to a child and then ascend to the other parent.
+    let mut seen_child = false;
+    for &edge in &edge_types {
+        if edge == "child" {
+            seen_child = true;
+        } else if edge == "parent" && seen_child {
+            return false;
+        }
+    }
+
+    // Rule 2: No fake step-child via spouse when source is already a biological parent
+    for i in 0..edge_types.len().saturating_sub(1) {
+        if edge_types[i] == "spouse" && edge_types[i + 1] == "child" {
+            let p_start = path[i].as_str();
+            let p_child = path[i + 2].as_str();
+            if parents_of.get(p_child).is_some_and(|ps| ps.contains(&p_start)) {
+                return false;
+            }
+        }
+    }
+
+    // Rule 3: No fake step-parent via spouse when destination is already a biological parent
+    for i in 0..edge_types.len().saturating_sub(1) {
+        if edge_types[i] == "parent" && edge_types[i + 1] == "spouse" {
+            let p_child = path[i].as_str();
+            let p_end = path[i + 2].as_str();
+            if parents_of.get(p_child).is_some_and(|ps| ps.contains(&p_end)) {
+                return false;
+            }
+        }
+    }
+
+    // Rule 4: No internal shortcuts/chords (skipping a direct connection to take an unnecessary detour)
+    for i in 0..path.len() {
+        for j in (i + 2)..path.len() {
+            if i == 0 && j == path.len() - 1 {
+                // An edge between endpoints is permitted if one path is blood and one is spouse/affinal
+                continue;
+            }
+            let u = path[i].as_str();
+            let v = path[j].as_str();
+            let is_neighbor = parents_of.get(u).is_some_and(|ps| ps.contains(&v))
+                || parents_of.get(v).is_some_and(|ps| ps.contains(&u))
+                || spouses_of.get(u).is_some_and(|ss| ss.contains(&v));
+            if is_neighbor {
+                return false;
+            }
+        }
+    }
+
+    // Rule 5: If there is a direct biological parent-child or spouse edge between endpoints,
+    // any longer path containing a spouse/affinal edge is an invalid detour.
+    let from_id = path.first().unwrap().as_str();
+    let to_id = path.last().unwrap().as_str();
+    let is_direct_parent_child = parents_of.get(from_id).is_some_and(|ps| ps.contains(&to_id))
+        || parents_of.get(to_id).is_some_and(|ps| ps.contains(&from_id));
+    if is_direct_parent_child && edge_types.contains(&"spouse") {
+        return false;
+    }
+
+    let is_direct_spouse = spouses_of.get(from_id).is_some_and(|ss| ss.contains(&to_id));
+    if is_direct_spouse && path.len() > 2 && edge_types.contains(&"spouse") {
+        return false;
+    }
+
+    true
+}
+
 /// Full Phase 2 Kinship Finder (`GET /api/v1/kinship?from={id1}&to={id2}&max_traces={n}`, `04-tree-visualizations.md §2.5, §7.5`).
 /// Discovers up to `max_traces` distinct minimal genealogical paths across multiple marriages, remarriages,
 /// and collateral branches, ranking biological blood relationships first, followed by affinal/step paths.
@@ -1944,7 +2041,7 @@ pub fn compute_kinship_path(
                 continue;
             }
             if let Some(neighbors) = all_neighbors.get(curr) {
-                for &(next, _) in neighbors {
+                for &(next, kind) in neighbors {
                     if excluded_nodes.contains(next) {
                         continue;
                     }
@@ -1953,6 +2050,16 @@ pub fn compute_kinship_path(
                     {
                         continue;
                     }
+
+                    // Prune "parent" step after "child" step (cannot descend to a child and then ascend to a parent)
+                    let is_parent_step = kind == "parent";
+                    let has_child_step = path.windows(2).any(|w| {
+                        parents_of.get(w[1].as_str()).is_some_and(|ps| ps.contains(&w[0].as_str()))
+                    });
+                    if has_child_step && is_parent_step {
+                        continue;
+                    }
+
                     if !visited.contains(next) {
                         visited.insert(next.to_string());
                         let mut next_path = path.clone();
@@ -1969,7 +2076,9 @@ pub fn compute_kinship_path(
     let mut yen_candidates: Vec<Vec<String>> = Vec::new();
 
     if let Some(p0) = find_shortest(from_id, to_id, &HashSet::new(), &HashSet::new()) {
-        yen_result.push(p0);
+        if is_valid_kinship_path(&p0, &parents_of, &spouses_of) {
+            yen_result.push(p0);
+        }
     }
 
     let target_yen_count = max_traces + 3;
@@ -2002,7 +2111,10 @@ pub fn compute_kinship_path(
                 for node in &spur_path[1..] {
                     total_path.push(node.clone());
                 }
-                if !yen_candidates.contains(&total_path) && !yen_result.contains(&total_path) {
+                if is_valid_kinship_path(&total_path, &parents_of, &spouses_of)
+                    && !yen_candidates.contains(&total_path)
+                    && !yen_result.contains(&total_path)
+                {
                     yen_candidates.push(total_path);
                 }
             }
@@ -2017,10 +2129,12 @@ pub fn compute_kinship_path(
     }
 
     for p in yen_result {
-        if !candidate_paths.contains(&p) {
+        if is_valid_kinship_path(&p, &parents_of, &spouses_of) && !candidate_paths.contains(&p) {
             candidate_paths.push(p);
         }
     }
+
+    candidate_paths.retain(|p| is_valid_kinship_path(p, &parents_of, &spouses_of));
 
     if candidate_paths.is_empty() {
         return KinshipResponse {

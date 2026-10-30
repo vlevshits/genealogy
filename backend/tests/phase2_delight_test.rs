@@ -1348,3 +1348,119 @@ async fn test_multi_trace_kinship_ranking_and_max_traces() {
     assert_eq!(kin1.traces[0].id, "trace-1");
     assert!(kin1.traces[0].is_blood_relation);
 }
+
+#[tokio::test]
+async fn test_kinship_prunes_spurious_detours_and_extra_nodes_for_simple_cases() {
+    let (app, admin_auth, _, _) = setup_phase2_env(true).await;
+
+    // Viktor (Father) & Lyubov (Mother)
+    let (_, p_viktor) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Viktor",
+            "surname": "Levshits",
+            "sex": "M",
+            "birth_date": "1960"
+        }),
+    )
+    .await;
+    let viktor_id = p_viktor["id"].as_str().unwrap().to_string();
+
+    let (_, p_lyubov) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Lyubov",
+            "surname": "Levshits",
+            "sex": "F",
+            "birth_date": "1965"
+        }),
+    )
+    .await;
+    let lyubov_id = p_lyubov["id"].as_str().unwrap().to_string();
+
+    // Pavel (Son 1) & Valentin (Son 2)
+    let (_, p_pavel) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Pavel",
+            "surname": "Levshits",
+            "sex": "M",
+            "birth_date": "1990"
+        }),
+    )
+    .await;
+    let pavel_id = p_pavel["id"].as_str().unwrap().to_string();
+
+    let (_, p_valentin) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Valentin",
+            "surname": "Levshits",
+            "sex": "M",
+            "birth_date": "1995"
+        }),
+    )
+    .await;
+    let valentin_id = p_valentin["id"].as_str().unwrap().to_string();
+
+    // Family: Viktor & Lyubov -> [Pavel, Valentin]
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": viktor_id,
+            "partner2_id": lyubov_id,
+            "children_ids": [pavel_id.clone(), valentin_id.clone()]
+        }),
+    )
+    .await;
+
+    // Test 1: From Viktor (father) to Valentin (son) with max_traces=5
+    // Must NOT return fake "stepson" or "relative by marriage" detours through Lyubov or Pavel!
+    let (st_father_son, resp_val) = get_json(
+        &app,
+        &format!("/api/v1/kinship?from={viktor_id}&to={valentin_id}&max_traces=5"),
+        Some(&admin_auth),
+    )
+    .await;
+    assert_eq!(st_father_son, StatusCode::OK);
+    let father_son: KinshipResponse = serde_json::from_value(resp_val).unwrap();
+
+    // Must have exactly 1 direct trace: Son (degree 1, steps count 1)
+    assert!(father_son.connected);
+    assert_eq!(father_son.traces_count, 1, "Father to biological son must have exactly 1 trace");
+    assert_eq!(father_son.traces.len(), 1);
+    let tr = &father_son.traces[0];
+    assert_eq!(tr.relationship_key, "son");
+    assert_eq!(tr.degree_of_kinship, 1);
+    assert_eq!(tr.path_person_ids, vec![viktor_id.clone(), valentin_id.clone()]);
+    assert!(tr.is_blood_relation);
+
+    // Test 2: Between Pavel and Valentin (two full brothers)
+    // Must only return direct biological sibling traces via parents, no detours through spouse edge
+    let (st_bros, resp_bros) = get_json(
+        &app,
+        &format!("/api/v1/kinship?from={pavel_id}&to={valentin_id}&max_traces=5"),
+        Some(&admin_auth),
+    )
+    .await;
+    assert_eq!(st_bros, StatusCode::OK);
+    let brothers: KinshipResponse = serde_json::from_value(resp_bros).unwrap();
+    assert!(brothers.connected);
+    // Traces must all be biological blood relationship (brother), degree 2
+    for b_tr in &brothers.traces {
+        assert!(b_tr.is_blood_relation);
+        assert_eq!(b_tr.relationship_key, "brother");
+        assert_eq!(b_tr.degree_of_kinship, 2);
+        assert_eq!(b_tr.steps.len(), 3); // [Pavel, Parent, Valentin]
+    }
+}
