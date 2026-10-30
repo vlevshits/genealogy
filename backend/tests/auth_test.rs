@@ -1296,7 +1296,44 @@ async fn test_transactional_email_bilingual_templating_and_html_escaping() {
     assert!(ru_mail
         .html_body
         .contains("Архив &lt;Тест&gt; &amp; &#39;Семья&#39;"));
-    assert!(ru_mail.html_body.contains("lang=\"ru\""));
+    // Ensure no double escaping occurs anywhere in title, preheader, or body
+    assert!(!ru_mail.html_body.contains("&amp;amp;"));
+    assert!(!ru_mail.html_body.contains("&amp;lt;"));
+    // Verify brand tokens and layout
+    assert!(ru_mail.html_body.contains("#2D5584")); // Brand primary slate blue
+    assert!(ru_mail.html_body.contains("#C68A34")); // Brand accent warm gold
+    assert!(ru_mail.html_body.contains("#F8F9FA")); // Canvas background
+    assert!(ru_mail.html_body.contains("#FFFFFF")); // Card background
+    assert!(ru_mail.html_body.contains("Одноразовая ссылка для входа в")); // Hidden preheader
+    assert!(ru_mail
+        .html_body
+        .contains("Семейный архив и генеалогическое древо")); // Subtitle
+    assert!(ru_mail.html_body.contains("Войти в семейный архив")); // CTA button
+    assert!(ru_mail.html_body.contains("mso-padding-alt: 14px 28px")); // Outlook button padding
+    assert!(ru_mail.html_body.contains("color-scheme: light dark")); // Dark mode
+    assert!(ru_mail
+        .html_body
+        .contains("@media (prefers-color-scheme: dark)")); // Dark mode CSS
+    assert!(ru_mail
+        .html_body
+        .contains("@media only screen and (max-width: 600px)")); // Mobile responsive
+    assert!(ru_mail.html_body.contains("[if mso]")); // MSO button fallback
+    assert!(ru_mail.html_body.contains("<!--[if (gte mso 9)|(IE)]>")); // Outlook ghost table
+    assert!(ru_mail.html_body.contains(r#"width="580""#)); // 580px fixed width ghost table
+    assert!(ru_mail.html_body.contains("email-emblem-fallback")); // Gmail SVG fallback
+
+    // Clean plaintext URL extraction on its own line
+    let ru_ml_url = ru_mail
+        .text_body
+        .lines()
+        .find(|l| l.contains("https://tree.example.com/magic-link/verify?token="))
+        .and_then(|l| l.split("https://").nth(1))
+        .map(|s| format!("https://{s}"))
+        .unwrap();
+    assert_eq!(
+        ru_ml_url,
+        "https://tree.example.com/magic-link/verify?token=secret_token_12345"
+    );
 
     // 2. English magic link with XSS/special chars
     email_service
@@ -1327,9 +1364,32 @@ async fn test_transactional_email_bilingual_templating_and_html_escaping() {
     assert!(en_mail
         .html_body
         .contains("John &lt;img src=x onerror=alert(1)&gt; &amp; Co"));
+    assert!(!en_mail.html_body.contains("&amp;amp;"));
+    assert!(!en_mail.html_body.contains("&amp;lt;"));
     assert!(en_mail.html_body.contains("lang=\"en\""));
+    assert!(en_mail.html_body.contains("#2D5584"));
+    assert!(en_mail.html_body.contains("#C68A34"));
+    assert!(en_mail.html_body.contains("#F8F9FA"));
+    assert!(en_mail.html_body.contains("#FFFFFF"));
+    assert!(en_mail.html_body.contains("Your one-time sign-in link for"));
+    assert!(en_mail
+        .html_body
+        .contains("Family Tree &amp; Heritage Archive"));
+    assert!(en_mail.html_body.contains("Sign In to Family Archive"));
 
-    // 3. Invitation escaping in RU & EN
+    let en_ml_url = en_mail
+        .text_body
+        .lines()
+        .find(|l| l.contains("https://tree.example.com/magic-link/verify?token="))
+        .and_then(|l| l.split("https://").nth(1))
+        .map(|s| format!("https://{s}"))
+        .unwrap();
+    assert_eq!(
+        en_ml_url,
+        "https://tree.example.com/magic-link/verify?token=token_en_67890"
+    );
+
+    // 3. Invitation escaping in RU
     email_service
         .send_invitation(
             "invitee@test.local",
@@ -1348,6 +1408,78 @@ async fn test_transactional_email_bilingual_templating_and_html_escaping() {
     assert!(!invite_ru.html_body.contains("<admin@test.local>"));
     assert!(invite_ru.html_body.contains("&lt;admin@test.local&gt;"));
     assert!(invite_ru.html_body.contains("Editor &amp; Contributor"));
+    assert!(!invite_ru.html_body.contains("&amp;amp;"));
+    assert!(!invite_ru.html_body.contains("&amp;lt;"));
+    assert!(invite_ru.html_body.contains("#2D5584"));
+    assert!(invite_ru.html_body.contains("#C68A34"));
+    assert!(invite_ru.html_body.contains("#FFFFFF"));
+    assert!(invite_ru
+        .html_body
+        .contains("Приглашение присоединиться к семейному архиву"));
+    assert!(invite_ru.html_body.contains("7 дней"));
+    assert!(invite_ru.html_body.contains("Роль в архиве:"));
+    assert!(invite_ru.html_body.contains("Принять приглашение и войти"));
+    assert!(invite_ru.html_body.contains(".email-role-pill"));
+
+    let ru_inv_url = invite_ru
+        .text_body
+        .lines()
+        .find(|l| l.contains("https://tree.example.com/register?invite_token="))
+        .and_then(|l| l.split("https://").nth(1))
+        .map(|s| format!("https://{s}"))
+        .unwrap();
+    assert_eq!(
+        ru_inv_url,
+        "https://tree.example.com/register?invite_token=invite_tok_abc"
+    );
+
+    // 4. English invitation
+    email_service
+        .send_invitation(
+            "invitee_en@test.local",
+            "Invitee",
+            "Elena Rostova",
+            "Viewer",
+            "invite_tok_en_999",
+            "en-US",
+        )
+        .await
+        .unwrap();
+
+    let captured = email_service.captured_emails().await;
+    assert_eq!(captured.len(), 4);
+    let invite_en = &captured[3];
+    assert_eq!(invite_en.to, "invitee_en@test.local");
+    assert!(invite_en.subject.contains("Invitation to join"));
+    assert!(invite_en
+        .text_body
+        .contains("Elena Rostova has invited you"));
+    assert!(invite_en.text_body.contains("7 days"));
+    assert!(!invite_en.html_body.contains("&amp;amp;"));
+    assert!(!invite_en.html_body.contains("&amp;lt;"));
+    assert!(invite_en.html_body.contains("#2D5584"));
+    assert!(invite_en.html_body.contains("#C68A34"));
+    assert!(invite_en.html_body.contains("#FFFFFF"));
+    assert!(invite_en
+        .html_body
+        .contains("Invitation to join the family archive"));
+    assert!(invite_en.html_body.contains("Assigned Role:"));
+    assert!(invite_en.html_body.contains("7 days"));
+    assert!(invite_en
+        .html_body
+        .contains("Accept Invitation &amp; Create Account"));
+
+    let en_inv_url = invite_en
+        .text_body
+        .lines()
+        .find(|l| l.contains("https://tree.example.com/register?invite_token="))
+        .and_then(|l| l.split("https://").nth(1))
+        .map(|s| format!("https://{s}"))
+        .unwrap();
+    assert_eq!(
+        en_inv_url,
+        "https://tree.example.com/register?invite_token=invite_tok_en_999"
+    );
 }
 
 #[tokio::test]

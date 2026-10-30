@@ -82,6 +82,23 @@ impl GenDate {
         self.compute_sort_key()
     }
 
+    /// If this date is an exact date with year, month, and day, converts it to `chrono::NaiveDate` (Gregorian).
+    pub fn exact_naive_date(&self) -> Option<NaiveDate> {
+        if self.r#mod != GenDateMod::Exact {
+            return None;
+        }
+        let start = self.start.as_ref()?;
+        let m = start.m?;
+        let d = start.d?;
+        let naive = NaiveDate::from_ymd_opt(start.y, u32::from(m), u32::from(d))?;
+        if self.cal == CalendarType::Julian {
+            let offset = julian_to_gregorian_offset_days(start.y);
+            naive.checked_add_days(Days::new(offset))
+        } else {
+            Some(naive)
+        }
+    }
+
     /// Formats the structured `GenDate` into a canonical GEDCOM 5.5.1 `DATE` string (`10-core-data-model.md §3.2, §4.3`).
     pub fn to_gedcom(&self) -> String {
         if self.r#mod == GenDateMod::Phrase {

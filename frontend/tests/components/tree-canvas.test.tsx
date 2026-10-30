@@ -2227,6 +2227,109 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       // Verify zero card-edge intersections across all segments in this multi-component layout
       assertZeroCardEdgeIntersections(result);
     });
+
+    it('verifies that in computeAllNodesLayout, when a couple has multiple children (including a collinear child directly beneath the parents), all children parent-child edges share the exact same sourceX and yBus', () => {
+      const familyData: any = {
+        focal_id: 'p-dad',
+        nodes: [
+          { id: 'p-dad', first_name: 'Dad', last_name: 'Test', gender: 'male', is_living: false },
+          { id: 'p-mom', first_name: 'Mom', last_name: 'Test', gender: 'female', is_living: false },
+          { id: 'p-c1', first_name: 'Child 1', last_name: 'Test', gender: 'male', is_living: true },
+          { id: 'p-c2', first_name: 'Child 2', last_name: 'Test', gender: 'female', is_living: true },
+          { id: 'p-c3', first_name: 'Child 3', last_name: 'Test', gender: 'male', is_living: true },
+        ],
+        edges: [
+          { id: 'e-sp', source: 'p-dad', target: 'p-mom', kind: 'spouse' },
+          { id: 'e-c1', source: 'p-dad', target: 'p-c1', kind: 'parent_child' },
+          { id: 'e-c2', source: 'p-dad', target: 'p-c2', kind: 'parent_child' },
+          { id: 'e-c3', source: 'p-dad', target: 'p-c3', kind: 'parent_child' },
+          { id: 'e-m-c1', source: 'p-mom', target: 'p-c1', kind: 'parent_child' },
+          { id: 'e-m-c2', source: 'p-mom', target: 'p-c2', kind: 'parent_child' },
+          { id: 'e-m-c3', source: 'p-mom', target: 'p-c3', kind: 'parent_child' },
+        ],
+        families: [
+          {
+            id: 'fam-test',
+            partner1_id: 'p-dad',
+            partner2_id: 'p-mom',
+            children: ['p-c1', 'p-c2', 'p-c3'],
+          },
+        ],
+      };
+
+      const result = computeAllNodesLayout(familyData);
+      const childEdges = result.edges.filter((e) => e.kind === 'parent_child');
+      expect(childEdges.length).toBe(3);
+
+      const dadNode = result.nodes.find((n) => n.id === 'p-dad')!;
+      const momNode = result.nodes.find((n) => n.id === 'p-mom')!;
+      const leftNode = dadNode.x < momNode.x ? dadNode : momNode;
+      const rightNode = dadNode.x < momNode.x ? momNode : dadNode;
+      const unionMidX = (leftNode.x + leftNode.width + rightNode.x) / 2;
+
+      // Check that at least one child is collinear with unionMidX (targetX === unionMidX)
+      const hasCollinearChild = childEdges.some((e) => Math.abs(e.targetX - unionMidX) < 1);
+      expect(hasCollinearChild).toBe(true);
+
+      // Verify that all child edges share the EXACT same sourceX (the union midpoint) and yBus
+      const firstSourceX = childEdges[0].sourceX;
+      const firstYBus = childEdges[0].yBus;
+      expect(firstSourceX).toBe(unionMidX);
+
+      for (const edge of childEdges) {
+        expect(edge.sourceX).toBe(firstSourceX);
+        expect(edge.yBus).toBe(firstYBus);
+      }
+    });
+
+    it('verifies that in computeDescendantsLayout and computeHourglassLayout, children in the same family share the exact same sourceX and yBus without collinear offset', () => {
+      const familyData: any = {
+        focal_id: 'p-dad',
+        nodes: [
+          { id: 'p-dad', first_name: 'Dad', last_name: 'Test', gender: 'male', is_living: false },
+          { id: 'p-mom', first_name: 'Mom', last_name: 'Test', gender: 'female', is_living: false },
+          { id: 'p-c1', first_name: 'Child 1', last_name: 'Test', gender: 'male', is_living: true },
+          { id: 'p-c2', first_name: 'Child 2', last_name: 'Test', gender: 'female', is_living: true },
+          { id: 'p-c3', first_name: 'Child 3', last_name: 'Test', gender: 'male', is_living: true },
+        ],
+        edges: [
+          { id: 'e-sp', source: 'p-dad', target: 'p-mom', kind: 'spouse' },
+          { id: 'e-c1', source: 'p-dad', target: 'p-c1', kind: 'parent_child' },
+          { id: 'e-c2', source: 'p-dad', target: 'p-c2', kind: 'parent_child' },
+          { id: 'e-c3', source: 'p-dad', target: 'p-c3', kind: 'parent_child' },
+        ],
+        families: [
+          {
+            id: 'fam-test',
+            partner1_id: 'p-dad',
+            partner2_id: 'p-mom',
+            children: ['p-c1', 'p-c2', 'p-c3'],
+          },
+        ],
+      };
+
+      // Descendants layout
+      const descResult = computeDescendantsLayout(familyData, 3);
+      const descChildEdges = descResult.edges.filter((e) => e.kind === 'parent_child');
+      expect(descChildEdges.length).toBe(3);
+      const descFirstSx = descChildEdges[0].sourceX;
+      const descFirstYBus = descChildEdges[0].yBus;
+      for (const edge of descChildEdges) {
+        expect(edge.sourceX).toBe(descFirstSx);
+        expect(edge.yBus).toBe(descFirstYBus);
+      }
+
+      // Hourglass layout
+      const hgResult = computeHourglassLayout(familyData, 3);
+      const hgChildEdges = hgResult.edges.filter((e) => e.kind === 'parent_child' && e.sourceId === 'p-dad');
+      expect(hgChildEdges.length).toBe(3);
+      const hgFirstSx = hgChildEdges[0].sourceX;
+      const hgFirstYBus = hgChildEdges[0].yBus;
+      for (const edge of hgChildEdges) {
+        expect(edge.sourceX).toBe(hgFirstSx);
+        expect(edge.yBus).toBe(hgFirstYBus);
+      }
+    });
   });
 
   describe('Milestone 2.6: Interactive Tree Connectors, Visual Clarity & Popover Navigation', () => {

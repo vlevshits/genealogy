@@ -464,6 +464,27 @@ fn person_birth_window(
     parse_plausible_window(summary_date, sort_key)
 }
 
+fn parse_exact_date(date_str: Option<&str>) -> Option<chrono::NaiveDate> {
+    let raw = date_str?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let gd = GenDate::parse(raw);
+    gd.exact_naive_date()
+}
+
+fn person_exact_birth_date(
+    p: &TreePersonNodeDto,
+    events: &[LifeEventDto],
+) -> Option<chrono::NaiveDate> {
+    let ev_opt = events.iter().find(|e| {
+        e.individual_id.as_deref() == Some(p.id.as_str())
+            && matches!(e.event_type.as_str(), "birth" | "christening" | "baptism")
+    });
+    parse_exact_date(p.birth.as_ref().and_then(|b| b.date.as_deref()))
+        .or_else(|| parse_exact_date(ev_opt.and_then(event_date_text)))
+}
+
 fn person_death_window(
     p: &TreePersonNodeDto,
     events: &[LifeEventDto],
@@ -1031,6 +1052,8 @@ fn normalize_cross_script_token(raw: &str) -> String {
             _ => {}
         }
     }
+    // Normalize Latin transliteration variations of Cyrillic 'ё'
+    let out = out.replace("yo", "e").replace("jo", "e");
     for suffix in ["ii", "iy", "yi", "yy", "ey", "ei"] {
         if let Some(stem) = out.strip_suffix(suffix) {
             if stem.len() >= 2 {
@@ -1099,14 +1122,26 @@ fn collect_person_surnames(p: &TreePersonNodeDto) -> Vec<String> {
 
 fn collect_person_given_names(p: &TreePersonNodeDto) -> Vec<String> {
     let mut res = Vec::new();
-    if !p.primary_name.given_name.trim().is_empty() {
-        res.push(normalize_cross_script_token(&p.primary_name.given_name));
+    let add_token = |res: &mut Vec<String>, raw: &str| {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            res.push(normalize_cross_script_token(trimmed));
+            for part in trimmed.split_whitespace() {
+                let part_trimmed = part.trim();
+                if !part_trimmed.is_empty() && part_trimmed != trimmed {
+                    res.push(normalize_cross_script_token(part_trimmed));
+                }
+            }
+        }
+    };
+
+    add_token(&mut res, &p.primary_name.given_name);
+    if let Some(nick) = p.nickname.as_deref() {
+        add_token(&mut res, nick);
     }
     for alt in &p.alt_names {
         if let Some(g) = alt.given_name.as_deref() {
-            if !g.trim().is_empty() {
-                res.push(normalize_cross_script_token(g));
-            }
+            add_token(&mut res, g);
         }
     }
     res.sort();
@@ -1190,6 +1225,24 @@ pub fn score_duplicate_pair(
         reasons.push("similar_given_name".to_string());
     }
 
+    // Name Compatibility Guard:
+    let both_have_given = !givens_a.is_empty() && !givens_b.is_empty();
+    let both_have_surnames = !surnames_a.is_empty() && !surnames_b.is_empty();
+
+    // If both given names AND surnames conflict (neither given name nor surname has similarity >= 0.60,
+    // and both records have names): Return (0, vec![]) immediately.
+    // Two people with different first names and different last names must NEVER be duplicate candidates.
+    if both_have_given && both_have_surnames && best_given_sim < 0.60 && best_surname_sim < 0.60 {
+        return (0, Vec::new());
+    }
+
+    // If both records have non-empty given names, and best_given_sim < 0.60:
+    // Apply a heavy given name conflict penalty (-40). Two people with distinctly different given names
+    // (e.g. Татьяна vs Валентина) are different individuals and cannot be duplicates.
+    if both_have_given && best_given_sim < 0.60 {
+        score -= 40;
+    }
+
     // 3. Patronymic comparison
     if let (Some(pa), Some(pb)) = (
         a.primary_name.patronymic.as_deref(),
@@ -1231,6 +1284,20 @@ pub fn score_duplicate_pair(
         }
     }
 
+    // Exact Birth Date Conflict Guard:
+    // If both records have exact dates of birth with day and month (e.g. 20 NOV 1987 and 1 APR 1987),
+    // and the dates differ by more than 30 days:
+    // Apply an exact birth date conflict penalty (-30).
+    if let (Some(da), Some(db)) = (
+        person_exact_birth_date(a, &store.events),
+        person_exact_birth_date(b, &store.events),
+    ) {
+        let diff_days = (da - db).num_days().abs();
+        if diff_days > 30 {
+            score -= 30;
+        }
+    }
+
     // 5. Birth place comparison
     if let (Some(pa), Some(pb)) = (
         a.birth.as_ref().and_then(|v| v.place.as_deref()),
@@ -1259,7 +1326,11 @@ pub fn score_duplicate_pair(
         score -= 30;
     }
 
-    (score.clamp(0, 100), reasons)
+    if score <= 0 {
+        (0, Vec::new())
+    } else {
+        (score.min(100), reasons)
+    }
 }
 
 fn confidence_tier(score: i32) -> String {
@@ -1437,7 +1508,7 @@ pub fn match_prospective_person(
 /// Builds the quality summary response (`GET /api/v1/quality` and `GET /api/v1/quality/summary`).
 pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryResponse {
     let warnings = compute_quality_warnings(store, false);
-    let duplicates = compute_duplicate_candidates(store, 60);
+    let duplicates = compute_duplicate_candidates(store, 75);
 
     let mut chronology = 0;
     let mut family_age = 0;
@@ -2261,4 +2332,212 @@ pub fn execute_person_merge(
         merged_id: Some(merge_id),
         merged_gid: Some(merge_person.gid),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::privacy::FamilyDto;
+
+    fn make_test_person(
+        id: &str,
+        given: &str,
+        surname: &str,
+        patronymic: Option<&str>,
+        sex: &str,
+        birth_date: Option<&str>,
+    ) -> TreePersonNodeDto {
+        TreePersonNodeDto {
+            id: id.to_string(),
+            gid: format!("I{id}"),
+            sex: sex.to_string(),
+            is_living: false,
+            living_override: None,
+            is_private: false,
+            primary_name: PersonNameDto {
+                given_name: given.to_string(),
+                patronymic: patronymic.map(|s| s.to_string()),
+                surname: surname.to_string(),
+            },
+            birth_surname: None,
+            nickname: None,
+            name_prefix: None,
+            name_suffix: None,
+            biography: None,
+            birth: birth_date.map(|d| VitalEventSummaryDto {
+                date: Some(d.to_string()),
+                place: None,
+            }),
+            death: None,
+            avatar_url: None,
+            avatar_media_id: None,
+            avatar_crop: None,
+            notes: None,
+            birth_sort: None,
+            death_sort: None,
+            has_death_event: false,
+            alt_names: vec![],
+            external_ids: HashMap::new(),
+            version: 1,
+            tx_id: None,
+            generation: None,
+            is_direct_lineage: None,
+        }
+    }
+
+    #[test]
+    fn test_different_given_names_false_positive_prevention() {
+        let mut store = GenealogyPrivacyStore::empty();
+
+        // Person A: Татьяна Шурубейко, female, born 20 NOV 1987
+        let p_tatiana =
+            make_test_person("p1", "Татьяна", "Шурубейко", None, "F", Some("20 NOV 1987"));
+
+        // Person B: Валентина Левшиц, female, born 1 APR 1987
+        let p_valentina =
+            make_test_person("p2", "Валентина", "Левшиц", None, "F", Some("1 APR 1987"));
+
+        // Person C: Shared relative (e.g. spouse/partner or relative)
+        let p_relative = make_test_person("p3", "Иван", "Левшиц", None, "M", Some("1985"));
+
+        store.persons.push(p_tatiana.clone());
+        store.persons.push(p_valentina.clone());
+        store.persons.push(p_relative.clone());
+
+        // Connect both to shared relative in store families
+        store.families.push(FamilyDto {
+            id: "fam1".to_string(),
+            gid: "F0001".to_string(),
+            partner1_id: Some("p1".to_string()),
+            partner2_id: Some("p3".to_string()),
+            relationship_type: "married".to_string(),
+            is_private: false,
+            children: vec![],
+            external_ids: HashMap::new(),
+            version: 1,
+            marriage_date: None,
+            marriage_place: None,
+        });
+        store.families.push(FamilyDto {
+            id: "fam2".to_string(),
+            gid: "F0002".to_string(),
+            partner1_id: Some("p2".to_string()),
+            partner2_id: Some("p3".to_string()),
+            relationship_type: "married".to_string(),
+            is_private: false,
+            children: vec![],
+            external_ids: HashMap::new(),
+            version: 1,
+            marriage_date: None,
+            marriage_place: None,
+        });
+
+        // 1. With completely different surnames ("Шурубейко" vs "Левшиц"):
+        let (score1, _) = score_duplicate_pair(&p_tatiana, &p_valentina, &store);
+        assert_eq!(
+            score1, 0,
+            "Different first and last names must return score 0"
+        );
+
+        // 2. Even if Татьяна took the married surname "Левшиц":
+        let mut p_tatiana_married = p_tatiana.clone();
+        p_tatiana_married.primary_name.surname = "Левшиц".to_string();
+        p_tatiana_married.birth_surname = Some("Шурубейко".to_string());
+
+        let (score2, _) = score_duplicate_pair(&p_tatiana_married, &p_valentina, &store);
+        assert!(
+            score2 < 40,
+            "Татьяна vs Валентина with same married surname and birth year must have score < 40, got {score2}"
+        );
+
+        // 3. Even without exact dates (both just born 1987):
+        let mut p_t_year = p_tatiana_married.clone();
+        p_t_year.birth = Some(VitalEventSummaryDto {
+            date: Some("1987".to_string()),
+            place: None,
+        });
+        let mut p_v_year = p_valentina.clone();
+        p_v_year.birth = Some(VitalEventSummaryDto {
+            date: Some("1987".to_string()),
+            place: None,
+        });
+        let (score3, _) = score_duplicate_pair(&p_t_year, &p_v_year, &store);
+        assert!(
+            score3 < 40,
+            "Татьяна vs Валентина with year 1987 only must have score < 40, got {score3}"
+        );
+
+        // Compute candidates with threshold 75 — must NOT include this pair
+        let candidates = compute_duplicate_candidates(&store, 75);
+        assert!(
+            candidates.is_empty(),
+            "Expected 0 duplicate candidates, got {:?}",
+            candidates
+        );
+    }
+
+    #[test]
+    fn test_actual_duplicate_candidates_flagged() {
+        let store = GenealogyPrivacyStore::empty();
+
+        // Person A: Petr Shcheglov, born 1910
+        let p_petr = make_test_person("p1", "Petr", "Shcheglov", None, "M", Some("1910"));
+
+        // Person B: Pyotr Fyodorovich Shcheglov, born 1910
+        let p_pyotr = make_test_person(
+            "p2",
+            "Pyotr",
+            "Shcheglov",
+            Some("Fyodorovich"),
+            "M",
+            Some("1910"),
+        );
+
+        let (score, reasons) = score_duplicate_pair(&p_petr, &p_pyotr, &store);
+        assert!(
+            score >= 80,
+            "Petr Shcheglov vs Pyotr Fyodorovich Shcheglov must score >= 80, got {score}"
+        );
+        assert!(reasons.contains(&"same_surname".to_string()));
+        assert!(reasons.contains(&"same_given_name".to_string()));
+        assert!(reasons.contains(&"same_birth_year".to_string()));
+
+        let mut store_with_dups = store;
+        store_with_dups.persons.push(p_petr);
+        store_with_dups.persons.push(p_pyotr);
+
+        let candidates = compute_duplicate_candidates(&store_with_dups, 75);
+        assert_eq!(candidates.len(), 1);
+        assert!(candidates[0].score >= 80);
+    }
+
+    #[test]
+    fn test_exact_birth_date_conflict_penalty() {
+        let store = GenealogyPrivacyStore::empty();
+
+        // Person A: Ivan Ivanov, born 20 NOV 1987
+        let p_a = make_test_person("p1", "Ivan", "Ivanov", None, "M", Some("20 NOV 1987"));
+
+        // Person B: Ivan Ivanov, born 1 APR 1987 (7 months apart, > 30 days)
+        let p_b = make_test_person("p2", "Ivan", "Ivanov", None, "M", Some("1 APR 1987"));
+
+        let (score, _) = score_duplicate_pair(&p_a, &p_b, &store);
+        // Same surname (35) + same given (35) + same birth year (20) - date conflict penalty (30) = 60
+        assert_eq!(score, 60);
+
+        // Person C: Ivan Ivanov, born 25 NOV 1987 (5 days apart, <= 30 days)
+        let p_c = make_test_person("p3", "Ivan", "Ivanov", None, "M", Some("25 NOV 1987"));
+        let (score_close, _) = score_duplicate_pair(&p_a, &p_c, &store);
+        // No date conflict penalty: 35 + 35 + 20 = 90
+        assert_eq!(score_close, 90);
+    }
+
+    #[test]
+    fn test_nickname_in_given_names() {
+        let mut p = make_test_person("p1", "Alexander", "Ivanov", None, "M", None);
+        p.nickname = Some("Sasha".to_string());
+        let names = collect_person_given_names(&p);
+        assert!(names.contains(&"sasha".to_string()));
+        assert!(names.contains(&"alexander".to_string()));
+    }
 }

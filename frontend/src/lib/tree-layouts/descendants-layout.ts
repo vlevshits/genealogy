@@ -468,11 +468,7 @@ export function computeDescendantsLayout(
         for (let i = 0; i < part.children.length; i++) {
           const childPlan = part.children[i];
           const childAnchor = placeSubtree(childPlan, childCursorX, gen + 1, i);
-          const isCollinear = Math.abs(part.stemSourceX - childAnchor.anchorX) < 1;
-          const effectiveSourceX =
-            part.isSingleParent || isCollinear
-              ? part.stemSourceX + 12
-              : part.stemSourceX;
+          const effectiveSourceX = part.stemSourceX;
 
           edges.push(
             createPositionedEdge({

@@ -485,11 +485,7 @@ export function computeHourglassLayout(
         for (let chIdx = 0; chIdx < part.children.length; chIdx++) {
           const ch = part.children[chIdx];
           const chAnchor = renderDownBranch(ch, cursorX, chIdx);
-          const isCollinear = Math.abs(part.stemSourceX - chAnchor.anchorX) < 1;
-          const effectiveSourceX =
-            part.isSingleParent || isCollinear
-              ? part.stemSourceX + 12
-              : part.stemSourceX;
+          const effectiveSourceX = part.stemSourceX;
 
           edges.push(
             createPositionedEdge({

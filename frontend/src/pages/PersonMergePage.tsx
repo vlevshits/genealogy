@@ -4,6 +4,7 @@ import {
   Calendar,
   Camera,
   Check,
+  ExternalLink,
   FileText,
   GitMerge,
   Users,
@@ -151,15 +152,190 @@ function normalizeMergeSide(
       patronymic,
       surname,
     },
-    birth: rawBirth ?? {
-      date: typeof raw.birth_date === 'string' ? raw.birth_date : null,
-      place: typeof raw.birth_place === 'string' ? raw.birth_place : null,
-    },
-    death: rawDeath ?? {
-      date: typeof raw.death_date === 'string' ? raw.death_date : null,
-      place: typeof raw.death_place === 'string' ? raw.death_place : null,
-    },
+    birth: rawBirth
+      ? {
+          date: rawBirth.date ?? null,
+          place: rawBirth.place ?? null,
+        }
+      : {
+          date: typeof raw.birth_date === 'string' ? raw.birth_date : null,
+          place: typeof raw.birth_place === 'string' ? raw.birth_place : null,
+        },
+    death: rawDeath
+      ? {
+          date: rawDeath.date ?? null,
+          place: rawDeath.place ?? null,
+        }
+      : {
+          date: typeof raw.death_date === 'string' ? raw.death_date : null,
+          place: typeof raw.death_place === 'string' ? raw.death_place : null,
+        },
+    biography: (raw.biography as string | null | undefined) ?? null,
+    notes: (raw.notes as string | null | undefined) ?? null,
   };
+}
+
+export function computeDefaultFieldChoices(
+  preview: PersonMergePreviewDto
+): Record<string, 'target' | 'source'> {
+  const tgt = preview.target;
+  const src = preview.source;
+
+  const isBlank = (val: unknown): boolean => {
+    if (val === null || val === undefined) return true;
+    const str = String(val).trim();
+    return str === '' || str === '—' || str === '-';
+  };
+
+  const isSexEmpty = (val: unknown): boolean => {
+    if (isBlank(val)) return true;
+    const str = String(val).trim();
+    return str === 'U';
+  };
+
+  const isDateApproximate = (dateStr: string): boolean => {
+    return (
+      /^(abt|about|calc|bef|before|aft|after|est|estimated|ок\.|около|до|после)\b/i.test(
+        dateStr.trim()
+      ) || dateStr.includes('?')
+    );
+  };
+
+  const getDateSpecificity = (dateStr: string): number => {
+    const trimmed = dateStr.trim();
+    if (isBlank(trimmed)) return 0;
+
+    const approx = isDateApproximate(trimmed);
+
+    // Full date: YYYY-MM-DD or DD.MM.YYYY
+    const isFullIso = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+    const isFullDmy = /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(trimmed);
+    // Year + Month: YYYY-MM
+    const isYearMonth = /^\d{4}-\d{2}$/.test(trimmed);
+    // Year only: YYYY
+    const isYearOnly = /^\d{4}$/.test(trimmed);
+
+    let score = 10;
+    if (isFullIso || isFullDmy) {
+      score = 50;
+    } else if (isYearMonth) {
+      score = 35;
+    } else if (isYearOnly) {
+      score = 20;
+    } else {
+      const digitCount = (trimmed.match(/\d/g) || []).length;
+      score = 15 + Math.min(digitCount, 8);
+    }
+
+    if (approx) {
+      score -= 10;
+    }
+
+    // Tie-breaker: longer date string usually has more precision/detail
+    score += Math.min(trimmed.length, 20) * 0.1;
+
+    return score;
+  };
+
+  const fields = [
+    'name',
+    'sex',
+    'birth_date',
+    'birth_place',
+    'death_date',
+    'biography',
+  ] as const;
+
+  const result: Record<string, 'target' | 'source'> = {};
+
+  for (const field of fields) {
+    let targetVal = '';
+    let sourceVal = '';
+    let targetEmpty = false;
+    let sourceEmpty = false;
+
+    switch (field) {
+      case 'name': {
+        targetVal = [
+          tgt.primary_name?.given_name,
+          tgt.primary_name?.patronymic,
+          tgt.primary_name?.surname,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        sourceVal = [
+          src.primary_name?.given_name,
+          src.primary_name?.patronymic,
+          src.primary_name?.surname,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        targetEmpty = isBlank(targetVal);
+        sourceEmpty = isBlank(sourceVal);
+        break;
+      }
+      case 'sex': {
+        targetVal = tgt.sex ?? '';
+        sourceVal = src.sex ?? '';
+        targetEmpty = isSexEmpty(targetVal);
+        sourceEmpty = isSexEmpty(sourceVal);
+        break;
+      }
+      case 'birth_date': {
+        targetVal = tgt.birth?.date ?? '';
+        sourceVal = src.birth?.date ?? '';
+        targetEmpty = isBlank(targetVal);
+        sourceEmpty = isBlank(sourceVal);
+        break;
+      }
+      case 'birth_place': {
+        targetVal = tgt.birth?.place ?? '';
+        sourceVal = src.birth?.place ?? '';
+        targetEmpty = isBlank(targetVal);
+        sourceEmpty = isBlank(sourceVal);
+        break;
+      }
+      case 'death_date': {
+        targetVal = tgt.death?.date ?? '';
+        sourceVal = src.death?.date ?? '';
+        targetEmpty = isBlank(targetVal);
+        sourceEmpty = isBlank(sourceVal);
+        break;
+      }
+      case 'biography': {
+        targetVal = (tgt.biography || tgt.notes || '').trim();
+        sourceVal = (src.biography || src.notes || '').trim();
+        targetEmpty = isBlank(targetVal);
+        sourceEmpty = isBlank(sourceVal);
+        break;
+      }
+    }
+
+    if (!targetEmpty && sourceEmpty) {
+      result[field] = 'target';
+    } else if (targetEmpty && !sourceEmpty) {
+      result[field] = 'source';
+    } else if (!targetEmpty && !sourceEmpty) {
+      if (field === 'birth_date' || field === 'death_date') {
+        const targetSpec = getDateSpecificity(targetVal);
+        const sourceSpec = getDateSpecificity(sourceVal);
+        if (sourceSpec > targetSpec) {
+          result[field] = 'source';
+        } else {
+          result[field] = 'target';
+        }
+      } else {
+        result[field] = 'target';
+      }
+    } else {
+      // Both are empty
+      result[field] = 'target';
+    }
+  }
+
+  return result;
 }
 
 export function normalizeMergePreviewResponse(
@@ -250,14 +426,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
   );
   const [fieldChoices, setFieldChoices] = useState<
     Record<string, 'target' | 'source'>
-  >({
-    name: 'target',
-    sex: 'target',
-    birth_date: 'source',
-    birth_place: 'source',
-    death_date: 'source',
-    biography: 'target',
-  });
+  >(() => computeDefaultFieldChoices(preview));
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -271,7 +440,18 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
   };
 
   useEffect(() => {
-    if (!isAdmin || initialPreview) return;
+    if (initialPreview) {
+      const normalized = normalizeMergePreviewResponse(
+        initialPreview as unknown as Partial<PersonMergePreviewDto> &
+          Record<string, unknown>,
+        resolvedTargetId,
+        resolvedSourceId
+      );
+      setPreview(normalized);
+      setFieldChoices(computeDefaultFieldChoices(normalized));
+      return;
+    }
+    if (!isAdmin) return;
     peopleApi
       .getMergePreview(resolvedTargetId, resolvedSourceId)
       .then((res) => {
@@ -279,14 +459,14 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
           res &&
           ((res.target && res.source) || (res.keep_person && res.merge_person))
         ) {
-          setPreview(
-            normalizeMergePreviewResponse(
-              res as unknown as Partial<PersonMergePreviewDto> &
-                Record<string, unknown>,
-              resolvedTargetId,
-              resolvedSourceId
-            )
+          const normalized = normalizeMergePreviewResponse(
+            res as unknown as Partial<PersonMergePreviewDto> &
+              Record<string, unknown>,
+            resolvedTargetId,
+            resolvedSourceId
           );
+          setPreview(normalized);
+          setFieldChoices(computeDefaultFieldChoices(normalized));
         }
       })
       .catch(() => {});
@@ -401,19 +581,11 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
     if (submitting) return;
     setSubmitting(true);
     try {
-      const res = await peopleApi
-        .merge({
-          target_id: preview.target.id,
-          source_id: preview.source.id,
-          field_choices: fieldChoices,
-        })
-        .catch(() => ({
-          surviving_person_id: preview.target.id,
-          surviving_person: { id: preview.target.id },
-          merged_source_id: preview.source.id,
-          tx_id: 'tx-merge-1',
-          status: 'merged',
-        }));
+      const res = await peopleApi.merge({
+        target_id: preview.target.id,
+        source_id: preview.source.id,
+        field_choices: fieldChoices,
+      });
 
       if (res.tx_id) {
         showUndoToast({
@@ -444,6 +616,30 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
     }
   };
 
+  const handleOpenProfile = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    personId: string
+  ) => {
+    e.stopPropagation();
+    const url = `/persons/${personId}`;
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleAuxClickProfile = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    personId: string
+  ) => {
+    if (e.button === 1) {
+      e.stopPropagation();
+      const url = `/persons/${personId}`;
+      if (typeof window !== 'undefined') {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    }
+  };
+
   return (
     <div
       data-testid="person-merge-page"
@@ -459,22 +655,117 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         }
       />
 
+      {/* Responsive Profile Quick-Inspect Chips */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <Card className="p-3.5 sm:p-4 border-brand/30 bg-brand/5 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-semibold text-brand uppercase tracking-wider">
+                {t('merge.colTargetShort')}
+              </span>
+              <Badge variant="brand" size="sm">
+                {preview.target.gid}
+              </Badge>
+            </div>
+            <p className="text-sm font-semibold text-primary truncate">
+              {targetFullName || '—'}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="xs"
+            rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+            onClick={(e) => handleOpenProfile(e, preview.target.id)}
+            onAuxClick={(e) => handleAuxClickProfile(e, preview.target.id)}
+            aria-label={t('merge.openTargetProfileAria', { name: targetFullName })}
+            title={t('merge.openTargetProfileAria', { name: targetFullName })}
+            data-testid="merge-target-open-profile-chip-btn"
+            data-url={`/persons/${preview.target.id}`}
+            className="shrink-0"
+          >
+            {t('merge.viewProfileBtn')}
+          </Button>
+        </Card>
+
+        <Card className="p-3.5 sm:p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-semibold text-secondary uppercase tracking-wider">
+                {t('merge.colSourceShort')}
+              </span>
+              <Badge variant="outline" size="sm">
+                {preview.source.gid}
+              </Badge>
+            </div>
+            <p className="text-sm font-semibold text-primary truncate">
+              {sourceFullName || '—'}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="xs"
+            rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+            onClick={(e) => handleOpenProfile(e, preview.source.id)}
+            onAuxClick={(e) => handleAuxClickProfile(e, preview.source.id)}
+            aria-label={t('merge.openSourceProfileAria', { name: sourceFullName })}
+            title={t('merge.openSourceProfileAria', { name: sourceFullName })}
+            data-testid="merge-source-open-profile-chip-btn"
+            data-url={`/persons/${preview.source.id}`}
+            className="shrink-0"
+          >
+            {t('merge.viewProfileBtn')}
+          </Button>
+        </Card>
+      </div>
+
       {/* 2-Column Side-by-Side Scalar Field Comparison */}
       <Card className="overflow-hidden">
-        <div className="hidden sm:grid sm:grid-cols-3 gap-3 border-b border-border bg-surface-muted/70 px-5 py-3 text-xs font-semibold text-secondary">
+        <div className="hidden sm:grid sm:grid-cols-3 gap-3 border-b border-border bg-surface-muted/70 px-5 py-3 text-xs font-semibold text-secondary items-center">
           <span>{t('merge.colField')}</span>
-          <span>
-            {t('merge.colTarget', {
-              name: targetFullName,
-              gid: preview.target.gid,
-            })}
-          </span>
-          <span>
-            {t('merge.colSource', {
-              name: sourceFullName,
-              gid: preview.source.gid,
-            })}
-          </span>
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="truncate">
+              {t('merge.colTarget', {
+                name: targetFullName,
+                gid: preview.target.gid,
+              })}
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+              onClick={(e) => handleOpenProfile(e, preview.target.id)}
+              onAuxClick={(e) => handleAuxClickProfile(e, preview.target.id)}
+              aria-label={t('merge.openTargetProfileAria', { name: targetFullName })}
+              title={t('merge.openTargetProfileAria', { name: targetFullName })}
+              data-testid="merge-target-open-profile-btn"
+              data-url={`/persons/${preview.target.id}`}
+              className="shrink-0 text-secondary hover:text-primary"
+            >
+              {t('merge.viewProfileShort')}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="truncate">
+              {t('merge.colSource', {
+                name: sourceFullName,
+                gid: preview.source.gid,
+              })}
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              rightIcon={<ExternalLink className="h-3 w-3 shrink-0" />}
+              onClick={(e) => handleOpenProfile(e, preview.source.id)}
+              onAuxClick={(e) => handleAuxClickProfile(e, preview.source.id)}
+              aria-label={t('merge.openSourceProfileAria', { name: sourceFullName })}
+              title={t('merge.openSourceProfileAria', { name: sourceFullName })}
+              data-testid="merge-source-open-profile-btn"
+              data-url={`/persons/${preview.source.id}`}
+              className="shrink-0 text-secondary hover:text-primary"
+            >
+              {t('merge.viewProfileShort')}
+            </Button>
+          </div>
         </div>
 
         <div className="divide-y divide-border">

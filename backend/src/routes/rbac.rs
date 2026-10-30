@@ -8991,7 +8991,7 @@ pub async fn dismiss_quality_warning(
     get,
     path = "/api/v1/quality/duplicates",
     params(
-        ("min_score" = Option<i32>, Query, description = "Minimum similarity score (default 60)"),
+        ("min_score" = Option<i32>, Query, description = "Minimum similarity score (default 75)"),
         ("limit" = Option<usize>, Query, description = "Page size (default 50)"),
         ("cursor" = Option<String>, Query, description = "Pagination offset cursor")
     ),
@@ -9007,7 +9007,7 @@ pub async fn list_duplicate_candidates(
     Query(query): Query<DuplicateCandidatesFilterQuery>,
 ) -> Result<Json<DuplicateCandidatesListResponse>, AppError> {
     let store = state.privacy_store.read().await;
-    let min_score = query.min_score.unwrap_or(60).clamp(1, 100);
+    let min_score = query.min_score.unwrap_or(75).clamp(1, 100);
     let all = compute_duplicate_candidates(&store, min_score);
     let total = all.len();
     let offset = query

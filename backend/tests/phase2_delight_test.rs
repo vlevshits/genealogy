@@ -1437,12 +1437,18 @@ async fn test_kinship_prunes_spurious_detours_and_extra_nodes_for_simple_cases()
 
     // Must have exactly 1 direct trace: Son (degree 1, steps count 1)
     assert!(father_son.connected);
-    assert_eq!(father_son.traces_count, 1, "Father to biological son must have exactly 1 trace");
+    assert_eq!(
+        father_son.traces_count, 1,
+        "Father to biological son must have exactly 1 trace"
+    );
     assert_eq!(father_son.traces.len(), 1);
     let tr = &father_son.traces[0];
     assert_eq!(tr.relationship_key, "son");
     assert_eq!(tr.degree_of_kinship, 1);
-    assert_eq!(tr.path_person_ids, vec![viktor_id.clone(), valentin_id.clone()]);
+    assert_eq!(
+        tr.path_person_ids,
+        vec![viktor_id.clone(), valentin_id.clone()]
+    );
     assert!(tr.is_blood_relation);
 
     // Test 2: Between Pavel and Valentin (two full brothers)
@@ -1463,4 +1469,144 @@ async fn test_kinship_prunes_spurious_detours_and_extra_nodes_for_simple_cases()
         assert_eq!(b_tr.degree_of_kinship, 2);
         assert_eq!(b_tr.steps.len(), 3); // [Pavel, Parent, Valentin]
     }
+}
+
+#[tokio::test]
+async fn test_duplicate_matching_accuracy_and_false_positive_prevention() {
+    let (app, admin_auth, _, _) = setup_phase2_env(false).await;
+
+    // 1. Create two individuals with different given names born in 1987:
+    // "Татьяна Шурубейко" (F, 20 NOV 1987) and "Валентина Левшиц" (F, 1 APR 1987)
+    let (_, p_tatiana) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Татьяна",
+            "surname": "Шурубейко",
+            "sex": "F",
+            "birth_date": "20 NOV 1987",
+            "is_living": false
+        }),
+    )
+    .await;
+    let tatiana_id = p_tatiana["id"].as_str().unwrap().to_string();
+
+    let (_, p_valentina) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Валентина",
+            "surname": "Левшиц",
+            "sex": "F",
+            "birth_date": "1 APR 1987",
+            "is_living": false
+        }),
+    )
+    .await;
+    let valentina_id = p_valentina["id"].as_str().unwrap().to_string();
+
+    // Create a shared relative and attach both to families sharing this relative
+    let (_, p_rel) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Иван",
+            "surname": "Левшиц",
+            "sex": "M",
+            "birth_date": "1985",
+            "is_living": false
+        }),
+    )
+    .await;
+    let rel_id = p_rel["id"].as_str().unwrap().to_string();
+
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": tatiana_id,
+            "partner2_id": rel_id,
+            "relationship_type": "married"
+        }),
+    )
+    .await;
+    post_json(
+        &app,
+        "/api/v1/families",
+        &admin_auth,
+        json!({
+            "partner1_id": valentina_id,
+            "partner2_id": rel_id,
+            "relationship_type": "married"
+        }),
+    )
+    .await;
+
+    // 2. Create actual duplicate candidates:
+    // "Petr Shcheglov" (M, 1910) vs "Pyotr Fyodorovich Shcheglov" (M, 1910)
+    let (_, p_petr) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Petr",
+            "surname": "Shcheglov",
+            "sex": "M",
+            "birth_date": "1910",
+            "is_living": false
+        }),
+    )
+    .await;
+    let petr_id = p_petr["id"].as_str().unwrap().to_string();
+
+    let (_, p_pyotr) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "given_name": "Pyotr",
+            "patronymic": "Fyodorovich",
+            "surname": "Shcheglov",
+            "sex": "M",
+            "birth_date": "1910",
+            "is_living": false
+        }),
+    )
+    .await;
+    let pyotr_id = p_pyotr["id"].as_str().unwrap().to_string();
+
+    // Query duplicate candidates (default threshold is now 75)
+    let (st_dups, dups_val) = get_json(&app, "/api/v1/quality/duplicates", Some(&admin_auth)).await;
+    assert_eq!(st_dups, StatusCode::OK);
+    let dups_resp: DuplicateCandidatesListResponse = serde_json::from_value(dups_val).unwrap();
+
+    // Verify Tatiana and Valentina do NOT trigger as duplicate candidates
+    let tatiana_valentina_candidate = dups_resp.items.iter().find(|d| {
+        (d.person_a.id == tatiana_id && d.person_b.id == valentina_id)
+            || (d.person_a.id == valentina_id && d.person_b.id == tatiana_id)
+    });
+    assert!(
+        tatiana_valentina_candidate.is_none(),
+        "Tatiana and Valentina must not be flagged as duplicates"
+    );
+
+    // Verify Petr Shcheglov and Pyotr Fyodorovich Shcheglov ARE flagged with score >= 80
+    let petr_pyotr_candidate = dups_resp.items.iter().find(|d| {
+        (d.person_a.id == petr_id && d.person_b.id == pyotr_id)
+            || (d.person_a.id == pyotr_id && d.person_b.id == petr_id)
+    });
+    assert!(
+        petr_pyotr_candidate.is_some(),
+        "Petr and Pyotr Shcheglov must be flagged as duplicate candidates"
+    );
+    let pair = petr_pyotr_candidate.unwrap();
+    assert!(
+        pair.score >= 80,
+        "Expected Petr vs Pyotr score >= 80, got {}",
+        pair.score
+    );
 }

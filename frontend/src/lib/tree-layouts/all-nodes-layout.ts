@@ -752,7 +752,17 @@ export function computeAllNodesLayout(
 
     // Parent-Child Edges
     const createdChildEdges = new Set<string>();
-    let childEdgeCounter = 0;
+    const familyStaggerMap = new Map<string, number>();
+    let familyCounter = 0;
+    const getFamilyBusStagger = (familyKey: string): number => {
+      let stagger = familyStaggerMap.get(familyKey);
+      if (stagger === undefined) {
+        familyCounter++;
+        stagger = (familyCounter % 2 === 0 ? -1 : 1) * 6;
+        familyStaggerMap.set(familyKey, stagger);
+      }
+      return stagger;
+    };
 
     for (const cid of compSet) {
       const childNode = nodePositionMap.get(cid);
@@ -764,9 +774,6 @@ export function computeAllNodesLayout(
         (pid) => compSet.has(pid) && nodePositionMap.has(pid)
       );
       if (parentsInComp.length === 0) continue;
-
-      childEdgeCounter++;
-      const busStagger = (childEdgeCounter % 2 === 0 ? -1 : 1) * 6;
 
       if (parentsInComp.length === 2) {
         const [p1, p2] = parentsInComp;
@@ -783,9 +790,6 @@ export function computeAllNodesLayout(
           const sourceY = leftNode.y + CARD_HEIGHT / 2;
           const targetX = childNode.x + CARD_WIDTH / 2;
           const targetY = childNode.y;
-          const yBus = childNode.y - V_GAP / 2 + busStagger;
-          const isCollinear = Math.abs(rawSourceX - targetX) < 1;
-          const sourceX = isCollinear ? rawSourceX + 12 : rawSourceX;
           const edgeId = `all-edge-${p1}-${cid}`;
 
           const isChildInFamily = (f: { children?: Array<unknown> }) =>
@@ -810,6 +814,11 @@ export function computeAllNodesLayout(
                 (f.partner1_id === p2 && f.partner2_id === p1)
             ) ??
             (data.families ?? []).find((f) => isChildInFamily(f));
+
+          const familyKey = matchedFamily?.id ?? [p1, p2].sort().join('-');
+          const busStagger = getFamilyBusStagger(familyKey);
+          const yBus = childNode.y - V_GAP / 2 + busStagger;
+          const sourceX = rawSourceX;
 
           if (!createdChildEdges.has(edgeId)) {
             createdChildEdges.add(edgeId);
@@ -843,11 +852,6 @@ export function computeAllNodesLayout(
         const sourceY = pNode.y + CARD_HEIGHT;
         const targetX = childNode.x + CARD_WIDTH / 2;
         const targetY = childNode.y;
-        const yBus = childNode.y - V_GAP / 2 + busStagger;
-        // Prevent collinear vertical stems: single-parent drop stem lateral offset (+/- 12px)
-        const isCollinear = Math.abs(rawSourceX - targetX) < 1;
-        const sourceX = isCollinear ? rawSourceX + 12 : rawSourceX;
-        const edgeId = `all-edge-${pid}-${cid}`;
 
         const isChildInFamily = (f: { children?: Array<unknown> }) =>
           Boolean(
@@ -864,6 +868,12 @@ export function computeAllNodesLayout(
               isChildInFamily(f) &&
               (f.partner1_id === pid || f.partner2_id === pid)
           ) ?? (data.families ?? []).find((f) => isChildInFamily(f));
+
+        const familyKey = matchedFamily?.id ?? `single-${pid}`;
+        const busStagger = getFamilyBusStagger(familyKey);
+        const yBus = childNode.y - V_GAP / 2 + busStagger;
+        const sourceX = rawSourceX;
+        const edgeId = `all-edge-${pid}-${cid}`;
 
         if (!createdChildEdges.has(edgeId)) {
           createdChildEdges.add(edgeId);

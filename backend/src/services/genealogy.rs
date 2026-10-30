@@ -1817,7 +1817,10 @@ fn is_valid_kinship_path(
         if edge_types[i] == "spouse" && edge_types[i + 1] == "child" {
             let p_start = path[i].as_str();
             let p_child = path[i + 2].as_str();
-            if parents_of.get(p_child).is_some_and(|ps| ps.contains(&p_start)) {
+            if parents_of
+                .get(p_child)
+                .is_some_and(|ps| ps.contains(&p_start))
+            {
                 return false;
             }
         }
@@ -1828,7 +1831,10 @@ fn is_valid_kinship_path(
         if edge_types[i] == "parent" && edge_types[i + 1] == "spouse" {
             let p_child = path[i].as_str();
             let p_end = path[i + 2].as_str();
-            if parents_of.get(p_child).is_some_and(|ps| ps.contains(&p_end)) {
+            if parents_of
+                .get(p_child)
+                .is_some_and(|ps| ps.contains(&p_end))
+            {
                 return false;
             }
         }
@@ -1856,13 +1862,19 @@ fn is_valid_kinship_path(
     // any longer path containing a spouse/affinal edge is an invalid detour.
     let from_id = path.first().unwrap().as_str();
     let to_id = path.last().unwrap().as_str();
-    let is_direct_parent_child = parents_of.get(from_id).is_some_and(|ps| ps.contains(&to_id))
-        || parents_of.get(to_id).is_some_and(|ps| ps.contains(&from_id));
+    let is_direct_parent_child = parents_of
+        .get(from_id)
+        .is_some_and(|ps| ps.contains(&to_id))
+        || parents_of
+            .get(to_id)
+            .is_some_and(|ps| ps.contains(&from_id));
     if is_direct_parent_child && edge_types.contains(&"spouse") {
         return false;
     }
 
-    let is_direct_spouse = spouses_of.get(from_id).is_some_and(|ss| ss.contains(&to_id));
+    let is_direct_spouse = spouses_of
+        .get(from_id)
+        .is_some_and(|ss| ss.contains(&to_id));
     if is_direct_spouse && path.len() > 2 && edge_types.contains(&"spouse") {
         return false;
     }
@@ -2054,7 +2066,9 @@ pub fn compute_kinship_path(
                     // Prune "parent" step after "child" step (cannot descend to a child and then ascend to a parent)
                     let is_parent_step = kind == "parent";
                     let has_child_step = path.windows(2).any(|w| {
-                        parents_of.get(w[1].as_str()).is_some_and(|ps| ps.contains(&w[0].as_str()))
+                        parents_of
+                            .get(w[1].as_str())
+                            .is_some_and(|ps| ps.contains(&w[0].as_str()))
                     });
                     if has_child_step && is_parent_step {
                         continue;

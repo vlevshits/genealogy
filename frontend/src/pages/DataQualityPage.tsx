@@ -146,7 +146,7 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
             setDuplicates(warnRes.duplicates);
           }
         }
-        if (Array.isArray(dupRes) && dupRes.length > 0) {
+        if (Array.isArray(dupRes)) {
           setDuplicates(dupRes);
         }
       })

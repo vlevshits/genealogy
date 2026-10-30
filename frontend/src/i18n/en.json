@@ -1781,6 +1781,10 @@
     "confirmDialogDesc": "Merging {source} into {target} will combine all events, family unions, media face tags, and notes under {target} ({gid}).",
     "undoableNotice": "This merge is recorded as a single atomic transaction and can be undone from Change History.",
     "successToast": "Records merged into {name}",
+    "viewProfileBtn": "Open Profile",
+    "viewProfileShort": "Profile",
+    "openTargetProfileAria": "Open profile for {name} in new tab",
+    "openSourceProfileAria": "Open profile for {name} in new tab",
     "fields": {
       "name": "Full Name",
       "sex": "Sex / Gender",
