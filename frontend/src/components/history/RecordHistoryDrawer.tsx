@@ -95,15 +95,82 @@ export function buildDefaultEntityHistory(
   ];
 }
 
-function formatDiffValue(val: unknown, emptyLabel: string): string {
+export function formatDiffValue(val: unknown, emptyLabel: string = '—'): string {
   if (val === null || val === undefined || val === '') {
     return emptyLabel;
   }
   if (typeof val === 'boolean') {
     return val ? 'true' : 'false';
   }
+  if (typeof val === 'number') {
+    return String(val);
+  }
+  if (typeof val === 'string') {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return emptyLabel;
+    if (
+      val.every((item) => typeof item === 'string' || typeof item === 'number')
+    ) {
+      return val.join(', ');
+    }
+    const formatted = val
+      .map((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const obj = item as Record<string, unknown>;
+          if (obj.title) return String(obj.title);
+          if (obj.name) return String(obj.name);
+          if (obj.date)
+            return [obj.date, obj.place].filter(Boolean).join(', ');
+          if (obj.gid) return `@${obj.gid}@`;
+        }
+        return formatDiffValue(item, emptyLabel);
+      })
+      .filter((s) => s && s !== emptyLabel);
+    if (formatted.length === 0) return emptyLabel;
+    if (formatted.length <= 3) return formatted.join(', ');
+    return `${formatted.slice(0, 3).join(', ')} (+${formatted.length - 3})`;
+  }
   if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    // Person object with primary_name or gid
+    if (obj.gid || obj.primary_name) {
+      const pName = (obj.primary_name ?? obj) as Record<string, unknown>;
+      const given = pName?.given_name ?? obj.given_name;
+      const patr = pName?.patronymic ?? obj.patronymic;
+      const surn = pName?.surname ?? obj.surname;
+      const nameParts = [given, patr, surn].filter(Boolean).join(' ');
+      const gidPart = obj.gid ? ` (${obj.gid})` : '';
+      return `${nameParts || 'Person'}${gidPart}`;
+    }
+    // Name object
+    if ('given_name' in obj || 'surname' in obj || 'patronymic' in obj) {
+      const parts = [obj.given_name, obj.patronymic, obj.surname].filter(
+        Boolean
+      );
+      if (parts.length > 0) return parts.join(' ');
+    }
+    // Date/place object
+    if ('date' in obj || 'place' in obj) {
+      const parts = [obj.date, obj.place].filter(Boolean);
+      if (parts.length > 0) return parts.join(', ');
+    }
     try {
+      const entries = Object.entries(obj).filter(
+        ([_, v]) => v !== undefined && v !== null && v !== ''
+      );
+      if (entries.length === 0) return emptyLabel;
+      if (entries.length <= 3) {
+        return entries
+          .map(
+            ([k, v]) =>
+              `${k}: ${
+                typeof v === 'object' ? formatDiffValue(v, emptyLabel) : String(v)
+              }`
+          )
+          .join(', ');
+      }
       return JSON.stringify(val);
     } catch {
       return String(val);
@@ -120,13 +187,56 @@ export function extractEntryDiffs(entry: ChangeLogEntryDto): FieldDiffDto[] {
     before?: Record<string, unknown> | null;
     after?: Record<string, unknown> | null;
   };
-  const beforeObj = entry.before_json ?? rawEntry.before ?? {};
-  const afterObj = entry.after_json ?? rawEntry.after ?? {};
+  let beforeObj = (entry.before_json ?? rawEntry.before ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const afterObj = (entry.after_json ?? rawEntry.after ?? {}) as Record<
+    string,
+    unknown
+  >;
+
+  const syntheticDiffs: FieldDiffDto[] = [];
+
+  // Special handling for person merge bundles
+  if (beforeObj && beforeObj.kind === 'person_merge_bundle') {
+    const keepBefore = (beforeObj.keep_before ?? {}) as Record<string, unknown>;
+    const mergePerson = (beforeObj.merge_person ?? {}) as Record<string, unknown>;
+
+    const mergePersonLabel = formatDiffValue(mergePerson, '—');
+    const keepPersonLabel = formatDiffValue(keepBefore, '—');
+
+    syntheticDiffs.push({
+      field: 'merged_profile',
+      before: mergePersonLabel,
+      after: keepPersonLabel,
+    });
+
+    beforeObj = keepBefore;
+  }
+
+  const ignoredKeys = new Set([
+    'updated_at',
+    'version',
+    'created_at',
+    'id',
+    'gid',
+    'tx_id',
+    'kind',
+    'families_before',
+    'events_before',
+    'notes_before',
+    'media_before',
+    'gid_aliases_before',
+    'keep_before',
+    'merge_person',
+  ]);
+
   const keys = Array.from(
     new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)])
-  ).filter((k) => k !== 'updated_at' && k !== 'version');
+  ).filter((k) => !ignoredKeys.has(k));
 
-  const computed: FieldDiffDto[] = [];
+  const computed: FieldDiffDto[] = [...syntheticDiffs];
   for (const key of keys) {
     const bVal = beforeObj[key];
     const aVal = afterObj[key];

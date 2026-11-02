@@ -22,6 +22,7 @@ import {
 } from '../../ui';
 import { GedcomAnalysisReport } from '../../../api/client';
 import { useI18n } from '../../../i18n';
+import { formatGedcomWarning } from '../../../lib/error-formatter';
 import { formatBytes } from '../SystemDiagnosticsCard';
 
 export interface GedcomAnalysisModalProps {
@@ -195,7 +196,7 @@ export const GedcomAnalysisModal: React.FC<GedcomAnalysisModalProps> = ({
         >
           <ul className="list-disc pl-4 space-y-1 text-xs">
             {report.warnings.slice(0, 6).map((warning, idx) => (
-              <li key={idx}>{warning}</li>
+              <li key={idx}>{formatGedcomWarning(warning, t)}</li>
             ))}
           </ul>
         </Alert>

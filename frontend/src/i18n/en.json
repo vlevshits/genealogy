@@ -1483,6 +1483,11 @@
       "warningsTitle": "Parser Warnings ({count})",
       "proceedBtn": "Proceed to Clean Slate Import"
     },
+    "warnings": {
+      "missingMediaStubs": "{count} external media paths have no bundled binary; media asset stubs will be created for post-import reconciliation.",
+      "missingMediaStubsWithSample": "{count} external media paths ({sample}) have no bundled binary; media asset stubs will be created for post-import reconciliation.",
+      "unresolvedAsso": "Unresolved ASSO association target @{xref}@"
+    },
     "cleanSlate": {
       "title": "Confirm Clean Slate Replacement",
       "subtitle": "Replacing the current family tree requires explicit confirmation.",

@@ -23,6 +23,7 @@ import {
 } from '../../ui';
 import { GedcomImportResult } from '../../../api/client';
 import { useI18n } from '../../../i18n';
+import { formatGedcomWarning } from '../../../lib/error-formatter';
 
 export interface GedcomPostImportReportProps {
   result: GedcomImportResult;
@@ -173,7 +174,7 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
           >
             <ul className="list-disc pl-4 space-y-1 text-xs">
               {result.warnings.slice(0, 5).map((w, idx) => (
-                <li key={idx}>{w}</li>
+                <li key={idx}>{formatGedcomWarning(w, t)}</li>
               ))}
             </ul>
           </Alert>

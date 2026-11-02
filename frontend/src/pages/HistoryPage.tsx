@@ -22,6 +22,7 @@ import {
   HistoryFilterBar,
   HistoryFiltersState,
   extractEntryDiffs,
+  formatDiffValue,
 } from '../components/history';
 import {
   ChangeLogEntryDto,
@@ -515,18 +516,16 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                                     {d.field}
                                   </span>
                                   <span className="rounded bg-danger/10 px-2 py-0.5 text-secondary line-through break-words max-w-full overflow-hidden text-ellipsis">
-                                    {d.before === null ||
-                                    d.before === undefined ||
-                                    d.before === ''
-                                      ? t('history.drawer.emptyValue')
-                                      : String(d.before)}
+                                    {formatDiffValue(
+                                      d.before,
+                                      t('history.drawer.emptyValue')
+                                    )}
                                   </span>
                                   <span className="rounded bg-success/10 px-2 py-0.5 font-medium text-primary break-words max-w-full overflow-hidden text-ellipsis">
-                                    {d.after === null ||
-                                    d.after === undefined ||
-                                    d.after === ''
-                                      ? t('history.drawer.emptyValue')
-                                      : String(d.after)}
+                                    {formatDiffValue(
+                                      d.after,
+                                      t('history.drawer.emptyValue')
+                                    )}
                                   </span>
                                 </div>
                               ))}

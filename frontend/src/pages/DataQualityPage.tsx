@@ -111,7 +111,21 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   const effectiveRole = userRole ?? user?.role ?? 'admin';
   const isAdmin = effectiveRole === 'admin';
 
-  const [activeTab, setActiveTab] = useState<QualityFilterTab>('all');
+  const [activeTab, setActiveTab] = useState<QualityFilterTab>(() => {
+    if (typeof window !== 'undefined') {
+      const search = new URLSearchParams(window.location.search);
+      const tabParam = search.get('tab');
+      if (
+        tabParam === 'duplicates' ||
+        tabParam === 'warning' ||
+        tabParam === 'critical' ||
+        tabParam === 'dismissed'
+      ) {
+        return tabParam as QualityFilterTab;
+      }
+    }
+    return 'all';
+  });
   const [warnings, setWarnings] = useState<QualityWarningDto[]>(
     () => initialWarnings ?? buildDefaultQualityWarnings()
   );
@@ -522,12 +536,19 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                           size="sm"
                           variant="primary"
                           data-testid={`compare-merge-btn-${pairKey}`}
+                          data-url={`/people/merge?target=${encodeURIComponent(
+                            personAId
+                          )}&source=${encodeURIComponent(
+                            personBId
+                          )}&returnTo=${encodeURIComponent('/quality?tab=duplicates')}`}
                           leftIcon={<GitMerge className="h-3.5 w-3.5" />}
                           onClick={() =>
                             navigateTo(
                               `/people/merge?target=${encodeURIComponent(
                                 personAId
-                              )}&source=${encodeURIComponent(personBId)}`
+                              )}&source=${encodeURIComponent(
+                                personBId
+                              )}&returnTo=${encodeURIComponent('/quality?tab=duplicates')}`
                             )
                           }
                         >

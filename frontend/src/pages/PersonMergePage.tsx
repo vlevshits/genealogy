@@ -413,6 +413,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
     searchParams.get('source') ||
     searchParams.get('b') ||
     'node-dup-2';
+  const returnTo = searchParams.get('returnTo') || '/quality?tab=duplicates';
 
   const [preview, setPreview] = useState<PersonMergePreviewDto>(() =>
     initialPreview
@@ -567,7 +568,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         type: 'success',
         title: t('quality.duplicates.markedNotDuplicateToast'),
       });
-      navigateTo('/quality');
+      navigateTo(returnTo);
     } catch (err) {
       addToast({
         type: 'error',
@@ -600,11 +601,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         });
       }
       setConfirmOpen(false);
-      const survivingId =
-        res.surviving_person_id ||
-        res.surviving_person?.id ||
-        preview.target.id;
-      navigateTo(`/persons/${survivingId}`);
+      navigateTo(returnTo);
     } catch (err) {
       addToast({
         type: 'error',
@@ -944,7 +941,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() => navigateTo('/quality')}
+            onClick={() => navigateTo(returnTo)}
           >
             {t('common.cancel')}
           </Button>

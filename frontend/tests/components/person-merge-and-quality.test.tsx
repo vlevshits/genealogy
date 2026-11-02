@@ -253,5 +253,37 @@ describe('PersonMergePage & DataQualityPage Fixes', () => {
 
       expect(html).toContain('Duplicates (0)');
     });
+
+    it('passes returnTo=/quality?tab=duplicates in compare and merge button link', () => {
+      const sampleDuplicates = [
+        {
+          id: 'dup-pair-1',
+          person_a: {
+            id: 'p-1',
+            gid: 'I001',
+            full_name: 'Aleksandr Kalman',
+            primary_name: { given_name: 'Aleksandr', surname: 'Kalman' },
+          },
+          person_b: {
+            id: 'p-2',
+            gid: 'I002',
+            full_name: 'Aleksandr Kalman',
+            primary_name: { given_name: 'Aleksandr', surname: 'Kalman' },
+          },
+          score: 85,
+          confidence: 'high',
+          reasons: ['name_match'],
+        },
+      ];
+
+      const html = renderWithProviders(
+        <DataQualityPage initialDuplicates={sampleDuplicates as any} />,
+        'ru',
+        'admin'
+      );
+
+      // Verify returnTo parameter is included in the merge URL
+      expect(html).toContain('returnTo=%2Fquality%3Ftab%3Dduplicates');
+    });
   });
 });

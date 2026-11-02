@@ -113,3 +113,33 @@ export function getLocalizedErrorMessage(
 
   return t('common.errorLoading');
 }
+
+/**
+ * Localizes backend and parser warning strings for GEDCOM imports and analyses.
+ */
+export function formatGedcomWarning(rawWarning: string, t: TranslateFn): string {
+  if (!rawWarning || typeof rawWarning !== 'string') return '';
+  const trimmed = rawWarning.trim();
+
+  // 1. External media paths warning (e.g. "129 external media paths (/root/...) have no bundled binary...")
+  const mediaMissingMatch = trimmed.match(
+    /^(\d+)\s+external media paths(?:\s+\(([^)]+)\))?\s+have no bundled binary;\s+media asset stubs (?:will be|were) created for post-import reconciliation\.?$/i
+  );
+  if (mediaMissingMatch) {
+    const count = parseInt(mediaMissingMatch[1], 10);
+    const sample = mediaMissingMatch[2];
+    if (sample) {
+      return t('gedcom.warnings.missingMediaStubsWithSample', { count, sample });
+    }
+    return t('gedcom.warnings.missingMediaStubs', { count });
+  }
+
+  // 2. Unresolved ASSO target (e.g. "Unresolved ASSO target @I0012@")
+  const assoMatch = trimmed.match(/^Unresolved ASSO target @([^@]+)@\.?$/i);
+  if (assoMatch) {
+    return t('gedcom.warnings.unresolvedAsso', { xref: assoMatch[1] });
+  }
+
+  // 3. Fallback to raw warning string
+  return rawWarning;
+}

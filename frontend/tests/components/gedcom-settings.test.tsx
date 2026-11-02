@@ -20,6 +20,7 @@ import {
   isCleanSlateConfirmed,
 } from '../../src/components/settings';
 import { getGedcomExportUrl } from '../../src/api/client';
+import { formatGedcomWarning } from '../../src/lib/error-formatter';
 
 function renderWithProviders(
   node: React.ReactNode,
@@ -257,5 +258,85 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
         `Found raw HTML form/button element in ${path.basename(filePath)}`
       ).toBeNull();
     }
+  });
+
+  it('localizes GEDCOM parser warnings for missing media stubs and unresolved ASSO targets in EN and RU', () => {
+    const tEn = (key: string, params?: Record<string, string | number>) => {
+      const enJson = JSON.parse(
+        fs.readFileSync(path.resolve(__dirname, '../../src/i18n/en.json'), 'utf-8')
+      );
+      const keys = key.split('.');
+      let cur: any = enJson;
+      for (const k of keys) cur = cur?.[k];
+      let str = typeof cur === 'string' ? cur : key;
+      if (params) {
+        for (const [pk, pv] of Object.entries(params)) {
+          str = str.replace(new RegExp(`\\{${pk}\\}`, 'g'), String(pv));
+        }
+      }
+      return str;
+    };
+
+    const tRu = (key: string, params?: Record<string, string | number>) => {
+      const ruJson = JSON.parse(
+        fs.readFileSync(path.resolve(__dirname, '../../src/i18n/ru.json'), 'utf-8')
+      );
+      const keys = key.split('.');
+      let cur: any = ruJson;
+      for (const k of keys) cur = cur?.[k];
+      let str = typeof cur === 'string' ? cur : key;
+      if (params) {
+        for (const [pk, pv] of Object.entries(params)) {
+          str = str.replace(new RegExp(`\\{${pk}\\}`, 'g'), String(pv));
+        }
+      }
+      return str;
+    };
+
+    const warning1 =
+      '129 external media paths have no bundled binary; media asset stubs will be created for post-import reconciliation.';
+    const localizedEn1 = formatGedcomWarning(warning1, tEn);
+    const localizedRu1 = formatGedcomWarning(warning1, tRu);
+    expect(localizedEn1).toContain('129 external media paths have no bundled binary');
+    expect(localizedRu1).toContain('129 внешних путей к медиафайлам не содержат прикреплённых файлов');
+
+    const warningSample =
+      '129 external media paths (/root/gramps/...) have no bundled binary; media asset stubs will be created for post-import reconciliation.';
+    const localizedEnSample = formatGedcomWarning(warningSample, tEn);
+    const localizedRuSample = formatGedcomWarning(warningSample, tRu);
+    expect(localizedEnSample).toContain('/root/gramps/...');
+    expect(localizedRuSample).toContain('129 внешних путей к медиафайлам (/root/gramps/...)');
+
+    const warningAsso = 'Unresolved ASSO target @I0012@';
+    const localizedEnAsso = formatGedcomWarning(warningAsso, tEn);
+    const localizedRuAsso = formatGedcomWarning(warningAsso, tRu);
+    expect(localizedEnAsso).toBe('Unresolved ASSO association target @I0012@');
+    expect(localizedRuAsso).toBe('Не удалось разрешить связанную запись ASSO @I0012@');
+
+    // Test component rendering with localized warning in Russian
+    const reportWithWarning = {
+      ...DEFAULT_GEDCOM_ANALYSIS_REPORT,
+      warnings: [warning1],
+    };
+    const htmlModal = renderWithProviders(
+      <GedcomAnalysisModal
+        report={reportWithWarning}
+        open={true}
+        onProceed={() => {}}
+        onCancel={() => {}}
+      />,
+      'ru'
+    );
+    expect(htmlModal).toContain('129 внешних путей к медиафайлам не содержат прикреплённых файлов');
+
+    const resultWithWarning = {
+      ...DEFAULT_GEDCOM_IMPORT_RESULT,
+      warnings: [warning1],
+    };
+    const htmlReport = renderWithProviders(
+      <GedcomPostImportReport result={resultWithWarning} />,
+      'ru'
+    );
+    expect(htmlReport).toContain('129 внешних путей к медиафайлам не содержат прикреплённых файлов');
   });
 });

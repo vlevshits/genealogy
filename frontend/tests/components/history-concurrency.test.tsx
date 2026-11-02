@@ -12,6 +12,7 @@ import {
   RecordHistoryDrawer,
   computeConflictFields,
   extractEntryDiffs,
+  formatDiffValue,
 } from '../../src/components/history';
 import { TreeSnapshotsCard } from '../../src/components/settings';
 import {
@@ -344,5 +345,79 @@ describe('Phase 1.11 — Change History, Undo Toast, Restore Deleted, Optimistic
       'en'
     );
     expect(htmlLiveGroup).toContain('Maria Petrova');
+  });
+
+  it('correctly handles person_merge_bundle in extractEntryDiffs and formatDiffValue without [object Object]', () => {
+    const mergeEntry = {
+      id: 'chg-merge-1',
+      tx_id: 'tx-merge-101',
+      op: 'merge',
+      action: 'merge',
+      entity_type: 'individual',
+      entity_id: 'keep-1',
+      entity_label: 'Moisei Kalman',
+      summary: 'Merged Moisei Kalman (I500057) into Moisei Kalman (I500100)',
+      before_json: {
+        kind: 'person_merge_bundle',
+        keep_before: {
+          id: 'keep-1',
+          gid: 'I500100',
+          primary_name: { given_name: 'Moisei', surname: 'Kalman' },
+          birth: { date: '1900', place: 'Tver' },
+        },
+        merge_person: {
+          id: 'merge-2',
+          gid: 'I500057',
+          primary_name: { given_name: 'Moisei', surname: 'Kalman' },
+          birth: { date: '1900-03-15', place: 'Tver, Russia' },
+        },
+        families_before: [{ id: 'fam-1' }, { id: 'fam-2' }],
+        events_before: [{ id: 'ev-1' }, { id: 'ev-2' }, { id: 'ev-3' }],
+        notes_before: [],
+        media_before: [{ id: 'med-1' }],
+        gid_aliases_before: { I500057: 'keep-1' },
+      },
+      after_json: {
+        id: 'keep-1',
+        gid: 'I500100',
+        primary_name: { given_name: 'Moisei', surname: 'Kalman' },
+        birth: { date: '1900-03-15', place: 'Tver, Russia' },
+      },
+      created_at: '2026-10-30T14:35:00Z',
+    };
+
+    const diffs = extractEntryDiffs(mergeEntry as any);
+    // Should extract synthetic merged_profile and changed birth field
+    expect(diffs.some((d) => d.field === 'merged_profile')).toBe(true);
+    expect(diffs.some((d) => d.field === 'birth')).toBe(true);
+
+    // None of the internal backup bundle arrays should appear as raw fields
+    expect(diffs.some((d) => d.field === 'events_before')).toBe(false);
+    expect(diffs.some((d) => d.field === 'families_before')).toBe(false);
+    expect(diffs.some((d) => d.field === 'media_before')).toBe(false);
+    expect(diffs.some((d) => d.field === 'notes_before')).toBe(false);
+    expect(diffs.some((d) => d.field === 'keep_before')).toBe(false);
+    expect(diffs.some((d) => d.field === 'merge_person')).toBe(false);
+
+    // formatDiffValue verification
+    expect(formatDiffValue(null)).toBe('—');
+    expect(formatDiffValue({ given_name: 'Moisei', surname: 'Kalman' })).toBe('Moisei Kalman');
+    expect(formatDiffValue({ date: '1900-03-15', place: 'Tver' })).toBe('1900-03-15, Tver');
+
+    // Render in HistoryPage with expanded tx to ensure zero [object Object]
+    const group = {
+      tx_id: 'tx-merge-101',
+      tx_label: 'Merged Moisei Kalman (I500057) into Moisei Kalman (I500100)',
+      actor_name: 'Valentin Levshits',
+      created_at: '2026-10-30T14:35:00Z',
+      can_undo: true,
+      changes: [mergeEntry as any],
+    };
+
+    const html = renderWithProviders(
+      <HistoryPage userRole="admin" initialGroups={[group]} />,
+      'ru'
+    );
+    expect(html).not.toContain('[object Object]');
   });
 });
