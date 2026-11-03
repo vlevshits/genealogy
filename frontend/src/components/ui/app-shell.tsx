@@ -73,10 +73,10 @@ export const AppShell: React.FC<AppShellProps> = ({
       {/* Persistent Top Header */}
       <PwaOfflineBanner />
       <header className="sticky top-0 z-30 w-full border-b border-border bg-surface/90 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8">
           {/* Left: Mobile Hamburger + Brand + Primary Links */}
-          <div className="flex items-center gap-3">
-            <div className="md:hidden">
+          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+            <div className="md:hidden shrink-0">
               <IconButton
                 label={t('nav.openMenu')}
                 onClick={() => setMobileMenuOpen(true)}
@@ -87,26 +87,28 @@ export const AppShell: React.FC<AppShellProps> = ({
 
             <a
               href="/"
+              title={resolvedTitle}
               onClick={(e) => {
                 e.preventDefault();
                 navigate('/');
               }}
-              className="flex items-center gap-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="flex items-center gap-2 sm:gap-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus shrink-0"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-surface shadow-xs">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-surface shadow-xs">
                 <BrandLogoIcon className="h-5 w-5" />
               </div>
-              <span className="font-sans text-base sm:text-lg font-semibold tracking-tight text-primary">
+              <span className="font-sans text-base sm:text-lg font-semibold tracking-tight text-primary whitespace-nowrap truncate max-w-[150px] sm:max-w-[180px] md:max-w-[200px] lg:max-w-[250px] xl:max-w-none">
                 {resolvedTitle}
               </span>
             </a>
 
             {/* Primary Nav Links */}
-            <nav aria-label={t('nav.mainNav')} className="hidden md:flex items-center gap-1 ml-3">
+            <nav aria-label={t('nav.mainNav')} className="hidden md:flex items-center gap-0.5 lg:gap-1 ml-1 lg:ml-3 shrink-0">
               <NavLink
                 href="/"
                 active={currentPath === '/'}
                 onNavigate={navigate}
+                className="px-2 lg:px-3 text-xs lg:text-sm"
               >
                 {t('nav.home')}
               </NavLink>
@@ -114,6 +116,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 href="/tree"
                 active={currentPath.startsWith('/tree')}
                 onNavigate={navigate}
+                className="px-2 lg:px-3 text-xs lg:text-sm"
               >
                 {t('nav.tree')}
               </NavLink>
@@ -123,6 +126,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     href="/people"
                     active={currentPath.startsWith('/people')}
                     onNavigate={navigate}
+                    className="px-2 lg:px-3 text-xs lg:text-sm"
                   >
                     {t('nav.people')}
                   </NavLink>
@@ -130,6 +134,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     href="/media"
                     active={currentPath.startsWith('/media')}
                     onNavigate={navigate}
+                    className="px-2 lg:px-3 text-xs lg:text-sm"
                   >
                     {t('nav.media')}
                   </NavLink>
@@ -138,7 +143,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                     align="start"
                     ariaLabel={t('nav.more')}
                     trigger={
-                      <span className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-secondary hover:bg-surface-muted hover:text-primary">
+                      <span className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 lg:px-3 py-1.5 text-xs lg:text-sm font-medium text-secondary hover:bg-surface-muted hover:text-primary">
                         <span>{t('nav.more')}</span>
                         <ChevronDown className="h-3.5 w-3.5" />
                       </span>
@@ -166,7 +171,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </div>
 
           {/* Right: Omnibox Trigger, +Add, Locale, Theme, User Menu */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isAuthenticated && (
               <Button
                 variant="secondary"
@@ -175,9 +180,9 @@ export const AppShell: React.FC<AppShellProps> = ({
                 onClick={() => setOmniboxOpen(true)}
                 leftIcon={<Search className="h-3.5 w-3.5" />}
                 rightIcon={<Kbd className="hidden sm:inline-flex">⌘K</Kbd>}
-                className="rounded-xl bg-surface-muted/70 px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary"
+                className="rounded-xl bg-surface-muted/70 px-2.5 sm:px-3 py-1.5 text-xs text-secondary hover:bg-surface-muted hover:text-primary"
               >
-                <span className="hidden lg:inline">{t('nav.searchTrigger')}</span>
+                <span className="hidden xl:inline">{t('nav.searchTrigger')}</span>
               </Button>
             )}
 
@@ -187,9 +192,9 @@ export const AppShell: React.FC<AppShellProps> = ({
                 <DropdownMenu
                   ariaLabel={t('nav.add')}
                   trigger={
-                    <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
-                      <Plus className="h-4 w-4" />
-                      <span className="hidden sm:inline">{t('nav.add')}</span>
+                    <span className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-brand px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-surface hover:opacity-95 shadow-xs">
+                      <Plus className="h-4 w-4 shrink-0" />
+                      <span className="hidden lg:inline">{t('nav.add')}</span>
                     </span>
                   }
                   items={[
@@ -335,8 +340,8 @@ export const AppShell: React.FC<AppShellProps> = ({
       <PwaInstallPrompt instanceTitle={resolvedTitle} />
       <main className="flex-1 w-full">{children}</main>
 
-      {/* Footer (hidden on full-bleed /tree canvas) */}
-      {!currentPath.startsWith('/tree') && (
+      {/* Footer (hidden on full-bleed /tree canvas and /export/print studio) */}
+      {!currentPath.startsWith('/tree') && !currentPath.startsWith('/export/print') && (
         <footer className="mt-auto border-t border-border bg-surface py-5 text-xs text-secondary">
           <div className="mx-auto flex max-w-7xl flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
             <span>{t('app.footerCopyright')}</span>

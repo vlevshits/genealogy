@@ -8,6 +8,7 @@ import {
 } from '../components/auth';
 import { useAuth } from '../lib/auth-context';
 import { sanitizeReturnUrl } from '../lib/navigation-utils';
+import { UserDto } from '../api/client';
 import { useI18n } from '../i18n';
 
 export interface AuthPagesProps {
@@ -32,6 +33,16 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
   const rawReturnUrl = params.get('returnUrl');
   const targetUrl = sanitizeReturnUrl(rawReturnUrl, '/');
 
+  const resolvePostAuthTarget = (loggedInUser?: UserDto | null): string => {
+    if (!rawReturnUrl || rawReturnUrl === '/' || targetUrl === '/') {
+      if (loggedInUser?.start_page === 'tree') {
+        return '/tree';
+      }
+      return '/';
+    }
+    return targetUrl;
+  };
+
   if (currentPath.startsWith('/setup')) {
     return (
       <AuthLayout
@@ -44,7 +55,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
           defaultTreeTitle={instanceTitle || setupStatus?.tree_title}
           onComplete={(nextTitle) => {
             if (nextTitle) onInstanceTitleChange?.(nextTitle);
-            onNavigate(targetUrl);
+            onNavigate(resolvePostAuthTarget());
           }}
         />
       </AuthLayout>
@@ -62,7 +73,9 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       >
         <RegisterInviteCard
           inviteToken={inviteToken}
-          onComplete={() => onNavigate(targetUrl)}
+          onComplete={(registeredUser) =>
+            onNavigate(resolvePostAuthTarget(registeredUser))
+          }
         />
       </AuthLayout>
     );
@@ -78,7 +91,9 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       >
         <MagicLinkVerifyCard
           token={token}
-          onComplete={() => onNavigate(targetUrl)}
+          onComplete={(verifiedUser) =>
+            onNavigate(resolvePostAuthTarget(verifiedUser))
+          }
         />
       </AuthLayout>
     );
@@ -97,7 +112,9 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
         enablePublicAccess={setupStatus?.enable_public_access ?? false}
         returnUrl={rawReturnUrl ?? undefined}
         onNavigate={onNavigate}
-        onSuccess={() => onNavigate(targetUrl)}
+        onSuccess={(_promptPasskey, loggedInUser) =>
+          onNavigate(resolvePostAuthTarget(loggedInUser))
+        }
       />
     </AuthLayout>
   );

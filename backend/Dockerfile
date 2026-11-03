@@ -24,8 +24,9 @@ RUN mkdir -p src/bin tests && \
     cargo build --release --bins && \
     rm -rf src tests
 
-# Copy real sources and migrations
+# Copy real sources, assets and migrations
 COPY src ./src
+COPY assets ./assets
 COPY migrations ./migrations
 COPY tests ./tests
 

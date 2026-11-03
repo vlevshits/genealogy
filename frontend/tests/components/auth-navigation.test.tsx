@@ -5,6 +5,18 @@ import { I18nProvider } from '../../src/i18n';
 import { ThemeProvider } from '../../src/lib/theme';
 import { AuthProvider } from '../../src/lib/auth-context';
 import { ToastProvider, ConfirmProvider, AuthLayout } from '../../src/components/ui';
+import { AppShell } from '../../src/components/ui/app-shell';
+import { UserDto } from '../../src/api/client';
+
+const mockAdminUser: UserDto = {
+  id: 'u-admin-1',
+  email: 'admin@levshits.family',
+  display_name: 'Vladimir Levshits',
+  role: 'admin',
+  is_active: true,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
 import { LoginCard } from '../../src/components/auth';
 import { AuthPages } from '../../src/pages/AuthPages';
 import {
@@ -16,14 +28,15 @@ import {
 
 function renderWithProviders(
   node: React.ReactNode,
-  locale: 'en' | 'ru' = 'en'
+  locale: 'en' | 'ru' = 'en',
+  user: UserDto | null = null
 ): string {
   return renderToStaticMarkup(
     <ThemeProvider>
       <I18nProvider initialLocale={locale}>
         <ToastProvider>
           <ConfirmProvider>
-            <AuthProvider>{node}</AuthProvider>
+            <AuthProvider initialUser={user}>{node}</AuthProvider>
           </ConfirmProvider>
         </ToastProvider>
       </I18nProvider>
@@ -64,6 +77,22 @@ describe('Milestone 2.4 — TASK-AUTH-PUBLIC-NAVIGATION Test Suite', () => {
         'ru'
       );
       expect(htmlRu).toContain('Семейный архив');
+    });
+
+    it('renders AppShell brand anchor and title with whitespace-nowrap and shrink-0 to prevent vertical wrapping', () => {
+      const html = renderWithProviders(
+        <AppShell instanceTitle="Family Tree Archive">
+          <div>Page Content</div>
+        </AppShell>,
+        'en',
+        mockAdminUser
+      );
+
+      expect(html).toContain('whitespace-nowrap');
+      expect(html).toContain('truncate');
+      expect(html).toContain('Family Tree Archive');
+      expect(html).toContain('hidden xl:inline');
+      expect(html).toContain('hidden lg:inline');
     });
   });
 

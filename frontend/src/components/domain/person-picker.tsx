@@ -15,6 +15,7 @@ export interface PersonPickerProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  ariaLabel?: string;
 }
 
 export const PersonPicker: React.FC<PersonPickerProps> = ({
@@ -27,6 +28,7 @@ export const PersonPicker: React.FC<PersonPickerProps> = ({
   placeholder,
   disabled = false,
   className,
+  ariaLabel,
 }) => {
   const { t } = useI18n();
 
@@ -63,6 +65,7 @@ export const PersonPicker: React.FC<PersonPickerProps> = ({
       placeholder={placeholder || t('nav.searchTrigger')}
       disabled={disabled}
       className={className}
+      ariaLabel={ariaLabel}
       renderOption={(opt, isSelected) =>
         opt.data ? <PersonListItem person={opt.data} selected={isSelected} /> : opt.label
       }

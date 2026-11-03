@@ -48,7 +48,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-surface shadow-xs">
             <BrandLogoIcon className="h-4.5 w-4.5" />
           </div>
-          <span className="font-sans font-semibold tracking-tight text-sm text-primary">
+          <span className="font-sans font-semibold tracking-tight text-sm text-primary whitespace-nowrap truncate max-w-[200px] sm:max-w-none">
             {resolvedTitle}
           </span>
         </a>

@@ -42,10 +42,10 @@ use crate::{
             dismiss_quality_warning_by_id, export_gedcom, export_gedcom_post, export_printable_pdf,
             get_anniversaries, get_audit_history, get_dashboard, get_data_quality_warnings,
             get_family, get_fan_chart, get_kinship, get_media_crop, get_media_detail,
-            get_media_file, get_onboarding_status, get_patronymic_suggestion, get_person,
-            get_person_delete_impact, get_person_profile, get_place_detail, get_places_map,
-            get_quality_summary, get_record_history, get_record_version, get_stats, get_tree,
-            get_tree_view, global_search, import_gedcom, list_duplicate_candidates,
+            get_media_file, get_onboarding_status, get_patronymic_suggestion, get_pdf_preview_info,
+            get_person, get_person_delete_impact, get_person_profile, get_place_detail,
+            get_places_map, get_quality_summary, get_record_history, get_record_version, get_stats,
+            get_tree, get_tree_view, global_search, import_gedcom, list_duplicate_candidates,
             list_event_sources, list_events, list_families, list_media_archive, list_notes,
             list_people_directory, list_people_surnames, list_places_directory,
             list_quality_warnings, list_snapshots, mark_pair_not_duplicate,
@@ -116,6 +116,10 @@ use crate::{
             SnapshotListResponse, UndoTransactionResponse,
         },
         media_bundle::{MediaBundleQuery, MediaBundleReconciliationReport},
+        pdf::{
+            PdfExportPreviewInfo, PdfExportRequest, PdfPosterLayoutDto, PdfPreviewCardDto,
+            PdfPreviewConnectorDto, PdfTileSheetDto,
+        },
         privacy::{
             AvatarCropDto, ChangeLogEntryDto, DismissedWarningDto, FaceTagDto, FamilyChildDto,
             FamilyDto, IndividualAltNameDto, LifeEventDto, MediaAssetSummaryDto, MediaLinkDto,
@@ -239,6 +243,7 @@ use crate::{
         rbac::import_gedcom,
         rbac::reconcile_gedcom_media_bundle,
         rbac::export_printable_pdf,
+        rbac::get_pdf_preview_info,
         rbac::get_audit_history,
         rbac::get_record_history,
         rbac::undo_history_transaction,
@@ -436,6 +441,12 @@ use crate::{
             GedcomImportResult,
             GedcomExportRequest,
             AdminToolOperationResponse,
+            PdfExportRequest,
+            PdfExportPreviewInfo,
+            PdfPreviewCardDto,
+            PdfPreviewConnectorDto,
+            PdfPosterLayoutDto,
+            PdfTileSheetDto,
             QualityWarningPersonRefDto,
             QualityWarningDto,
             QualityCategoryCountsDto,
@@ -636,6 +647,7 @@ pub fn create_router(state: AppState) -> Router {
             post(reconcile_gedcom_media_bundle).layer(DefaultBodyLimit::max(500 * 1024 * 1024)),
         )
         .route("/export/pdf", post(export_printable_pdf))
+        .route("/export/pdf/preview-info", post(get_pdf_preview_info))
         .route("/history", get(get_audit_history))
         .route(
             "/history/{entity_type}/{entity_id}",

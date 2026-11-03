@@ -110,7 +110,7 @@ export function SegmentedControl<T extends string = string>({
             onClick={() => selectValue(opt.value)}
             onKeyDown={(e) => handleKeyDown(e, idx)}
             className={cn(
-              'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer',
+              'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer text-center leading-tight h-full [&>svg]:shrink-0',
               sizeClasses[size],
               isSelected
                 ? cn('bg-surface text-primary shadow-xs', opt.accentClassName)

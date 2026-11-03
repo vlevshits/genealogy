@@ -332,10 +332,52 @@
     - Verify living person privacy masking in public guest mode.
 
 ### Phase 3 — "Power tools"
-- Printable PDF posters / tiles ([05](features/05-printable-tree-pdf.md)).
+- Printable PDF posters / tiles ([05](features/05-printable-tree-pdf.md), [implementation](implementation/05-printable-tree-pdf.md)) — **Complete**.
 - Append & merge import with reconciliation ([09](features/09-tree-import-merge-reconciliation.md)).
 - Automatic Face Recognition & Identity Clustering: facial feature embedding extraction (128-d/512-d vectors) from confirmed face tags, cosine similarity clustering, and automated person identity suggestion on new photo uploads ([06 §3.5](features/06-media-face-tagging.md#35-future-vision-facial-embedding-extraction--identity-clustering-phase-3), `TD-MEDIA-01`).
 - Monthly digest email, GEDZIP in nightly backups.
+
+#### Milestone 3.1 — Printable Tree Export Studio: Tree View Parity & Banner Customization
+- **`TASK-PDF-STUDIO-EXPANSION`**: Printable Tree Export Studio — Tree View Parity (All Nodes, Collateral Density, Partners, Siblings, Photos) & Custom Banner
+  - **User Story & Trigger:** "I want feature parity with interactive tree mode in the printable PDF studio: All Nodes full graph view, Wide vs Compact density for collateral branches, explicit toggles for spouse and siblings, portrait photos on cards, and full customization of both the main Title and Description/Subtitle banner." ([05 §1–3](features/05-printable-tree-pdf.md), [05 page §1–3](pages/05-printable-pdf-page.md)).
+  - **Backend Acceptance Criteria:**
+    - Extend `PdfExportRequest` schema:
+      - `view_mode`: Support `"all_nodes"` (and `"all"`) in addition to `"pedigree"`, `"hourglass"`, `"descendants"`, and `"fan"`.
+      - `collateral: Option<bool>`: Defaults to `true` for hourglass. When `true` (Wide), expands ancestral branches downward to encompass collateral aunts/uncles, first cousins, nieces/nephews; when `false` (Compact), confines tree strictly to direct lineal ascendants and descendants.
+      - `include_partner: Option<bool>`: Defaults to `true`.
+      - `include_siblings: Option<bool>`: Defaults to `false`.
+      - `show_photos: Option<bool>`: Defaults to `true`. Embeds 300 DPI circular cropped profile portraits on cards from local media storage or base64 avatar strings.
+      - `title: Option<String>`: Custom headline text override; falls back to `"{tree_title}: {focal_name}"` or `"Family Tree of {focal_name}"` when omitted.
+      - `subtitle: Option<String>`: Custom description text override; falls back to localized metadata banner (`"Layout: {mode} • Generations: {gens} • Persons: {count} • {date}"`) when omitted.
+    - Update `compute_tree_layout` in `backend/src/services/pdf/layout.rs`:
+      - **All Nodes Layout:** Implement complete forest traversal using Disjoint Set Union (DSU) to partition the tree into connected components and an isolated singletons shelf grid, arranging components with $\ge 30\text{ mm}$ spacing and computing multi-sheet tiled bounding matrices.
+      - **Hourglass Collateral Expansion:** Implement bottom-up width allocation with horizontal generational tiers ($Y = \text{tier} \times \text{ROW\_STEP}$) for collateral relatives when `collateral = true`.
+      - **Partner & Sibling Placement:** Pair partners on generational baseline with warm ochre marital connector (`#d97706`); align siblings on Gen 0 branching from the parental distribution bus runner; support symmetrical multi-spouse placement (`[Spouse 1] === [Person] === [Spouse 2]`).
+      - **Banner Generation:** Format decorative header with custom or fallback title and subtitle.
+    - Update `POST /api/v1/export/pdf/preview-info` to return updated preview cards, connectors, resolved `title`, `subtitle`, and `total_persons`.
+  - **Frontend Acceptance Criteria:**
+    - Update `PrintConfigSidebar.tsx`:
+      - Add `All Nodes` to Layout SegmentedControl; hide generation depth when All Nodes is active.
+      - Add Tree Density SegmentedControl (`Wide (Collateral)` vs `Compact`) when Hourglass is selected.
+      - Add "Include spouse / partner" (default checked) and "Include siblings" (default unchecked) checkboxes under "Relatives & Content Density".
+      - Add "Show portrait photos" (default checked) checkbox.
+      - Add text inputs for "Chart Title" and "Description / Subtitle" with smart placeholder and helper hint.
+      - Disable partner, sibling, and collateral controls when Fan Chart is selected with an explanatory tooltip.
+    - Update `PrintPreviewCanvas.tsx` and `PrintSummaryBar.tsx`:
+      - Render custom headline and description in the canvas header banner with live updates as the user types.
+      - Render 300 DPI circular profile portraits on cards when `show_photos = true`.
+      - Render partner cards with ochre connector bars and siblings on parental bus runners.
+      - Render multi-component forest layout in All Nodes mode.
+      - Update Summary Bar badges: reflect accurate `total_persons` count, canvas dimensions ($W \times H\text{ mm}$), and sheet grid counts ($N \times M$).
+    - UI & i18n Quality: Full EN/RU localization parity; zero emojis or icon glyphs in translation JSON strings.
+  - **QA & Verification Criteria:**
+    - Verify All Nodes mode generates valid multi-component poster and tiled grids.
+    - Verify Hourglass Wide vs Compact toggles collateral branches correctly.
+    - Verify toggling "Include spouse / partner" and "Include siblings" adds/removes cards and adjusts sheet counts.
+    - Verify portrait photos appear on person cards in preview and exported vector PDF.
+    - Verify custom title and subtitle text appear in PDF header banner; verify localized fallback when blank.
+    - Verify Fan Chart layout disables incompatible collateral, partner, and sibling controls.
+    - Verify living person privacy masking redacts birth dates and photos of living individuals.
 
 ---
 

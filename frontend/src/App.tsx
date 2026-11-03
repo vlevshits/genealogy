@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import {
   AccessDeniedCard,
   AppShell,
@@ -16,6 +16,7 @@ import { MediaPage } from './pages/MediaPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { DataQualityPage } from './pages/DataQualityPage';
 import { PersonMergePage } from './pages/PersonMergePage';
+import { PrintExportPage } from './pages/PrintExportPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuthPages } from './pages/AuthPages';
 import {
@@ -49,6 +50,9 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   const [activePersonName, setActivePersonName] = useState<string>('');
   const [onboardingStatus, setOnboardingStatus] =
     useState<OnboardingStatusResponse | null>(initialOnboardingStatus);
+  const isTreeEmpty = Boolean(onboardingStatus?.is_empty);
+
+  const initialRedirectAttemptedRef = useRef(false);
 
   useEffect(() => {
     const onPopState = () => {
@@ -85,7 +89,18 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
       .then((status) => {
         setOnboardingStatus(status);
       })
-      .catch(() => {});
+      .catch(() => {
+        setOnboardingStatus({
+          is_empty: false,
+          total_individuals: 1,
+          can_onboard: false,
+          resolved_home_person_id: null,
+          default_home_person_id: null,
+          user_home_person_id: null,
+          user_person_id: null,
+          start_page: 'dashboard',
+        });
+      });
   }, [initialOnboardingStatus, isAuthenticated]);
 
   useEffect(() => {
@@ -97,6 +112,14 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
   }, [initialOnboardingStatus, loadOnboardingStatus, isAuthenticated]);
 
   const navigate = useCallback((nextPath: string) => {
+    initialRedirectAttemptedRef.current = true;
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('genealogy_start_page_redirected', 'true');
+      } catch {
+        // Ignore storage access error
+      }
+    }
     const baseOrigin =
       typeof window !== 'undefined'
         ? window.location.origin
@@ -108,6 +131,65 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     setPath(parsed.pathname);
     setSearch(parsed.search);
   }, []);
+
+  // Default Start Page redirect on cold start / initial application load (16-dashboard-home.md)
+  useEffect(() => {
+    if (isLoading) return;
+
+    let alreadyRedirected = false;
+    if (typeof window !== 'undefined') {
+      try {
+        alreadyRedirected =
+          sessionStorage.getItem('genealogy_start_page_redirected') === 'true';
+      } catch {
+        // Ignore storage access error
+      }
+    }
+
+    if (initialRedirectAttemptedRef.current || alreadyRedirected) {
+      return;
+    }
+
+    // Wait until onboardingStatus has loaded if authenticated and not yet provided
+    if (isAuthenticated && !initialOnboardingStatus && onboardingStatus === null) {
+      return;
+    }
+
+    // Only apply start_page redirect if the user landed on '/'
+    if (path === '/') {
+      if (isAuthenticated && !isTreeEmpty && user?.start_page === 'tree') {
+        initialRedirectAttemptedRef.current = true;
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem('genealogy_start_page_redirected', 'true');
+          } catch {
+            // Ignore storage access error
+          }
+        }
+        navigate('/tree');
+        return;
+      }
+    }
+
+    // Mark attempted so subsequent in-app navigations to '/' stay on '/'
+    initialRedirectAttemptedRef.current = true;
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('genealogy_start_page_redirected', 'true');
+      } catch {
+        // Ignore storage access error
+      }
+    }
+  }, [
+    isLoading,
+    isAuthenticated,
+    initialOnboardingStatus,
+    onboardingStatus,
+    isTreeEmpty,
+    user?.start_page,
+    path,
+    navigate,
+  ]);
 
   // Determine whether this route is restricted for unauthenticated visitors in public mode (02 §3.2)
   const isRestrictedUnauthenticatedRoute =
@@ -395,6 +477,19 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     );
   }
 
+  // 4g. Printable PDF Studio route (/export/print) — Admin-only (05-printable-pdf-page.md)
+  if (path.startsWith('/export/print')) {
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+      >
+        <PrintExportPage onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
     const focusParam = new URLSearchParams(search).get('focus');
@@ -542,19 +637,12 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     );
   }
 
-  // 7. Home route (/) — Empty-tree onboarding or start_page preference (16-dashboard-home.md §2, §3, §4)
-  const isTreeEmpty = Boolean(onboardingStatus?.is_empty);
-  const effectiveStartPage =
-    user?.start_page ?? onboardingStatus?.start_page ?? 'dashboard';
+  // 7. Home route (/) — Empty-tree onboarding or Dashboard (16-dashboard-home.md §2, §3, §4)
   const resolvedHomePersonId =
     onboardingStatus?.resolved_home_person_id ??
     user?.home_person_id ??
     user?.person_id ??
     null;
-
-  // Navigating to / displays DashboardPage in public guest mode; only authenticated users who chose 'tree' open TreeCanvas directly
-  const openTreeDirectly =
-    !isTreeEmpty && isAuthenticated && effectiveStartPage === 'tree';
 
   return (
     <AppShell
@@ -572,11 +660,6 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
               navigate('/tree');
             }}
             onImportGedcom={() => navigate('/settings/gedcom')}
-          />
-        ) : openTreeDirectly ? (
-          <TreeCanvas
-            onSignIn={() => navigate(buildLoginUrl(path, search))}
-            onNavigate={navigate}
           />
         ) : (
           <DashboardPage

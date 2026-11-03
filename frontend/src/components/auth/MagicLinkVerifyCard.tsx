@@ -24,7 +24,7 @@ export function clearMagicLinkVerificationCache(): void {
 export interface MagicLinkVerifyCardProps {
   token: string;
   initialVerifiedUser?: UserDto | null;
-  onComplete?: () => void;
+  onComplete?: (verifiedUser?: UserDto) => void;
 }
 
 export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
@@ -92,7 +92,7 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
         verifiedUser.display_name
       );
       await verifyAddPasskey(cred);
-      onComplete?.();
+      onComplete?.(verifiedUser ?? undefined);
     } catch (err) {
       setEnrollError(getLocalizedErrorMessage(err, t));
     } finally {
@@ -139,7 +139,11 @@ export const MagicLinkVerifyCard: React.FC<MagicLinkVerifyCardProps> = ({
         {t('auth.magicVerify.enrollNowBtn')}
       </Button>
 
-      <Button variant="secondary" fullWidth onClick={() => onComplete?.()}>
+      <Button
+        variant="secondary"
+        fullWidth
+        onClick={() => onComplete?.(verifiedUser ?? undefined)}
+      >
         {t('auth.magicVerify.skipBtn')}
       </Button>
     </div>

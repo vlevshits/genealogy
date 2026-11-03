@@ -21,6 +21,7 @@ import {
   loginWithRecoveryCode,
   requestLoginChallenge,
   requestMagicLink,
+  UserDto,
   verifyPasskeyLogin,
 } from '../../api/client';
 import {
@@ -40,7 +41,7 @@ export interface LoginCardProps {
   enablePublicAccess?: boolean;
   returnUrl?: string;
   initialMode?: LoginViewMode;
-  onSuccess?: (promptPasskeyEnrollment?: boolean) => void;
+  onSuccess?: (promptPasskeyEnrollment?: boolean, loggedInUser?: UserDto) => void;
   onNavigate?: (path: string) => void;
 }
 
@@ -111,7 +112,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
       const assertion = await getPasskeyAssertion(challenge);
       const res = await verifyPasskeyLogin(assertion);
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
-      onSuccess?.(res.prompt_passkey_enrollment);
+      onSuccess?.(res.prompt_passkey_enrollment, res.user);
     } catch (err) {
       setError(getLocalizedErrorMessage(err, t));
     } finally {
@@ -130,7 +131,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
         password,
       });
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
-      onSuccess?.(res.prompt_passkey_enrollment);
+      onSuccess?.(res.prompt_passkey_enrollment, res.user);
     } catch (err) {
       setError(getLocalizedErrorMessage(err, t));
     } finally {
@@ -163,7 +164,7 @@ export const LoginCard: React.FC<LoginCardProps> = ({
         code: recoveryCode.trim(),
       });
       establishSession(res.user, res.session_token, res.prompt_passkey_enrollment);
-      onSuccess?.(true);
+      onSuccess?.(true, res.user);
     } catch (err) {
       setError(getLocalizedErrorMessage(err, t));
     } finally {

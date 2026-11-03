@@ -144,6 +144,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     setAuthToken(null);
     setUser(null);
     setPromptPasskeyEnrollment(false);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('genealogy_start_page_redirected');
+      } catch {
+        // Ignore storage access error in restricted environments
+      }
+    }
   }, []);
 
   return (

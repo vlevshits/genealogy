@@ -8,6 +8,7 @@ pub mod gedcom;
 pub mod genealogy;
 pub mod history;
 pub mod media_bundle;
+pub mod pdf;
 pub mod privacy;
 pub mod quality;
 pub mod rbac;

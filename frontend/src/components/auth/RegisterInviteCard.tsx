@@ -14,6 +14,7 @@ import {
   InvitePreviewResponse,
   registerWithInvite,
   requestRegisterChallenge,
+  UserDto,
 } from '../../api/client';
 import {
   createPasskeyCredential,
@@ -27,7 +28,7 @@ import { RecoveryCodesCard } from './RecoveryCodesCard';
 export interface RegisterInviteCardProps {
   inviteToken: string;
   initialInvite?: InvitePreviewResponse | null;
-  onComplete?: () => void;
+  onComplete?: (registeredUser?: UserDto) => void;
 }
 
 export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
@@ -56,6 +57,7 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [registeredUser, setRegisteredUser] = useState<UserDto | null>(null);
 
   const errorRef = useRef<HTMLDivElement | null>(null);
 
@@ -124,7 +126,7 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
       <RecoveryCodesCard
         codes={recoveryCodes}
         requireConfirmation
-        onContinue={() => onComplete?.()}
+        onContinue={() => onComplete?.(registeredUser ?? undefined)}
       />
     );
   }
@@ -156,6 +158,7 @@ export const RegisterInviteCard: React.FC<RegisterInviteCardProps> = ({
       });
 
       establishSession(res.user, res.session_token, false);
+      setRegisteredUser(res.user);
       setRecoveryCodes(res.recovery_codes);
     } catch (err) {
       setSubmitError(getLocalizedErrorMessage(err, t));

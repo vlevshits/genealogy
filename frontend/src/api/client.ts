@@ -1625,6 +1625,148 @@ export async function exportGedcom(
 }
 
 // =============================================================================
+// Feature 05 — Printable PDF Tree Export (Single & Multi-Page Tiled)
+// =============================================================================
+
+export interface PdfExportRequest {
+  focal_person_id?: string;
+  view_mode?: string;
+  generations?: number;
+  theme?: string;
+  format?: string;
+  target_sheet_size?: string;
+  overlap_mm?: number;
+  show_crop_marks?: boolean;
+  show_photos?: boolean;
+  redact_living?: boolean;
+  title?: string;
+  subtitle?: string;
+  include_partner?: boolean;
+  include_siblings?: boolean;
+  collateral?: boolean;
+  include_assembly_guide?: boolean;
+}
+
+export interface PdfPreviewCardDto {
+  id: string;
+  gid: string;
+  full_name: string;
+  lifespan: string;
+  is_living: boolean;
+  is_focal: boolean;
+  sex: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  generation: number;
+  has_avatar: boolean;
+}
+
+export interface PdfPreviewConnectorDto {
+  points: [number, number][];
+  is_dashed: boolean;
+  color?: string;
+}
+
+export interface PdfPosterLayoutDto {
+  sheet_width_mm: number;
+  sheet_height_mm: number;
+  scale: number;
+  offset_x: number;
+  offset_y: number;
+  frame_margin: number;
+}
+
+export interface PdfTileSheetDto {
+  sheet_index: number;
+  row: number;
+  col: number;
+  canvas_window_x: number;
+  canvas_window_y: number;
+  window_width: number;
+  window_height: number;
+  has_cut_right: boolean;
+  has_cut_bottom: boolean;
+  label: string;
+}
+
+export interface PdfExportPreviewInfo {
+  total_sheets: number;
+  grid_rows: number;
+  grid_cols: number;
+  canvas_width_mm: number;
+  canvas_height_mm: number;
+  sheet_width_mm: number;
+  sheet_height_mm: number;
+  overlap_mm: number;
+  format: string;
+  target_sheet_size: string;
+  total_persons: number;
+  summary_text: string;
+  title?: string;
+  subtitle?: string;
+  cards?: PdfPreviewCardDto[];
+  connectors?: PdfPreviewConnectorDto[];
+  poster_layout?: PdfPosterLayoutDto;
+  tiles?: PdfTileSheetDto[];
+}
+
+export async function exportPrintablePdf(
+  params: PdfExportRequest
+): Promise<Blob> {
+  const headers = new Headers();
+  headers.set('X-Requested-With', 'genealogy');
+  headers.set('Content-Type', 'application/json');
+
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/export/pdf`, {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify(params),
+    });
+  } catch {
+    throw new ApiError(0, {
+      code: 'network_error',
+      message: 'Network request failed',
+    });
+  }
+
+  if (!response.ok) {
+    let errData: ApiErrorResponse;
+    try {
+      errData = await response.json();
+    } catch {
+      errData = {
+        error: {
+          code: 'network_error',
+          message: response.statusText || 'Unknown network error',
+        },
+      };
+    }
+    throw new ApiError(response.status, errData.error);
+  }
+
+  return await response.blob();
+}
+
+export async function fetchPdfPreviewInfo(
+  params: PdfExportRequest
+): Promise<PdfExportPreviewInfo> {
+  return apiFetch<PdfExportPreviewInfo>('/export/pdf/preview-info', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+// =============================================================================
 // Phase 1.11 — Change History, Undo Toast, Restore Deleted, Optimistic Concurrency & Tree Snapshots
 // =============================================================================
 
@@ -2380,6 +2522,13 @@ export const placesApi = {
   async getPlacesMap(): Promise<PlacesMapResponseDto> {
     return apiFetch<PlacesMapResponseDto>('/places/map');
   },
+};
+
+export const exportApi = {
+  exportGedcom,
+  getGedcomExportUrl,
+  exportPrintablePdf,
+  fetchPdfPreviewInfo,
 };
 
 

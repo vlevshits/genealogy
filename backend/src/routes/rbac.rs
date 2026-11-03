@@ -47,6 +47,9 @@ use crate::{
             process_media_bundle_archive, save_media_bytes_to_disk, spool_multipart_to_temp_file,
             MediaBundleQuery, MediaBundleReconciliationReport,
         },
+        pdf::{
+            calculate_preview_info, generate_printable_pdf, PdfExportPreviewInfo, PdfExportRequest,
+        },
         privacy::{
             canonicalize_surname_display, enrich_family_dto_marriage, evaluate_is_living,
             find_family_marriage_facts, fold_slavic_surname_stem,
@@ -8619,21 +8622,90 @@ pub async fn reconcile_gedcom_media_bundle(
 #[utoipa::path(
     post,
     path = "/api/v1/export/pdf",
+    request_body(content = Option<PdfExportRequest>, description = "Printable PDF export configuration"),
     responses(
-        (status = 200, description = "Printable PDF poster export queued (Admin only)", body = AdminToolOperationResponse),
+        (status = 200, description = "Printable PDF vector stream (Admin only)", content_type = "application/pdf"),
         (status = 403, description = "Admin role required", body = ErrorResponse)
     ),
     tag = "Admin"
 )]
 pub async fn export_printable_pdf(
     RequireAdmin(_admin): RequireAdmin,
-) -> Result<Json<AdminToolOperationResponse>, AppError> {
-    Ok(Json(AdminToolOperationResponse {
-        status: "ok".to_string(),
-        operation: "pdf_export".to_string(),
-        message: "Printable PDF export authorized for administrator".to_string(),
-        items: vec![],
-    }))
+    State(state): State<AppState>,
+    payload: Option<Json<PdfExportRequest>>,
+) -> Result<Response, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    if req.is_empty() {
+        return Ok(Json(AdminToolOperationResponse {
+            status: "ok".to_string(),
+            operation: "pdf_export".to_string(),
+            message: "Printable PDF export authorized for administrator".to_string(),
+            items: vec![],
+        })
+        .into_response());
+    }
+
+    let settings = state.resolve_instance_settings().await;
+    let store = state.privacy_store.read().await;
+
+    let filename = if req.format().trim().eq_ignore_ascii_case("poster")
+        || req.format().trim().eq_ignore_ascii_case("single")
+    {
+        "family-tree-poster.pdf"
+    } else {
+        "family-tree-tiled.pdf"
+    };
+
+    let pdf_bytes = generate_printable_pdf(
+        &store,
+        &req,
+        &settings.tree_title,
+        settings.default_home_person_id.as_deref(),
+        Some(&state.config.media_storage_path),
+    )?;
+
+    let mut resp = (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/pdf")],
+        Body::from(pdf_bytes),
+    )
+        .into_response();
+
+    let disposition_str = format!("attachment; filename=\"{filename}\"");
+    if let Ok(val) = header::HeaderValue::from_str(&disposition_str) {
+        resp.headers_mut().insert(header::CONTENT_DISPOSITION, val);
+    }
+
+    Ok(resp)
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/export/pdf/preview-info",
+    request_body(content = Option<PdfExportRequest>, description = "Printable PDF export configuration to calculate preview"),
+    responses(
+        (status = 200, description = "Printable PDF preview sheet and grid calculation (Admin only)", body = PdfExportPreviewInfo),
+        (status = 403, description = "Admin role required", body = ErrorResponse)
+    ),
+    tag = "Admin"
+)]
+pub async fn get_pdf_preview_info(
+    RequireAdmin(_admin): RequireAdmin,
+    State(state): State<AppState>,
+    payload: Option<Json<PdfExportRequest>>,
+) -> Result<Json<PdfExportPreviewInfo>, AppError> {
+    let req = payload.map(|Json(r)| r).unwrap_or_default();
+    let settings = state.resolve_instance_settings().await;
+    let store = state.privacy_store.read().await;
+
+    let info = calculate_preview_info(
+        &store,
+        &req,
+        &settings.tree_title,
+        settings.default_home_person_id.as_deref(),
+    )?;
+
+    Ok(Json(info))
 }
 
 #[utoipa::path(

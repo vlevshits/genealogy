@@ -507,6 +507,35 @@ describe('i18n Key Parity & Localization Helpers', () => {
     expect(formatVitalEventLabel('marriage_license', 'M', { locale: 'ru' })).toBe('регистрация брака');
     expect(formatVitalEventLabel('marriage_license', 'M', { locale: 'en' })).toBe('marriage license');
   });
+
+  it('Phase 3: print.* keys have 100% EN/RU parity and zero glyphs or emojis', () => {
+    const enPrint = (en as Record<string, any>).print;
+    const ruPrint = (ru as Record<string, any>).print;
+
+    expect(enPrint, 'en.json must define print').toBeDefined();
+    expect(ruPrint, 'ru.json must define print').toBeDefined();
+
+    const enKeys = Object.keys(enPrint).sort();
+    const ruKeys = Object.keys(ruPrint).sort();
+    expect(enKeys).toEqual(ruKeys);
+
+    const leadingIconRegex = /^\s*[+＋←→↑↓↔✓✔✕✖✗✘]\s+/;
+    const emojiRegex = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+
+    for (const key of enKeys) {
+      const enVal = String(enPrint[key]);
+      const ruVal = String(ruPrint[key]);
+
+      expect(enVal.trim().length, `en print.${key} must not be empty`).toBeGreaterThan(0);
+      expect(ruVal.trim().length, `ru print.${key} must not be empty`).toBeGreaterThan(0);
+
+      expect(enVal, `en print.${key} must not have leading icon`).not.toMatch(leadingIconRegex);
+      expect(ruVal, `ru print.${key} must not have leading icon`).not.toMatch(leadingIconRegex);
+
+      expect(enVal, `en print.${key} must not have emoji`).not.toMatch(emojiRegex);
+      expect(ruVal, `ru print.${key} must not have emoji`).not.toMatch(emojiRegex);
+    }
+  });
 });
 
 
