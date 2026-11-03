@@ -1714,3 +1714,109 @@ async fn test_all_nodes_hierarchical_centering_not_all_left_aligned() {
         "Parents and children must not be left-aligned to the exact same x in all_nodes"
     );
 }
+
+#[tokio::test]
+async fn test_descendant_layout_lineage_connector_drops_into_child_not_union_gap() {
+    let mut store = GenealogyPrivacyStore::empty();
+
+    let p_parent = make_test_person("p_parent", "I_PAR", "Anna", "Gronskaya", "F", 1950);
+    let p_parent_sp = make_test_person("p_parent_sp", "I_PAR_SP", "Petr", "Gronsky", "M", 1948);
+    let p_child = make_test_person("p_child", "I_CH", "Vera", "Gronskaya", "F", 1975);
+    let p_child_sp = make_test_person("p_child_sp", "I_CH_SP", "Boris", "Gronsky", "M", 1973);
+
+    let f_parent = make_test_family(
+        "f_parent",
+        "F_PAR",
+        Some("p_parent"),
+        Some("p_parent_sp"),
+        &["p_child"],
+    );
+    let f_child = make_test_family("f_child", "F_CH", Some("p_child"), Some("p_child_sp"), &[]);
+
+    store.persons = vec![p_parent, p_parent_sp, p_child, p_child_sp];
+    store.families = vec![f_parent, f_child];
+
+    let layout = compute_tree_layout(
+        &store,
+        "I_PAR",
+        "descendant",
+        3,
+        false,
+        false,
+        None,
+        None,
+        true, // include_partner
+        false,
+        false,
+        "Descendant Connector Drop Test",
+        None,
+    )
+    .unwrap();
+
+    let child_card = layout
+        .cards
+        .iter()
+        .find(|c| c.gid == "I_CH")
+        .expect("Child card must exist");
+    let child_spouse_card = layout
+        .cards
+        .iter()
+        .find(|c| c.gid == "I_CH_SP")
+        .expect("Child spouse card must exist");
+
+    // Child and spouse are placed as a couple side-by-side
+    assert!(
+        child_spouse_card.x > child_card.x,
+        "Child spouse card should be placed to the right of child card"
+    );
+
+    let expected_drop_x = child_card.x + child_card.width / 2.0;
+    let old_wrong_gap_x = child_card.x + child_card.width + 6.0; // union_mid_x in gap between cards
+
+    // Find the vertical connector dropping into the child card (ending at child_card.y)
+    let child_drop_connector = layout
+        .connectors
+        .iter()
+        .find(|c| {
+            c.points.len() == 2
+                && (c.points[0].0 - c.points[1].0).abs() < 0.001 // vertical line
+                && (c.points[1].1 - child_card.y).abs() < 0.001 // ends at top of child card
+        })
+        .expect("Connector vertically dropping into child card must exist");
+
+    assert!(
+        (child_drop_connector.points[1].0 - expected_drop_x).abs() < 0.001,
+        "Connector must drop into top center of child card (x={}), but was {}",
+        expected_drop_x,
+        child_drop_connector.points[1].0
+    );
+
+    assert!(
+        (child_drop_connector.points[1].0 - old_wrong_gap_x).abs() > 1.0,
+        "Connector must NOT drop into union gap between child and spouse (gap_x={})",
+        old_wrong_gap_x
+    );
+
+    // Also verify the parent vertical drop starts at parent's marital bar (p.y + CARD_HEIGHT / 2.0)
+    let parent_card = layout
+        .cards
+        .iter()
+        .find(|c| c.gid == "I_PAR")
+        .expect("Parent card must exist");
+    let expected_parent_bar_y = parent_card.y + parent_card.height / 2.0;
+    let parent_drop_connector = layout
+        .connectors
+        .iter()
+        .find(|c| {
+            c.points.len() == 2
+                && (c.points[0].0 - c.points[1].0).abs() < 0.001
+                && (c.points[0].1 - expected_parent_bar_y).abs() < 0.001
+        })
+        .expect("Parent drop connector must exist");
+
+    assert!(
+        (parent_drop_connector.points[0].1 - expected_parent_bar_y).abs() < 0.001,
+        "Parent drop connector must start from parent marital bar at y={}",
+        expected_parent_bar_y
+    );
+}

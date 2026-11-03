@@ -123,22 +123,64 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
     return `${genText} • ${sheetText} (${config.target_sheet_size || 'A4'})`;
   }, [previewInfo?.subtitle, config.subtitle, config.view_mode, config.generations, isPoster, totalSheets, gridCols, gridRows, config.target_sheet_size, t]);
 
+  // Fallback poster layout memo when isPoster is true
+  const posterLayout = useMemo(() => {
+    if (!isPoster) return null;
+    if (previewInfo?.poster_layout) return previewInfo.poster_layout;
+
+    const posterSizes: Record<string, { w: number; h: number }> = {
+      A0: { w: 1189, h: 841 },
+      A1: { w: 841, h: 594 },
+      A2: { w: 594, h: 420 },
+      A3: { w: 420, h: 297 },
+    };
+    const sheet =
+      previewInfo?.format === 'poster' && previewInfo?.sheet_width_mm && previewInfo?.sheet_height_mm
+        ? { w: previewInfo.sheet_width_mm, h: previewInfo.sheet_height_mm }
+        : posterSizes[config.target_sheet_size ?? 'A2'] ?? { w: 594, h: 420 };
+    const frameMargin = 12.0;
+    const printableW = sheet.w - 2 * frameMargin;
+    const printableH = sheet.h - 2 * frameMargin;
+    const rawW = previewInfo?.canvas_width_mm ?? 500;
+    const rawH = previewInfo?.canvas_height_mm ?? 300;
+    const scale = Math.min(1.0, Math.min(printableW / rawW, printableH / rawH));
+    const offX = frameMargin + (printableW - rawW * scale) / 2.0;
+    const offY = frameMargin + (printableH - rawH * scale) / 2.0;
+    return {
+      sheet_width_mm: sheet.w,
+      sheet_height_mm: sheet.h,
+      scale,
+      offset_x: offX,
+      offset_y: offY,
+      frame_margin: frameMargin,
+    };
+  }, [
+    isPoster,
+    previewInfo?.poster_layout,
+    previewInfo?.canvas_width_mm,
+    previewInfo?.canvas_height_mm,
+    previewInfo?.sheet_width_mm,
+    previewInfo?.sheet_height_mm,
+    previewInfo?.format,
+    config.target_sheet_size,
+  ]);
+
   // Dimensions in Millimeters
   const mmDimensions = useMemo(() => {
     if (isPoster) {
-      if (previewInfo?.poster_layout) {
+      if (posterLayout) {
         return {
-          w: previewInfo.poster_layout.sheet_width_mm,
-          h: previewInfo.poster_layout.sheet_height_mm,
+          w: posterLayout.sheet_width_mm,
+          h: posterLayout.sheet_height_mm,
         };
       }
       const posterSizes: Record<string, { w: number; h: number }> = {
-        A0: { w: 841, h: 1189 },
-        A1: { w: 594, h: 841 },
-        A2: { w: 420, h: 594 },
-        A3: { w: 297, h: 420 },
+        A0: { w: 1189, h: 841 },
+        A1: { w: 841, h: 594 },
+        A2: { w: 594, h: 420 },
+        A3: { w: 420, h: 297 },
       };
-      return posterSizes[config.target_sheet_size ?? 'A2'] ?? { w: 420, h: 594 };
+      return posterSizes[config.target_sheet_size ?? 'A2'] ?? { w: 594, h: 420 };
     }
 
     if (previewInfo?.canvas_width_mm && previewInfo?.canvas_height_mm) {
@@ -155,7 +197,7 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
       w: singleW * gridCols,
       h: singleH * gridRows,
     };
-  }, [isPoster, previewInfo, config.target_sheet_size, gridCols, gridRows]);
+  }, [isPoster, posterLayout, previewInfo, config.target_sheet_size, gridCols, gridRows]);
 
   // Scaled pixel dimensions for screen wrapper
   const pixelDimensions = useMemo(() => {
@@ -214,18 +256,20 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
     try {
       const blob = await exportPrintablePdf(config);
       if (typeof window !== 'undefined' && window.URL && typeof window.URL.createObjectURL === 'function') {
-        if (pdfBlobUrl) {
-          window.URL.revokeObjectURL(pdfBlobUrl);
-        }
         const url = window.URL.createObjectURL(blob);
-        setPdfBlobUrl(url);
+        setPdfBlobUrl((prevUrl) => {
+          if (prevUrl) {
+            window.URL.revokeObjectURL(prevUrl);
+          }
+          return url;
+        });
       }
     } catch {
       // Fallback
     } finally {
       setIsLoadingPdf(false);
     }
-  }, [config, pdfBlobUrl]);
+  }, [config]);
 
   const handleModeChange = (mode: 'layout' | 'pdf') => {
     setViewMode(mode);
@@ -233,6 +277,15 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
       loadLivePdf();
     }
   };
+
+  // Debounced live PDF refresh on config changes in PDF mode
+  useEffect(() => {
+    if (viewMode !== 'pdf') return;
+    const timer = setTimeout(() => {
+      loadLivePdf();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [viewMode, config, loadLivePdf]);
 
   // Revoke blob URL on unmount
   useEffect(() => {
@@ -388,14 +441,14 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
               />
 
               {/* Single Poster Decorative Border & Title */}
-              {isPoster && (
+              {isPoster && posterLayout && (
                 <g>
                   {/* Outer Frame */}
                   <rect
-                    x={previewInfo?.poster_layout?.frame_margin ?? 10}
-                    y={previewInfo?.poster_layout?.frame_margin ?? 10}
-                    width={mmDimensions.w - 2 * (previewInfo?.poster_layout?.frame_margin ?? 10)}
-                    height={mmDimensions.h - 2 * (previewInfo?.poster_layout?.frame_margin ?? 10)}
+                    x={posterLayout.frame_margin}
+                    y={posterLayout.frame_margin}
+                    width={mmDimensions.w - 2 * posterLayout.frame_margin}
+                    height={mmDimensions.h - 2 * posterLayout.frame_margin}
                     fill="none"
                     className={isHeritage ? 'stroke-amber-800/70' : 'stroke-border'}
                     strokeWidth={1.2}
@@ -404,10 +457,10 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
                   {/* Inner Frame for Heritage theme */}
                   {isHeritage && (
                     <rect
-                      x={(previewInfo?.poster_layout?.frame_margin ?? 10) + 2}
-                      y={(previewInfo?.poster_layout?.frame_margin ?? 10) + 2}
-                      width={mmDimensions.w - 2 * (previewInfo?.poster_layout?.frame_margin ?? 10) - 4}
-                      height={mmDimensions.h - 2 * (previewInfo?.poster_layout?.frame_margin ?? 10) - 4}
+                      x={posterLayout.frame_margin + 2}
+                      y={posterLayout.frame_margin + 2}
+                      width={mmDimensions.w - 2 * posterLayout.frame_margin - 4}
+                      height={mmDimensions.h - 2 * posterLayout.frame_margin - 4}
                       fill="none"
                       className="stroke-amber-800/40"
                       strokeWidth={0.5}
@@ -417,18 +470,18 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
 
                   {/* Poster Title Banner */}
                   <text
-                    x={(previewInfo?.poster_layout?.offset_x ?? 15) + 6}
-                    y={(previewInfo?.poster_layout?.offset_y ?? 15) + 12}
-                    fontSize={14 * (previewInfo?.poster_layout?.scale ?? 1.0)}
+                    x={posterLayout.offset_x + 6}
+                    y={posterLayout.offset_y + 12}
+                    fontSize={14 * posterLayout.scale}
                     fontWeight="bold"
                     className={isHeritage ? 'fill-amber-950 font-serif' : 'fill-primary font-sans'}
                   >
                     {chartTitle}
                   </text>
                   <text
-                    x={(previewInfo?.poster_layout?.offset_x ?? 15) + 6}
-                    y={(previewInfo?.poster_layout?.offset_y ?? 15) + 20 * (previewInfo?.poster_layout?.scale ?? 1.0)}
-                    fontSize={7 * (previewInfo?.poster_layout?.scale ?? 1.0)}
+                    x={posterLayout.offset_x + 6}
+                    y={posterLayout.offset_y + 20 * posterLayout.scale}
+                    fontSize={7 * posterLayout.scale}
                     className={isHeritage ? 'fill-amber-800 font-serif' : 'fill-secondary font-sans'}
                   >
                     {subtitle}
@@ -463,9 +516,9 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
               {hasServerCards &&
                 previewInfo?.connectors?.map((conn, idx) => {
                   if (conn.points.length < 2) return null;
-                  const scale = isPoster ? previewInfo.poster_layout?.scale ?? 1.0 : 1.0;
-                  const offX = isPoster ? previewInfo.poster_layout?.offset_x ?? 0.0 : 0.0;
-                  const offY = isPoster ? previewInfo.poster_layout?.offset_y ?? 0.0 : 0.0;
+                  const scale = isPoster && posterLayout ? posterLayout.scale : 1.0;
+                  const offX = isPoster && posterLayout ? posterLayout.offset_x : 0.0;
+                  const offY = isPoster && posterLayout ? posterLayout.offset_y : 0.0;
 
                   const d = conn.points
                     .map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${(offX + x * scale).toFixed(1)} ${(offY + y * scale).toFixed(1)}`)
@@ -496,9 +549,9 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
               {/* Render Server Real Cards */}
               {hasServerCards &&
                 previewInfo?.cards?.map((card) => {
-                  const scale = isPoster ? previewInfo.poster_layout?.scale ?? 1.0 : 1.0;
-                  const offX = isPoster ? previewInfo.poster_layout?.offset_x ?? 0.0 : 0.0;
-                  const offY = isPoster ? previewInfo.poster_layout?.offset_y ?? 0.0 : 0.0;
+                  const scale = isPoster && posterLayout ? posterLayout.scale : 1.0;
+                  const offX = isPoster && posterLayout ? posterLayout.offset_x : 0.0;
+                  const offY = isPoster && posterLayout ? posterLayout.offset_y : 0.0;
 
                   const x = offX + card.x * scale;
                   const y = offY + card.y * scale;
@@ -521,8 +574,8 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
                         className={cn(
                           card.is_focal
                             ? isHeritage
-                              ? 'fill-amber-100 stroke-amber-800'
-                              : 'fill-brand/10 stroke-brand'
+                            ? 'fill-amber-100 stroke-amber-800'
+                            : 'fill-brand/10 stroke-brand'
                             : isHeritage
                             ? 'fill-amber-50/95 stroke-amber-800/50'
                             : 'fill-surface stroke-border'
@@ -635,16 +688,20 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
                 Array.from(new Set(fallbackNodes.map((n) => n.generation)))
                   .sort((a, b) => a - b)
                   .map((gen) => {
-                    const cardW = 56.0;
+                    const scale = isPoster && posterLayout ? posterLayout.scale : 1.0;
+                    const offX = isPoster && posterLayout ? posterLayout.offset_x : 0.0;
+                    const offY = isPoster && posterLayout ? posterLayout.offset_y : 0.0;
+                    const cardW = 56.0 * scale;
                     const col = gen - 1;
-                    const x = 20 + col * (cardW + 16);
+                    const x = offX + (20 + col * (56.0 + 16)) * scale;
+                    const y = offY + 28 * scale;
                     return (
                       <text
                         key={`tier-hdr-${gen}`}
                         x={x + cardW / 2}
-                        y={28}
+                        y={y}
                         textAnchor="middle"
-                        fontSize={2.5}
+                        fontSize={2.5 * scale}
                         fontWeight="bold"
                         className={isHeritage ? 'fill-amber-800 font-serif' : 'fill-tertiary font-sans uppercase tracking-wider text-[2.2px]'}
                       >
@@ -656,12 +713,15 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
               {/* Fallback Rendering if cards are not yet loaded */}
               {!hasServerCards &&
                 fallbackNodes.map((node, i) => {
-                  const cardW = 56.0;
-                  const cardH = 26.0;
+                  const scale = isPoster && posterLayout ? posterLayout.scale : 1.0;
+                  const offX = isPoster && posterLayout ? posterLayout.offset_x : 0.0;
+                  const offY = isPoster && posterLayout ? posterLayout.offset_y : 0.0;
+                  const cardW = 56.0 * scale;
+                  const cardH = 26.0 * scale;
                   const col = node.generation - 1;
                   const row = i % 3;
-                  const x = 20 + col * (cardW + 16);
-                  const y = 35 + row * (cardH + 12);
+                  const x = offX + (20 + col * (56.0 + 16)) * scale;
+                  const y = offY + (35 + row * (26.0 + 12)) * scale;
                   const isMale = node.sex === 'M';
                   const isMasked = Boolean(config.redact_living && node.isLiving);
                   const displayName = isMasked
@@ -674,35 +734,35 @@ export const PrintPreviewCanvas: React.FC<PrintPreviewCanvasProps> = ({
                     : `${t('print.born')} ${node.birthYear}`;
 
                   return (
-                    <g key={node.id} transform={`translate(${x}, ${y})`}>
+                    <g key={node.id} transform={`translate(${x.toFixed(1)}, ${y.toFixed(1)})`}>
                       <rect
                         width={cardW}
                         height={cardH}
-                        rx={2.5}
+                        rx={2.5 * scale}
                         className={isHeritage ? 'fill-amber-50 stroke-amber-800/40' : 'fill-surface stroke-border'}
-                        strokeWidth={0.7}
+                        strokeWidth={0.7 * scale}
                       />
                       <rect
                         x={0}
                         y={0}
-                        width={1.6}
+                        width={1.6 * scale}
                         height={cardH}
-                        rx={0.8}
+                        rx={0.8 * scale}
                         className={isMale ? 'fill-lineage-male' : 'fill-lineage-female'}
                       />
                       <text
-                        x={14}
-                        y={cardH / 2 - 0.8}
-                        fontSize={2.7}
+                        x={14 * scale}
+                        y={cardH / 2 - 0.8 * scale}
+                        fontSize={2.7 * scale}
                         fontWeight="bold"
                         className={isHeritage ? 'fill-amber-950 font-serif' : 'fill-primary font-sans'}
                       >
                         {truncateName(displayName, 32)}
                       </text>
                       <text
-                        x={14}
-                        y={cardH / 2 + 3.2}
-                        fontSize={2.1}
+                        x={14 * scale}
+                        y={cardH / 2 + 3.2 * scale}
+                        fontSize={2.1 * scale}
                         className={isHeritage ? 'fill-amber-800 font-serif' : 'fill-secondary font-sans'}
                       >
                         {datesText}

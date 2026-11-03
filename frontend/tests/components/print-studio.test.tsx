@@ -949,6 +949,36 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
     );
     expect(htmlWithoutCustomText).not.toContain('aria-label="Clear"');
   });
+
+  it('updates PrintPreviewCanvas immediately to single poster landscape layout with fallback posterLayout when switching formats', () => {
+    const htmlPoster = renderWithProviders(
+      <PrintPreviewCanvas
+        config={{ format: 'poster', target_sheet_size: 'A2' }}
+        previewInfo={{
+          total_sheets: 4,
+          grid_rows: 2,
+          grid_cols: 2,
+          canvas_width_mm: 594,
+          canvas_height_mm: 420,
+          sheet_width_mm: 297,
+          sheet_height_mm: 210,
+          overlap_mm: 10,
+          format: 'tiled',
+          target_sheet_size: 'A4',
+          total_persons: 15,
+          summary_text: '4 Sheets',
+        }}
+      />,
+      'en'
+    );
+
+    // Should render landscape A2 sheet viewBox 0 0 594 420 (not portrait 420 594)
+    expect(htmlPoster).toContain('viewBox="0 0 594 420"');
+    // Should render outer decorative poster frame with frame_margin = 12
+    expect(htmlPoster).toContain('x="12" y="12" width="570" height="396"');
+    // Should not render tiled grid overlay
+    expect(htmlPoster).not.toContain('data-testid="print-tiling-grid-overlay"');
+  });
 });
 
 

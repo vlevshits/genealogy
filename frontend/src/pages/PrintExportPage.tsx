@@ -141,19 +141,47 @@ export const PrintExportPage: React.FC<PrintExportPageProps> = ({
             const isPoster = config.format === 'poster';
             const cols = isPoster ? 1 : 2;
             const rows = isPoster ? 1 : 2;
+            const posterSizes: Record<string, { w: number; h: number }> = {
+              A0: { w: 1189, h: 841 },
+              A1: { w: 841, h: 594 },
+              A2: { w: 594, h: 420 },
+              A3: { w: 420, h: 297 },
+            };
+            const posterSheet = posterSizes[config.target_sheet_size ?? 'A2'] ?? { w: 594, h: 420 };
+            const sheetW = isPoster ? posterSheet.w : 297;
+            const sheetH = isPoster ? posterSheet.h : 210;
+            const canvasW = 594;
+            const canvasH = 420;
+            const frameMargin = 12.0;
+            const printableW = sheetW - 2 * frameMargin;
+            const printableH = sheetH - 2 * frameMargin;
+            const scale = Math.min(1.0, Math.min(printableW / canvasW, printableH / canvasH));
+            const offX = frameMargin + (printableW - canvasW * scale) / 2.0;
+            const offY = frameMargin + (printableH - canvasH * scale) / 2.0;
+
             setPreviewInfo({
               total_sheets: cols * rows,
               grid_rows: rows,
               grid_cols: cols,
-              canvas_width_mm: isPoster ? 420 : 594,
-              canvas_height_mm: isPoster ? 594 : 420,
-              sheet_width_mm: isPoster ? 420 : 297,
-              sheet_height_mm: isPoster ? 594 : 210,
+              canvas_width_mm: isPoster ? 594 : 594,
+              canvas_height_mm: isPoster ? 420 : 420,
+              sheet_width_mm: isPoster ? sheetW : 297,
+              sheet_height_mm: isPoster ? sheetH : 210,
               overlap_mm: isPoster ? 0 : config.overlap_mm ?? 10,
               format: config.format || 'tiled',
               target_sheet_size: config.target_sheet_size || (isPoster ? 'A2' : 'A4'),
               total_persons: 15,
               summary_text: isPoster ? '1 Poster Sheet' : '4 Sheets (2×2 Grid)',
+              poster_layout: isPoster
+                ? {
+                    sheet_width_mm: sheetW,
+                    sheet_height_mm: sheetH,
+                    scale,
+                    offset_x: offX,
+                    offset_y: offY,
+                    frame_margin: frameMargin,
+                  }
+                : undefined,
             });
           }
         })

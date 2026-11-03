@@ -911,7 +911,7 @@ fn layout_descendant(
                 children_pos: Vec::new(),
                 spouse_id: primary_spouse,
             });
-            return (union_mid, y);
+            return (x + CARD_WIDTH_MM / 2.0, y);
         }
 
         let children_ids = find_children_of_person(person_id, store, person_by_id);
@@ -933,7 +933,7 @@ fn layout_descendant(
                 children_pos: Vec::new(),
                 spouse_id: primary_spouse,
             });
-            return (union_mid, y);
+            return (x + CARD_WIDTH_MM / 2.0, y);
         }
 
         let mut child_positions = Vec::new();
@@ -978,7 +978,7 @@ fn layout_descendant(
             spouse_id: primary_spouse,
         });
 
-        (union_mid, y)
+        (x + CARD_WIDTH_MM / 2.0, y)
     }
 
     place_desc_tree(
@@ -1130,8 +1130,12 @@ fn layout_descendant(
             // Drop connectors to children from union midpoint
             if !p.children_pos.is_empty() {
                 let parent_bot_x = p.union_mid_x;
-                let parent_bot_y = p.y + CARD_HEIGHT_MM;
-                let mid_y = parent_bot_y + (VERTICAL_GAP_MM * 1.5 / 2.0);
+                let parent_bot_y = if p.spouse_id.is_some() {
+                    p.y + CARD_HEIGHT_MM / 2.0
+                } else {
+                    p.y + CARD_HEIGHT_MM
+                };
+                let mid_y = p.y + CARD_HEIGHT_MM + (VERTICAL_GAP_MM * 1.5 / 2.0);
 
                 // Vertical drop from parent couple
                 connectors.push(RenderConnector {
