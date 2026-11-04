@@ -150,7 +150,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           );
         }
       })
-      .catch(() => { });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -407,10 +407,11 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${currentStage >= 2
+            className={`flex items-center gap-2 ${
+              currentStage >= 2
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-              }`}
+            }`}
           >
             <Badge
               variant={currentStage >= 2 ? 'brand' : 'neutral'}
@@ -424,10 +425,11 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${currentStage >= 2
+            className={`flex items-center gap-2 ${
+              currentStage >= 2
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-              }`}
+            }`}
           >
             <Badge
               variant={currentStage >= 2 ? 'success' : 'neutral'}
