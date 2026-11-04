@@ -26,6 +26,8 @@ import { DropdownMenu } from '../ui/dropdown-menu';
 import { Popover } from '../ui/popover';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
+import { IconButton } from '../ui/icon-button';
+import { TextInput } from '../ui/input';
 import { useI18n } from '../../i18n';
 
 export interface GenDateInputProps {
@@ -209,19 +211,15 @@ export const GenDateInput: React.FC<GenDateInputProps> = ({
     <div className={cn('space-y-2', className)}>
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="relative flex-1 flex items-center">
-          <input
+          <TextInput
             id={id}
             type="text"
             value={textInput}
             disabled={disabled}
-            aria-invalid={invalid || undefined}
+            invalid={invalid}
             placeholder={placeholder || t('gendate.placeholder')}
             onChange={(e) => handleTextChange(e.target.value)}
-            className={cn(
-              'min-h-11 w-full rounded-lg border bg-surface pl-3 pr-20 py-2 font-mono text-xs sm:text-sm text-primary placeholder:font-sans placeholder:text-tertiary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              invalid ? 'border-danger' : 'border-border hover:border-secondary/50',
-              disabled && 'opacity-50 pointer-events-none bg-surface-muted'
-            )}
+            className="pr-20 font-mono text-xs sm:text-sm placeholder:font-sans"
           />
 
           <div className="absolute right-1.5 flex items-center gap-1">
@@ -232,86 +230,85 @@ export const GenDateInput: React.FC<GenDateInputProps> = ({
               align="end"
               className="w-76 p-3"
               trigger={
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
+                  variant="ghost"
                   disabled={disabled}
-                  aria-label={t('gendate.openCalendar')}
-                  title={t('gendate.openCalendar')}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-secondary hover:bg-surface-muted hover:text-primary cursor-pointer"
+                  label={t('gendate.openCalendar')}
+                  className="h-7 w-7 min-h-0 min-w-0 text-secondary hover:text-primary"
                 >
                   <CalendarIcon className="h-4 w-4" />
-                </button>
+                </IconButton>
               }
             >
               <div className="space-y-3">
                 {/* Fast Century & Decade Jump Controls */}
                 <div className="flex items-center justify-between gap-1 border-b border-border pb-2">
-                  <button
-                    type="button"
-                    aria-label={t('gendate.prevCentury')}
-                    title={t('gendate.prevCentury')}
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    label={t('gendate.prevCentury')}
                     onClick={() => setCalYear((y) => Math.max(1000, y - 100))}
-                    className="rounded p-1 text-secondary hover:bg-surface-muted hover:text-primary cursor-pointer"
+                    className="h-7 w-7 min-h-0 min-w-0 text-secondary hover:text-primary"
                   >
                     <ChevronsLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('gendate.prevDecade')}
-                    title={t('gendate.prevDecade')}
+                  </IconButton>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    label={t('gendate.prevDecade')}
                     onClick={() => setCalYear((y) => Math.max(1000, y - 10))}
-                    className="rounded p-1 text-secondary hover:bg-surface-muted hover:text-primary cursor-pointer"
+                    className="h-7 w-7 min-h-0 min-w-0 text-secondary hover:text-primary"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                  </button>
+                  </IconButton>
 
-                  <input
-                    type="number"
-                    aria-label={t('gendate.yearLabel')}
-                    value={calYear}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!Number.isNaN(val)) setCalYear(val);
-                    }}
-                    className="w-20 rounded border border-border bg-surface-muted px-2 py-1 text-center font-mono text-xs font-bold text-primary"
-                  />
+                  <div className="w-20">
+                    <TextInput
+                      type="number"
+                      size="sm"
+                      aria-label={t('gendate.yearLabel')}
+                      value={calYear}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(val)) setCalYear(val);
+                      }}
+                      className="text-center font-mono text-xs font-bold px-1.5 py-1"
+                    />
+                  </div>
 
-                  <button
-                    type="button"
-                    aria-label={t('gendate.nextDecade')}
-                    title={t('gendate.nextDecade')}
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    label={t('gendate.nextDecade')}
                     onClick={() => setCalYear((y) => Math.min(2099, y + 10))}
-                    className="rounded p-1 text-secondary hover:bg-surface-muted hover:text-primary cursor-pointer"
+                    className="h-7 w-7 min-h-0 min-w-0 text-secondary hover:text-primary"
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('gendate.nextCentury')}
-                    title={t('gendate.nextCentury')}
+                  </IconButton>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    label={t('gendate.nextCentury')}
                     onClick={() => setCalYear((y) => Math.min(2099, y + 100))}
-                    className="rounded p-1 text-secondary hover:bg-surface-muted hover:text-primary cursor-pointer"
+                    className="h-7 w-7 min-h-0 min-w-0 text-secondary hover:text-primary"
                   >
                     <ChevronsRight className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                 </div>
 
                 {/* Month Grid */}
                 <div className="grid grid-cols-4 gap-1">
                   {Array.from({ length: 12 }, (_, idx) => idx + 1).map((m) => (
-                    <button
+                    <Button
                       key={m}
-                      type="button"
+                      size="sm"
+                      variant={calMonth === m ? 'primary' : 'secondary'}
                       onClick={() => setCalMonth(m)}
-                      className={cn(
-                        'rounded-md py-1 text-[11px] font-medium transition-colors cursor-pointer',
-                        calMonth === m
-                          ? 'bg-brand text-surface'
-                          : 'bg-surface-muted/60 text-secondary hover:text-primary'
-                      )}
+                      className="h-7 min-h-0 px-1 py-1 text-[11px]"
                     >
                       {t(`gendate.months.${m}`).slice(0, 3)}
-                    </button>
+                    </Button>
                   ))}
                 </div>
 
@@ -323,19 +320,15 @@ export const GenDateInput: React.FC<GenDateInputProps> = ({
                       gd.start?.m === calMonth &&
                       gd.start?.d === d;
                     return (
-                      <button
+                      <Button
                         key={d}
-                        type="button"
+                        size="sm"
+                        variant={isSelectedDay ? 'primary' : 'ghost'}
                         onClick={() => applyCalendarPick(calYear, calMonth, d)}
-                        className={cn(
-                          'h-7 w-7 rounded-md font-mono text-xs transition-colors cursor-pointer',
-                          isSelectedDay
-                            ? 'bg-brand text-surface font-bold'
-                            : 'text-primary hover:bg-surface-muted'
-                        )}
+                        className="h-7 w-7 min-h-0 min-w-0 p-0 font-mono text-xs"
                       >
                         {d}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -384,14 +377,16 @@ export const GenDateInput: React.FC<GenDateInputProps> = ({
 
         {/* Second field shown when Between or From–To is selected */}
         {isRange && (
-          <input
-            type="text"
-            value={secondDateText}
-            aria-label={t('gendate.secondDatePlaceholder')}
-            placeholder={t('gendate.secondDatePlaceholder')}
-            onChange={(e) => handleSecondDateChange(e.target.value)}
-            className="min-h-10 sm:w-44 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs sm:text-sm text-primary placeholder:font-sans placeholder:text-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          />
+          <div className="sm:w-44">
+            <TextInput
+              type="text"
+              value={secondDateText}
+              aria-label={t('gendate.secondDatePlaceholder')}
+              placeholder={t('gendate.secondDatePlaceholder')}
+              onChange={(e) => handleSecondDateChange(e.target.value)}
+              className="font-mono text-xs sm:text-sm placeholder:font-sans"
+            />
+          </div>
         )}
       </div>
 

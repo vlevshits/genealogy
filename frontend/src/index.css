@@ -10,14 +10,14 @@
   --color-border-focus: #3B68A0;
   --color-text-primary: #111827;
   --color-text-secondary: #4B5563;
-  --color-text-tertiary: #6B7280;
+  --color-text-tertiary: #5B6472;
 
   /* Semantic & Brand Accents */
   --color-brand-primary: #2D5584;
-  --color-brand-accent: #C68A34;
-  --color-status-success: #2E7D32;
-  --color-status-warning: #D97706;
-  --color-status-danger: #C53030;
+  --color-brand-accent: #8E5B12;
+  --color-status-success: #256B29;
+  --color-status-warning: #9A4F00;
+  --color-status-danger: #B82828;
 
   /* Lineage & Gender Tokens */
   --color-lineage-male: #45678F;
@@ -53,11 +53,12 @@
   --color-text-tertiary: #9CA3AF;
 
   /* Semantic & Brand Accents */
-  --color-brand-primary: #4F7EB5;
+  --color-brand-primary: #6899D3;
+  --color-brand-primary-hover: #7EA9DC;
   --color-brand-accent: #D9A04B;
   --color-status-success: #4CAF50;
   --color-status-warning: #F59E0B;
-  --color-status-danger: #EF4444;
+  --color-status-danger: #F87171;
 
   /* Lineage & Gender Tokens */
   --color-lineage-male: #658BB8;
@@ -152,6 +153,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Physical Print Sheet Tokens (UX-113: remain light in both Light & Dark Mode) */
+.paper-sheet-modern {
+  background-color: #FFFFFF;
+  color: #111827;
+}
+.paper-sheet-heritage {
+  background-color: #FDFBF7;
+  color: #1F2937;
+}
+.fill-paper-modern {
+  fill: #FFFFFF;
+}
+.fill-paper-heritage {
+  fill: #FDFBF7;
+}
+
 @media (pointer: coarse) {
   .touch-target-expand {
     position: relative;
@@ -177,3 +194,4 @@ body {
     scroll-behavior: auto !important;
   }
 }
+

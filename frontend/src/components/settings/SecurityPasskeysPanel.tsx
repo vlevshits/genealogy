@@ -39,6 +39,7 @@ import { useAuth } from '../../lib/auth-context';
 import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { RecoveryCodesCard } from '../auth/RecoveryCodesCard';
+import { McpTokensPanel } from './McpTokensPanel';
 
 export interface SecurityPasskeysPanelProps {
   initialPasskeys?: PasskeyCredentialDto[];
@@ -551,6 +552,9 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
           </div>
         </CardBody>
       </Card>
+
+      {/* 5. Protected MCP Server Personal Access Tokens Card */}
+      <McpTokensPanel />
     </div>
   );
 };

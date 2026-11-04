@@ -315,7 +315,7 @@ export const PlacesMapView: React.FC<PlacesMapViewProps> = ({
               preserveAspectRatio="xMidYMid slice"
             >
               {/* Base OpenStreetMap Geographical Tiles */}
-              <g className="opacity-95">
+              <g className="opacity-95 dark:brightness-90 dark:contrast-95">
                 {tiles.map((tile) => (
                   <image
                     key={tile.key}

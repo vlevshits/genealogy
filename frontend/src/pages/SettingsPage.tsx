@@ -235,7 +235,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
       {/* Standard Two-Column Admin Layout (07-admin-settings-page.md §2, §3.1) */}
       <div className="flex flex-col md:flex-row items-start gap-6 lg:gap-8">
-        <aside className="w-full md:w-64 shrink-0">
+        <aside className="w-full md:w-64 lg:w-72 shrink-0">
           <Card className="p-2">
             <SideNav
               ariaLabel={t('settings.navAriaLabel')}

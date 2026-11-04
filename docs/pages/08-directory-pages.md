@@ -53,7 +53,21 @@ Feature behavior lives in the feature specs; this document defines the shared pa
 
 ## 4. History & Quality Pages
 - `/history` (Administrators Only): day-grouped feed (avatar of author, sentence, time, *Restore/Undo* action), filters as chips. Accessible exclusively to Admins; hidden from navigation and returns `403 Forbidden` for Viewers and Editors.
-- `/quality` (Administrators Only): summary chips on top, three tabs (*Warnings*, *Possible duplicates*, *Incomplete*), each row with a primary fix action (*Open*, *Compare*, *Dismiss*). Accessible exclusively to Admins; hidden from navigation and returns `403 Forbidden` for Viewers and Editors.
+- `/quality` (Administrators Only): Centralized data maintenance hub accessible exclusively to Admins (`403 Forbidden` for Viewers and Editors).
+  - **Summary Chips:** `⚠️ Warnings ({count})`, `👥 Duplicates ({count})`, `📍 Place Hierarchy ({count})`, `ℹ️ Incomplete ({count})`.
+  - **Navigation Tabs:**
+    1. *All Warnings* / *Critical* / *Warnings* / *Info*: soft validation checks with *Dismiss* ("This is correct") and direct profile links.
+    2. *Duplicates*: relationship-centric duplicate pairs with similarity badge, kinship context indicators (shared parents/spouses/children, detached subtree tags), *Not a Duplicate* button, and *Compare & Merge* CTA.
+    3. *Place Hierarchy* (`/quality?tab=places_hierarchy`): automated gazetteer normalization queue:
+       - Sub-filters: *All issues*, *Unparsed paths*, *Orphan places*, *Redundant duplicates*.
+       - Batch Action Bar: *"⚡ Auto-fix All High Confidence ({count})"* with dry-run confirmation dialog.
+       - Place Fix Cards: side-by-side comparison displaying current flat place record (raw name, type, coordinates, event count) vs. proposed decomposed hierarchy tree (`[Country] → [Region] → [District] → [Clean Leaf]`), confidence pill badge, rule explanation, and actions (`Apply Fix`, `Customize / Pick Parent`, `Dismiss`).
+       - Customization Dialog: allows manual parent selection via Place Picker combobox, clean leaf name editing, and place type override before applying.
+       - Undo Toast: immediate toast notification with 1-click Undo button reversing the batch or single fix transaction.
+
+### 4.1 Places Page Administrative Banner (`/places`)
+- When the backend detects unparsed place strings, orphan localities, or administrative type mismatches, `/places` renders a top notification card for Administrators:
+  *"14 place hierarchy issues detected in your tree. Clean up jurisdictions, link orphan localities, and enhance map accuracy."* with action button `[ Review & Fix in Data Quality ]` routing to `/quality?tab=places_hierarchy`.
 
 ---
 
@@ -62,3 +76,6 @@ Feature behavior lives in the feature specs; this document defines the shared pa
 - [ ] **One Layout:** All list pages share header, filter bar, table, and bulk bar components.
 - [ ] **Mobile Cards:** Lists are fully usable on a phone without horizontal scrolling.
 - [ ] **Role Segregation & Route Guards:** `/history`, `/quality`, and `/people/merge` are accessible exclusively to Administrators (`403 Forbidden` for Viewers and Editors); `/people` and `/places` are restricted to authenticated family members (`401 Unauthorized` / redirect to `/login` for unauthenticated visitors).
+- [ ] **Place Hierarchy Quality Tab:** `/quality` features a dedicated "Place Hierarchy" tab with summary chips, before/after cards, confidence badges, and customizable parent selection.
+- [ ] **Batch Auto-Fix Workflow:** Clicking "Auto-fix High Confidence" displays a confirmation summary and applies all high-confidence recommendations with an instant Undo toast.
+- [ ] **Places Page Quality Banner:** `/places` displays a notification banner for Administrators when place hierarchy issues exist, linking directly to `/quality?tab=places_hierarchy`.

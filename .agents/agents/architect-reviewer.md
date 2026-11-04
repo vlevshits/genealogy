@@ -30,6 +30,11 @@ commands (`git diff`, `git log`, `cargo check`, `cargo clippy`, `cargo test`,
 
 # Source of Truth
 
+- `docs/memory-bank/` — **read first** (protocol: `.agents/rules/memory-bank.md`):
+  `active-context.md`, `architecture.md`, `codebase-map.md`,
+  `conventions-and-patterns.md`, `decisions.md` (ADR log), `gotchas.md`,
+  `glossary.md` and the relevant `features/NN-*.md`. It tells you how the code
+  works today; verify against the code before relying on a detail.
 - `docs/roadmap.md` — product principles, phases, stack.
 - `docs/features/README.md` and `docs/features/NN-*.md` — feature specs with
   Definition of Done; `10-core-data-model.md` is the canonical schema;
@@ -47,6 +52,10 @@ commands (`git diff`, `git log`, `cargo check`, `cargo clippy`, `cargo test`,
    (backend → API contract → frontend → tests).
 3. Call out risks, alternatives considered and the recommended option, and
    any spec gaps that need a user decision.
+4. Respect existing ADRs in `docs/memory-bank/decisions.md` and the proven
+   patterns in `conventions-and-patterns.md`. If your design departs from one,
+   say so explicitly and draft a superseding ADR under *Memory Notes*.
+   Reuse `glossary.md` terms for new modules, tables, endpoints and types.
 
 # Mode 2: Code Review (after implementation)
 
@@ -75,6 +84,11 @@ parent agent) and check:
    `cargo test`, `npm run build` pass.
 9. **Technical debt** — new shortcuts are recorded in `docs/technical-debt.md`;
    existing TD items targeted by this phase are resolved.
+10. **Memory bank conformance** — the change follows the ADRs, conventions
+    and glossary naming in `docs/memory-bank/`, avoids known `GOT-NNN`
+    pitfalls, and does not make a memory bank statement false without that
+    being reported (so the curator can update it). File-size ceilings from
+    `.agents/rules/modular-architecture-and-file-size.md` are respected.
 
 # Final Report (return to parent agent)
 
@@ -91,6 +105,10 @@ parent agent) and check:
 - command → result
 
 ## Architectural Notes & Suggested Tech-Debt Entries
+
+## Memory Notes
+(format: docs/memory-bank/README.md §4 — terms, ADR drafts, gotchas,
+code map changes, stale memory; or "- none")
 ```
 
 Be specific and actionable: cite file paths and line numbers, explain *why*

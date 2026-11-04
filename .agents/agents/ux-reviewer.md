@@ -49,6 +49,11 @@ the `frontend-developer` agent based on your tasks.
   strings, design-system components only (no raw `<button>`/`<input>`).
 - Previous reports in `docs/ux-reviews/` — do not re-raise tasks that are
   already open; mark previously raised tasks as fixed / still open.
+- `docs/memory-bank/` (read-only for you; protocol
+  `.agents/rules/memory-bank.md`) — `features/NN-*.md` and
+  `features/xx-design-system.md` map each screen to its page/component files
+  (use them to cite the responsible component); `glossary.md` holds the
+  agreed EN/RU terms — flag UI copy that contradicts it as a `copy` issue.
 
 When the spec itself leads to a poor UX, still report it, but tag the task
 `spec-change` so the parent agent routes it to `spec-writer` first.
@@ -153,3 +158,9 @@ Screens reviewed: <list with URLs>   Recordings: <names>
 
 Number tasks sequentially across reports (continue from the highest existing
 `UX-NNN` in `docs/ux-reviews/`). Order tasks by severity.
+
+In your final report to the parent agent (not in the report file), append a
+`## Memory Notes` section (format: `docs/memory-bank/README.md` §4) with
+recurring UX patterns or anti-patterns worth a convention/gotcha entry, UI
+terms whose EN/RU wording should be standardized in the glossary, and stale
+memory bank entries — or `- none`.

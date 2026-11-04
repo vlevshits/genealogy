@@ -91,6 +91,7 @@ export const DirectoryFilterBar: React.FC<DirectoryFilterBarProps> = ({
             {t('directory.filterSex')}
           </label>
           <Select
+            ariaLabel={t('directory.filterSex')}
             aria-label={t('directory.filterSex')}
             value={filters.sex || 'all'}
             onChange={(val) => onFiltersChange({ sex: val })}
@@ -109,6 +110,7 @@ export const DirectoryFilterBar: React.FC<DirectoryFilterBarProps> = ({
             {t('directory.filterStatus')}
           </label>
           <Select
+            ariaLabel={t('directory.filterStatus')}
             aria-label={t('directory.filterStatus')}
             value={filters.living || 'all'}
             onChange={(val) => onFiltersChange({ living: val })}
@@ -126,6 +128,7 @@ export const DirectoryFilterBar: React.FC<DirectoryFilterBarProps> = ({
             {t('directory.filterPhoto')}
           </label>
           <Select
+            ariaLabel={t('directory.filterPhoto')}
             aria-label={t('directory.filterPhoto')}
             value={filters.hasPhoto || 'all'}
             onChange={(val) => onFiltersChange({ hasPhoto: val })}

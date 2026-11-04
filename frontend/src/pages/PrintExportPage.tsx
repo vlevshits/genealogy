@@ -260,7 +260,7 @@ export const PrintExportPage: React.FC<PrintExportPageProps> = ({
   return (
     <div
       data-testid="print-export-page"
-      className={cn('flex flex-col lg:flex-row h-[calc(100dvh-4rem)] w-full overflow-hidden', className)}
+      className={cn('flex flex-col lg:flex-row h-[calc(100dvh-4rem)] pb-16 md:pb-0 w-full overflow-hidden', className)}
     >
       {/* Mobile/Tablet Segmented Toggle (< 1024px) */}
       <div className="lg:hidden shrink-0 border-b border-border bg-surface px-4 py-2.5 flex justify-center">

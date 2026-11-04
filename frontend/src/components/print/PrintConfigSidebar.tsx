@@ -179,8 +179,8 @@ export const PrintConfigSidebar: React.FC<PrintConfigSidebarProps> = ({
         className
       )}
     >
-      {/* Sidebar Header */}
-      <div className="p-4 sm:p-5 border-b border-border space-y-1">
+      {/* Sidebar Header (hidden on mobile where top SegmentedControl already labels the tab) */}
+      <div className="hidden lg:block p-4 sm:p-5 border-b border-border space-y-1">
         <div className="flex items-center gap-2">
           <Printer className="h-5 w-5 text-brand" />
           <h2 className="text-base font-semibold text-primary">
@@ -486,7 +486,7 @@ export const PrintConfigSidebar: React.FC<PrintConfigSidebarProps> = ({
         </div>
 
         {/* 9. Primary Action Button (Sticky) */}
-        <div className="sticky bottom-0 bg-surface/95 backdrop-blur-xs p-4 border-t border-border -mx-4 -mb-4 mt-4 z-10">
+        <div className="sticky bottom-0 bg-surface/95 backdrop-blur-xs p-4 pb-20 md:pb-4 border-t border-border -mx-4 -mb-4 mt-4 z-10">
           <Button
             variant="primary"
             size="lg"

@@ -61,7 +61,7 @@ Every view in the application (with the exception of isolated full-screen auth p
   - **All Authenticated (Viewer+):** `Places` (`/places`).
   - **Administrators Only:** `Data Quality` (`/quality`), `In-Tree Person Merge` (`/people/merge`), `Print / Posters` (`/export/print`), `Recent Changes` (`/history`), `GEDCOM Import & Export` (`/settings/gedcom`), `Tree Merge Wizard` (`/settings/merge`), and `Instance Settings` (`/settings`).
 - **`+ Add` Button (Editor & Admin only):**
-  - Quick action menu: *Add Person* (unconnected or family node), *Upload Photos*.
+  - Quick action menu: *Add Person* (unconnected or family node), *Upload Photos*, *Tell Me About My Family* (`/stories/intake`).
   - Hidden completely for unauthenticated guests and Viewers.
 - **Global Omnibox Search (`Cmd+K` / `Ctrl+K`):**
   - Accessible to all authenticated users (Viewer, Editor, Admin).
@@ -102,6 +102,7 @@ Every view in the application (with the exception of isolated full-screen auth p
 | `/persons/:id` | Person profile (UUID or `gid`) | Authenticated (Viewer+); Public Guest if public enabled (Masked living data) | [03 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/03-person-profile-page.md) |
 | `/places`, `/places/:id` | Places directory & detail | Authenticated (Viewer+) | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |
 | `/media` | Media archive & face tagging | Authenticated (Viewer+) | [04 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/04-media-gallery-page.md) |
+| `/stories/intake` | AI Story Intake & Subtree Staging Studio | Editors & Admins | [10 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/10-ai-story-intake-page.md) |
 | `/export/print` | Printable PDF studio | Administrators Only | [05 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/05-printable-pdf-page.md) |
 | `/settings/merge` | Tree import & merge wizard | Administrators Only | [06 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/06-tree-merge-page.md) |
 | `/history` | Global audit & change history feed | Administrators Only | [08 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/08-directory-pages.md) |

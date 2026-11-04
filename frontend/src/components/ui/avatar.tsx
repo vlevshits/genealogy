@@ -48,6 +48,12 @@ export const Avatar: React.FC<AvatarProps> = ({
   ref,
   ...props
 }) => {
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
   const ringClass = showGenderRing
     ? sex === 'male'
       ? 'ring-2 ring-male ring-offset-2 ring-offset-surface'
@@ -80,8 +86,13 @@ export const Avatar: React.FC<AvatarProps> = ({
     >
       {isLivingRedacted ? (
         <User className="h-1/2 w-1/2 opacity-70" />
-      ) : src ? (
-        <img src={src} alt={alt || name || ''} className="h-full w-full object-cover" />
+      ) : src && !imgError ? (
+        <img
+          src={src}
+          alt={alt || name || ''}
+          onError={() => setImgError(true)}
+          className="h-full w-full object-cover"
+        />
       ) : initials ? (
         <span>{initials}</span>
       ) : (

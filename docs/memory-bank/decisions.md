@@ -1,0 +1,75 @@
+# Architecture Decision Log (ADR)
+
+This document records the architectural, design, and structural decisions made across the Genealogy system. Decisions are assigned permanent identifiers (`ADR-NNN`) and are never deleted. When a decision is superseded, it is marked with strikethrough and links to its replacement.
+
+---
+
+## Index
+
+- [ADR-001: Single-Instance Architecture (1 Instance = 1 Family Tree)](#adr-001-single-instance-architecture-1-instance--1-family-tree)
+- [ADR-002: Runtime SQLx Parameter Binding (No Compile-Time Macros)](#adr-002-runtime-sqlx-parameter-binding-no-compile-time-macros)
+- [ADR-003: Session Cookies with `X-Requested-With` CSRF Header Verification](#adr-003-session-cookies-with-x-requested-with-csrf-header-verification)
+- [ADR-004: Standardized Error Envelope with Machine-Readable Codes Linked to i18n](#adr-004-standardized-error-envelope-with-machine-readable-codes-linked-to-i18n)
+- [ADR-005: Privacy-404 for Redacted and Living Person Access](#adr-005-privacy-404-for-redacted-and-living-person-access)
+- [ADR-006: Dual Identifier Resolution (`UUID` and Alphanumeric `gid`)](#adr-006-dual-identifier-resolution-uuid-and-alphanumeric-gid)
+- [ADR-007: CSS-First Design Tokens via Tailwind CSS v4 `@theme`](#adr-007-css-first-design-tokens-via-tailwind-css-v4-theme)
+- [ADR-008: In-Database Advisory Locking for Sequential Upgrades & CLI Operations](#adr-008-in-database-advisory-locking-for-sequential-upgrades--cli-operations)
+- [ADR-009: Strict Unauthenticated Navigation Segregation & Default Clean Slate](#adr-009-strict-unauthenticated-navigation-segregation--default-clean-slate)
+
+---
+
+### ADR-001: Single-Instance Architecture (1 Instance = 1 Family Tree)
+- **Status:** Accepted
+- **Context:** Many genealogy SaaS platforms use multi-tenant databases with complicated organization or tenant IDs, which risks data leaks between trees and complicates self-hosting.
+- **Decision:** Every deployment represents exactly one family tree. Multi-tenancy is deliberately omitted.
+- **Consequences:** Greatly simplifies database queries, permissions, and backups. Scaling out means running separate Docker Compose stacks for different families.
+
+### ADR-002: Runtime SQLx Parameter Binding (No Compile-Time Macros)
+- **Status:** Accepted
+- **Context:** SQLx's `query!` and `query_as!` macros connect to a live PostgreSQL instance at compile time or require an offline query cache file (`sqlx-data.json`), which easily falls out of sync and breaks Docker and CI sandbox builds.
+- **Decision:** Use runtime query binding via `sqlx::query` and `sqlx::query_as::<_, T>` with handwritten parameter bindings.
+- **Consequences:** 100% reproducible offline builds (`cargo build`, `cargo test`) without external database dependencies. Slightly less compile-time schema checking, mitigated by extensive integration test suites.
+
+### ADR-003: Session Cookies with `X-Requested-With` CSRF Header Verification
+- **Status:** Accepted
+- **Context:** Browser-based single-page applications require protection against Cross-Site Request Forgery (CSRF). Traditional token synchronizer patterns complicate stateless APIs.
+- **Decision:** Authenticate via `HttpOnly`, `SameSite=Lax` cookies. Require all mutating HTTP requests (`POST`, `PUT`, `PATCH`, `DELETE`) to send custom header `X-Requested-With: genealogy` and verify origin matching.
+- **Consequences:** Browsers prohibit cross-origin requests from setting custom headers without CORS preflight approval, preventing simple CSRF exploits while keeping the API clean.
+
+### ADR-004: Standardized Error Envelope with Machine-Readable Codes Linked to i18n
+- **Status:** Accepted
+- **Context:** Returning ad-hoc string error messages leads to untranslated errors or brittle client-side string scraping.
+- **Decision:** All non-2xx responses return `{"error": {"code": "...", "message": "...", "details": ...}}`. The `code` string maps directly to frontend translation keys (`errors.<code_value>`).
+- **Consequences:** The frontend provides localized error messages in Russian and English with consistent fallbacks.
+
+### ADR-005: Privacy-404 for Redacted and Living Person Access
+- **Status:** Accepted
+- **Context:** Returning `403 Forbidden` for a living or private individual confirms that a record exists with that identifier, creating an information leak.
+- **Decision:** Return `404 Not Found` indistinguishable from a missing ID whenever an unauthorized visitor requests a private or living person.
+- **Consequences:** Preserves total privacy for living relatives. Authorized users (Editor, Admin, Viewer) authenticate to inspect the profile.
+
+### ADR-006: Dual Identifier Resolution (`UUID` and Alphanumeric `gid`)
+- **Status:** Accepted
+- **Context:** Database relational integrity requires UUID primary keys, but users and GEDCOM files use short, human-readable IDs like `I0001` or `F0002`.
+- **Decision:** Support both `id` (UUID) and `gid` (string) across all public API routes and UI URLs.
+- **Consequences:** URL paths accept `/persons/I0001` or `/persons/550e8400-e29b-41d4-a716-446655440000`.
+
+### ADR-007: CSS-First Design Tokens via Tailwind CSS v4 `@theme`
+- **Status:** Accepted
+- **Context:** Tailwind CSS v4 transitions away from `tailwind.config.js` to native CSS variables and `@theme` directives in stylesheet entrypoints.
+- **Decision:** Define all design tokens, palette shades, lineage colors, and radii directly in `frontend/src/index.css`.
+- **Consequences:** Zero configuration overhead, instant hot-reloading with Vite, and seamless switching between light and dark modes via CSS custom properties.
+
+### ADR-008: In-Database Advisory Locking for Sequential Upgrades & CLI Operations
+- **Status:** Accepted
+- **Context:** Running concurrent migrations or CLI operations (backup, restore, import) against a shared database can corrupt schemas or duplicate data.
+- **Decision:** Acquire a PostgreSQL session-level advisory lock (`pg_advisory_lock(94218731)`) before performing startup migrations, restorations, or bulk imports.
+- **Consequences:** Guarantees serial execution of dangerous administrative operations.
+
+### ADR-009: Strict Unauthenticated Navigation Segregation & Default Clean Slate
+- **Status:** Accepted
+- **Context:** Unauthenticated visitors accessing a private family tree should not see active edit buttons, broken links to administrative sections, or partial UI chrome.
+- **Decision:** Unauthenticated navigation routes strictly isolate public vs private capabilities. If the instance has public access disabled, all routes immediately redirect to `/login`.
+- **Consequences:** Completely prevents unauthorized modification attempts and creates a clean presentation for public visitors.
+
+_Last curated: 2026-11-04 (memory bank bootstrap)_

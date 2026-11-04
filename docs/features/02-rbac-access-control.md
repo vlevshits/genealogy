@@ -47,9 +47,18 @@ Access is partitioned into four distinct tiers:
 | GEDCOM Import (Clean Slate & Merge) | No | No | No | No | **Yes** |
 | GEDCOM Export (`.ged` / `.gdz`) | No | No | No | No | **Yes** |
 | System Audit Feed / History (`/history`)| No | No | No | No | **Yes** |
+| **AI STORY INTAKE & MCP SERVER** | | | | | |
+| AI Story Intake & Staging (`/stories/intake`) | No | No | No | **Yes** | **Yes** |
+| Generate MCP Personal Access Token | No | No | **Yes** (`read:tree`) | **Yes** (read/write) | **Yes** (all scopes) |
+| Protected MCP Endpoint (`/api/v1/mcp`) | No | No | **Yes** (Bearer PAT) | **Yes** (Bearer PAT) | **Yes** (Bearer PAT) |
+| - MCP Tier A: Read & Search Tools | No | No | **Yes** (Living masked) | **Yes** (Full living access) | **Yes** (Full access) |
+| - MCP Tier B: Staged Subtree & Direct Mutation | No | No | No (403) | **Yes** | **Yes** |
+| - MCP Tier C: Admin Maintenance Tools | No | No | No (403) | No (403) | **Yes** |
+| Configure Built-in AI Provider & LLM Keys (`/settings/ai`)| No | No | No | No | **Yes** |
 | **ADMINISTRATION & SYSTEM OPERATIONS** | | | | | |
 | Resolve Data Quality Warnings (`/quality`)| No | No | No | No | **Yes** |
 | In-Tree Person Merge (`/people/merge`) | No | No | No | No | **Yes** |
+| Auto-Fix Place Hierarchy | No | No | No | No | **Yes** |
 | Enable/Disable Public Tree Sharing | No | No | No | No | **Yes** |
 | User & Role Management (`/settings/users`)| No | No | No | No | **Yes** |
 | Generate User Invitations | No | No | No | No | **Yes** |
@@ -124,23 +133,27 @@ When an administrator explicitly toggles public sharing (`ENABLE_PUBLIC_ACCESS=t
 Viewers are verified family members who have accepted an invitation and authenticated via Passkey or password:
 - **Full Living Person Visibility:** Because Viewers belong to the trusted family circle, they have full read access to living family members: full names, patronymics, exact birth dates, phone/email contact details, family relationships, timelines, and tagged photos.
 - **Private Item Shield:** If an Editor or Admin has explicitly marked an item as private (`is_private = TRUE`, e.g. sensitive adoption notes or private legal disputes), it remains hidden from Viewers.
-- **Strict Read-Only Boundary:** Viewers cannot add, edit, or delete any records, upload media, or dismiss quality warnings. All write endpoints reject Viewer requests with `403 Forbidden`.
-- **Bulk Extraction Protection:** Viewers cannot export GEDCOM files, generate printable PDF posters, or download database backups. This prevents unauthorized bulk data harvesting or leakage outside the family circle.
+- **Strict Read-Only Boundary:** Viewers cannot add, edit, or delete any records, upload media, or dismiss quality warnings. All write endpoints and the AI Story Intake Studio (`/stories/intake`) reject Viewer requests with `403 Forbidden`.
+- **Bulk Extraction Protection:** Viewers cannot export GEDCOM files, generate printable PDF posters, or download database backups.
+- **Scoped MCP Token Access:** Viewers can generate a Personal Access Token with scope `read:tree` to query tree records via external MCP clients; all responses enforce strict living-person masking (`И.` / `J.`), and write tool calls return `403 Forbidden` (`code: "forbidden"`).
 
 ### 3.4 Tier 4: Authenticated Editors (`Editor` — Content Curators)
 Editors are active family historians entrusted with recording family memory:
 - **Genealogical CRUD:** Full permission to create, edit, link, and delete individuals, families, life events, places, citations, and notes.
 - **Media Management:** Permission to upload photos, scan documents, adjust crop coordinates, and tag family faces.
+- **AI Story Intake & Staging:** Full access to the AI Story Intake Studio (`/stories/intake`) to submit narrative text or audio recordings, inspect and refine staged draft subtrees, reconcile matches, and commit new relatives into the live tree.
+- **MCP Server Access:** Permission to generate Personal Access Tokens with `read:tree`, `write:draft` (safe staging sandbox), and `write:direct` scopes to interface external AI tools with the tree.
 - **Undo Capability:** Access to the 60-second inline undo toast for their own editorial transactions.
-- **Operational Restrictions:** Editors **cannot** access instance settings, manage users, promote roles, enable public tree mode, create/rollback snapshots, export/import GEDCOM data, trigger PDF poster generation, view global audit history (`/history`), inspect or resolve data quality warnings (`/quality`), or execute duplicate person merges (`/people/merge`). These administrative and high-impact operations remain strictly isolated to Tier 5.
+- **Operational Restrictions:** Editors **cannot** access instance settings, manage users, promote roles, enable public tree mode, configure external AI API keys, create/rollback snapshots, export/import GEDCOM data, trigger PDF poster generation, view global audit history (`/history`), inspect or resolve data quality warnings (`/quality`), execute duplicate person merges (`/people/merge`), or execute Tier C administrative MCP tools (`admin:maintenance`). These administrative operations remain strictly isolated to Tier 5.
 
 ### 3.5 Tier 5: Administrators (`Admin` — Instance Ownership)
 Administrators maintain complete control over the application, server storage, and data portability:
-- **Instance Configuration:** Toggling public site sharing, setting default language, managing tree title.
+- **Instance Configuration:** Toggling public site sharing, setting default language, managing tree title, configuring external AI providers & API keys (`/settings/ai`).
 - **User Governance:** Inviting members, assigning/revoking roles (`Editor`, `Viewer`), deactivating accounts, and managing sign-in links.
 - **Bulk Data Portability:** Exclusive authority to perform GEDCOM imports (Clean Slate or Merge), GEDCOM exports (`.ged` / `.gdz`), and Printable PDF poster exports (`/export/print`).
 - **Disaster Recovery & Snapshots:** Exclusive access to download full `.tar.gz` database and media archives, execute tree snapshot rollbacks, and view the global audit log (`/history`).
 - **Quality & Deduplication Authority:** Exclusive authority to inspect data quality checks and soft warnings (`/quality`), dismiss warnings, and merge duplicate person records (`/people/merge`).
+- **Full MCP Administration:** Authority to execute all MCP tool tiers, including Tier C administrative tools (`get_data_quality_report`, `merge_duplicate_people`, `auto_fix_place_hierarchy`, `undo_transaction`).
 
 ---
 

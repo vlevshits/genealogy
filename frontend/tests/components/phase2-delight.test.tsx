@@ -304,7 +304,7 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
     const htmlQuality = renderWithProviders(<DataQualityPage />, 'en', 'admin');
     expect(htmlQuality).toContain('Data Quality &amp; Duplicate Detection');
     expect(htmlQuality).toContain('Death Before Birth');
-    expect(htmlQuality).toContain('This is correct');
+    expect(htmlQuality).toContain('Looks Correct');
 
     const firstDeceased =
       DEMO_TREE_DATA.nodes.find((n) => !n.is_living) ?? DEMO_TREE_DATA.nodes[0];
@@ -330,7 +330,7 @@ describe('Phase 2 ("Delight") — Components, Pages & Engineering Guardrails', (
     expect(htmlMerge).toContain('Сравнение и объединение дубликатов');
     expect(htmlMerge).toContain('role="radiogroup"');
     expect(htmlMerge).toContain('role="radio"');
-    expect(htmlMerge).toContain('Подтвердить и объединить записи');
+    expect(htmlMerge).toContain('Объединить записи');
   });
 
   it('renders PlacesMapView and PlacesPage in map view mode (/places?view=map)', () => {

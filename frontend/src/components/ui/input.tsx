@@ -171,7 +171,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
             type="button"
             aria-label={t('common.clear')}
             onClick={handleClear}
-            className="rounded p-0.5 text-tertiary hover:bg-surface-muted hover:text-primary cursor-pointer"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg -mr-1.5 text-tertiary hover:bg-surface-muted hover:text-primary cursor-pointer"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -217,7 +217,7 @@ export const PasswordInput: React.FC<PasswordInputProps> = ({
             type="button"
             aria-label={visible ? t('common.hidePassword') : t('common.showPassword')}
             onClick={() => setVisible((v) => !v)}
-            className="rounded p-1 text-tertiary hover:bg-surface-muted hover:text-primary cursor-pointer"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg -mr-1.5 text-tertiary hover:bg-surface-muted hover:text-primary cursor-pointer"
           >
             {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>

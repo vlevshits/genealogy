@@ -14,6 +14,10 @@ export interface ToastItem {
   description?: string;
   onRetry?: () => void;
   onUndo?: () => void;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
   durationSec?: number;
 }
 

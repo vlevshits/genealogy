@@ -19,6 +19,12 @@ export interface MediaCardProps {
 
 export const MediaCard: React.FC<MediaCardProps> = ({ asset, onSelect }) => {
   const { t } = useI18n();
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [asset.file_url]);
+
   const isImage = asset.mime_type.startsWith('image/');
   const isPdf =
     asset.mime_type === 'application/pdf' ||
@@ -26,7 +32,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ asset, onSelect }) => {
   const isAudio = asset.mime_type.startsWith('audio/');
 
   const aspectRatioStyle =
-    isImage && asset.width && asset.height && asset.height > 0
+    isImage && !imgError && asset.width && asset.height && asset.height > 0
       ? { aspectRatio: `${asset.width} / ${asset.height}` }
       : undefined;
 
@@ -39,11 +45,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({ asset, onSelect }) => {
         style={aspectRatioStyle}
         className="relative w-full overflow-hidden bg-surface-muted/70 min-h-44 flex items-center justify-center"
       >
-        {isImage ? (
+        {isImage && !imgError ? (
           <img
             src={asset.file_url}
             alt={asset.title}
             loading="lazy"
+            onError={() => setImgError(true)}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         ) : isPdf ? (
@@ -63,6 +70,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({ asset, onSelect }) => {
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 py-10 px-4 text-secondary">
             <ImageIcon className="h-10 w-10 text-tertiary" />
+            <span className="text-xs font-medium text-tertiary text-center line-clamp-1 px-2">
+              {asset.title}
+            </span>
           </div>
         )}
 
@@ -141,7 +151,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ asset, onSelect }) => {
             variant="secondary"
             size="sm"
             onClick={() => onSelect(asset)}
-            className="h-7 min-h-0 px-2.5 text-xs shrink-0"
+            className="px-2.5 text-xs shrink-0"
           >
             {t('mediaArchive.openStudioBtn')}
           </Button>

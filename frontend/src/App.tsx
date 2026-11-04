@@ -17,6 +17,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { DataQualityPage } from './pages/DataQualityPage';
 import { PersonMergePage } from './pages/PersonMergePage';
 import { PrintExportPage } from './pages/PrintExportPage';
+import { AiStoryIntakePage } from './pages/AiStoryIntakePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AuthPages } from './pages/AuthPages';
 import {
@@ -490,6 +491,45 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     );
   }
 
+  // 4h. AI Family Story Intake Studio route (/stories/intake) — Editor & Admin (10-ai-story-intake-page.md)
+  if (path.startsWith('/stories/intake') || path.startsWith('/stories')) {
+    if (user && user.role === 'viewer') {
+      return (
+        <AppShell
+          currentPath={path}
+          onNavigate={navigate}
+          instanceTitle={instanceTitle}
+          breadcrumbs={[
+            { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+            { id: 'stories', label: t('nav.storyIntake') },
+          ]}
+        >
+          <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <AccessDeniedCard
+              currentRole="viewer"
+              onOpenProfile={() => navigate('/settings/profile')}
+              onBackToTree={() => navigate('/tree')}
+            />
+          </div>
+        </AppShell>
+      );
+    }
+
+    return (
+      <AppShell
+        currentPath={path}
+        onNavigate={navigate}
+        instanceTitle={instanceTitle}
+        breadcrumbs={[
+          { id: 'home', label: t('nav.home'), onClick: () => navigate('/') },
+          { id: 'stories', label: t('nav.storyIntake') },
+        ]}
+      >
+        <AiStoryIntakePage onNavigate={navigate} />
+      </AppShell>
+    );
+  }
+
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
     const focusParam = new URLSearchParams(search).get('focus');
@@ -606,7 +646,10 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
           { id: 'places', label: t('nav.places') },
         ]}
       >
-        <PlacesPage initialView={viewParam === 'map' ? 'map' : 'list'} />
+        <PlacesPage
+          initialView={viewParam === 'map' ? 'map' : 'list'}
+          onNavigate={navigate}
+        />
       </AppShell>
     );
   }

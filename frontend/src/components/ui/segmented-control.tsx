@@ -18,6 +18,7 @@ export interface SegmentedControlProps<T extends string = string> {
   size?: ControlSize;
   disabled?: boolean;
   ariaLabel?: string;
+  'aria-label'?: string;
   className?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -30,9 +31,11 @@ export function SegmentedControl<T extends string = string>({
   size = 'md',
   disabled = false,
   ariaLabel,
+  'aria-label': ariaLabelAttr,
   className,
   ref,
 }: SegmentedControlProps<T>) {
+  const resolvedAriaLabel = ariaLabel || ariaLabelAttr;
   const [internalValue, setInternalValue] = useState<T | undefined>(
     defaultValue ?? options[0]?.value
   );
@@ -87,7 +90,7 @@ export function SegmentedControl<T extends string = string>({
     <div
       ref={ref}
       role="radiogroup"
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-lg border border-border bg-surface-muted p-0.5',
         disabled && 'opacity-50 pointer-events-none',

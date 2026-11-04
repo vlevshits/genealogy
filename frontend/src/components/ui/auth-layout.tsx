@@ -53,8 +53,8 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
           </span>
         </a>
         <div className="flex items-center gap-2">
-          <LanguageToggleButton size="sm" />
-          <ThemeToggleButton size="sm" />
+          <LanguageToggleButton size="md" />
+          <ThemeToggleButton size="md" />
         </div>
       </header>
 

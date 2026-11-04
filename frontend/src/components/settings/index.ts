@@ -8,5 +8,6 @@ export * from './FamilyMembersInvitesPanel';
 export * from './RoleChangeDialog';
 export * from './UserDeactivateDialog';
 export * from './UserTableRow';
+export * from './McpTokensPanel';
 export * from './gedcom';
 

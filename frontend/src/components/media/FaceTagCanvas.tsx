@@ -94,6 +94,11 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
     initialBox: NormalizedBox;
   } | null>(null);
   const [submittingTag, setSubmittingTag] = useState<boolean>(false);
+  const [imgError, setImgError] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [asset.file_url]);
 
   const isImage = asset.mime_type.startsWith('image/');
   const isPdf =
@@ -356,7 +361,7 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
       )}
 
       {/* Main Viewport Stage */}
-      <div className="relative flex-1 flex items-center justify-center overflow-auto p-4 min-h-80 sm:min-h-[460px]">
+      <div className="relative flex-1 min-h-[260px] lg:min-h-0 flex items-center justify-center overflow-auto p-3 sm:p-4">
         {isImage ? (
           <div
             ref={containerRef}
@@ -372,13 +377,23 @@ export const FaceTagCanvas: React.FC<FaceTagCanvasProps> = ({
               canEdit && isTaggingMode ? 'cursor-crosshair' : 'cursor-default'
             )}
           >
-            <img
-              ref={imgRef}
-              src={asset.file_url}
-              alt={asset.title}
-              draggable={false}
-              className="block max-h-[62vh] w-auto rounded-xl border border-border object-contain shadow-md"
-            />
+            {!imgError ? (
+              <img
+                ref={imgRef}
+                src={asset.file_url}
+                alt={asset.title}
+                draggable={false}
+                onError={() => setImgError(true)}
+                className="block max-h-[50vh] lg:max-h-[54vh] w-auto rounded-xl border border-border object-contain shadow-md"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 w-80 sm:w-96 h-60 rounded-xl border border-border bg-surface p-6 text-secondary shadow-md">
+                <FileText className="h-10 w-10 text-tertiary" />
+                <span className="text-xs font-medium text-center text-secondary">
+                  {asset.title}
+                </span>
+              </div>
+            )}
 
             {/* Candidate Suggestion Rectangles from Auto-Detect */}
             {canEdit &&

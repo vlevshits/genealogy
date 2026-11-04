@@ -58,6 +58,11 @@ CREATE INDEX places_name_trgm ON places USING gin (name gin_trgm_ops);
 - Library: **MapLibre GL** (or Leaflet) with tiles from `MAP_TILE_URL`.
 - Used on: person profile life map ([03 page](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/pages/03-person-profile-page.md)), place detail, and an optional **Family Map** (`/places?view=map`) showing all geocoded places with clustered pins and event counts.
 
+### 3.5 Place Hierarchy Auto-Fix & Quality Integration
+- **Administrative Quality Banner:** When the tree contains unparsed multi-part place strings, orphan localities missing parents, or unclassified `other` place types with recognizable administrative keywords, `/places` displays an alert banner to Administrators: *"N place hierarchy issues detected · [Review & Fix in Data Quality]"*.
+- **Automated Restructuring Engine:** Reuses the deterministic place quality engine specified in [15 §4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md#4-place-hierarchy-quality-engine--automated-restructuring). It decomposes comma-separated jurisdictions right-to-left, infers `place_type` from administrative keywords, matches orphan places by name stem and coordinate proximity ($\le 40\text{ km}$ district / $\le 200\text{ km}$ region), consolidates redundant nodes, and archives raw unparsed strings into `place_alt_names`.
+- **Atomic Undo & Reversibility:** All automated hierarchy fixes execute in a single SQL transaction logged in `change_log` and can be undone immediately via the UI toast or from `/history`.
+
 ---
 
 ## 4. Geocoding & Self-Hosting Privacy
@@ -88,6 +93,8 @@ Manual "Pick on map" always works without geocoding.
 | `GET/PATCH/DELETE` | `/api/v1/places/:id` | Detail incl. events here; update; delete (409 if referenced). |
 | `POST` | `/api/v1/places/:id/merge` | Merge `{ other_id }` into this place. |
 | `GET` | `/api/v1/places/geocode?q=` | Proxy to Nominatim (only if `GEOCODING_ENABLED`). |
+| `GET` | `/api/v1/quality/places/analysis` | Admin-only: Dry-run analysis of unparsed and orphan place hierarchies ([15 §7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md#7-api-endpoints)). |
+| `POST` | `/api/v1/quality/places/batch-fix` | Admin-only: Batch auto-fix high-confidence place hierarchies ([15 §7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md#7-api-endpoints)). |
 
 ---
 
@@ -100,3 +107,5 @@ Manual "Pick on map" always works without geocoding.
 - [ ] **Import Dedup:** Importing a GEDCOM with 500 repeated `PLAC` strings produces one record per unique place.
 - [ ] **Maps Optional:** With `MAP_TILE_URL` empty, the app has no map panes and makes zero external requests.
 - [ ] **Explicit Geocoding:** No place data is sent externally unless the user clicks "Find coordinates" with geocoding enabled.
+- [ ] **Data Quality Auto-Fix:** Multi-segment unparsed place strings and orphan localities can be automatically decomposed and linked into parent hierarchies from `/quality?tab=places_hierarchy` with atomic 1-click Undo.
+- [ ] **Lossless Alt-Names:** Original raw place strings are preserved in `place_alt_names` during automated restructuring.

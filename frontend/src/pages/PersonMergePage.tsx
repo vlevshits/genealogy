@@ -30,6 +30,19 @@ import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 import { cn } from '../lib/utils';
 
+import {
+  buildDefaultMergePreview,
+  computeDefaultFieldChoices,
+  normalizeMergePreviewResponse,
+  ScalarMergeRow,
+} from "../components/person/person-merge-helpers";
+
+export {
+  buildDefaultMergePreview,
+  computeDefaultFieldChoices,
+  normalizeMergePreviewResponse,
+};
+
 export interface PersonMergePageProps {
   initialPreview?: PersonMergePreviewDto;
   targetId?: string;
@@ -38,351 +51,7 @@ export interface PersonMergePageProps {
   onNavigate?: (path: string) => void;
 }
 
-export function buildDefaultMergePreview(
-  targetId: string = 'node-deceased-1',
-  sourceId: string = 'node-dup-2'
-): PersonMergePreviewDto {
-  return {
-    target: {
-      id: targetId,
-      gid: 'I0012',
-      sex: 'M',
-      is_living: false,
-      is_private: false,
-      primary_name: {
-        given_name: 'Pyotr',
-        patronymic: 'Fyodorovich',
-        surname: 'Shcheglov',
-      },
-      birth: { date: 'abt 1868', place: 'Tver Governorate' },
-      death: { date: '1931', place: 'Leningrad' },
-      biography: 'Merchant of the 2nd Guild in Tver.',
-      avatar_url: null,
-      notes: 'Merchant of the 2nd Guild in Tver.',
-    },
-    source: {
-      id: sourceId,
-      gid: 'I0388',
-      sex: 'M',
-      is_living: false,
-      is_private: false,
-      primary_name: {
-        given_name: 'Pyotr',
-        patronymic: null,
-        surname: 'Shcheglov',
-      },
-      birth: { date: '1868-02-03', place: 'Tver, Tver Governorate' },
-      death: { date: '1931-11-14', place: 'Leningrad' },
-      biography: 'Parish birth register entry #42.',
-      avatar_url: null,
-      notes: 'Parish birth register entry #42.',
-    },
-    combined_counts: {
-      events: 6,
-      media: 4,
-      families: 2,
-      notes: 3,
-    },
-  };
-}
 
-interface ScalarMergeRow {
-  field: string;
-  labelKey: string;
-  targetDisplay: string;
-  sourceDisplay: string;
-}
-
-function countTransferField(val: unknown, fallback: number): number {
-  if (typeof val === 'number') return val;
-  if (Array.isArray(val)) return val.length;
-  return fallback;
-}
-
-function normalizeMergeSide(
-  raw: Record<string, unknown> | undefined | null,
-  fallback: PersonMergePreviewDto['target']
-): PersonMergePreviewDto['target'] {
-  if (!raw) return fallback;
-  const rawPrimary = raw.primary_name as
-    | { given_name?: string; patronymic?: string | null; surname?: string }
-    | undefined;
-  const displayName =
-    typeof raw.display_name === 'string' ? raw.display_name.trim() : '';
-  const displayParts = displayName ? displayName.split(/\s+/) : [];
-  const givenName =
-    rawPrimary?.given_name ??
-    (typeof raw.given_name === 'string' ? raw.given_name : undefined) ??
-    displayParts[0] ??
-    fallback.primary_name.given_name;
-  const surname =
-    rawPrimary?.surname ??
-    (typeof raw.surname === 'string' ? raw.surname : undefined) ??
-    (displayParts.length > 1 ? displayParts[displayParts.length - 1] : '') ??
-    fallback.primary_name.surname;
-  const patronymic =
-    rawPrimary?.patronymic !== undefined
-      ? rawPrimary.patronymic
-      : typeof raw.patronymic === 'string'
-      ? raw.patronymic
-      : displayParts.length > 2
-      ? displayParts.slice(1, -1).join(' ')
-      : null;
-
-  const rawBirth = raw.birth as
-    | { date: string | null; place: string | null }
-    | null
-    | undefined;
-  const rawDeath = raw.death as
-    | { date: string | null; place: string | null }
-    | null
-    | undefined;
-
-  return {
-    ...fallback,
-    ...(raw as Partial<PersonMergePreviewDto['target']>),
-    id: typeof raw.id === 'string' ? raw.id : fallback.id,
-    gid: typeof raw.gid === 'string' ? raw.gid : fallback.gid,
-    sex:
-      raw.sex === 'M' || raw.sex === 'F' || raw.sex === 'U'
-        ? raw.sex
-        : fallback.sex,
-    primary_name: {
-      given_name: givenName,
-      patronymic,
-      surname,
-    },
-    birth: rawBirth
-      ? {
-          date: rawBirth.date ?? null,
-          place: rawBirth.place ?? null,
-        }
-      : {
-          date: typeof raw.birth_date === 'string' ? raw.birth_date : null,
-          place: typeof raw.birth_place === 'string' ? raw.birth_place : null,
-        },
-    death: rawDeath
-      ? {
-          date: rawDeath.date ?? null,
-          place: rawDeath.place ?? null,
-        }
-      : {
-          date: typeof raw.death_date === 'string' ? raw.death_date : null,
-          place: typeof raw.death_place === 'string' ? raw.death_place : null,
-        },
-    biography: (raw.biography as string | null | undefined) ?? null,
-    notes: (raw.notes as string | null | undefined) ?? null,
-  };
-}
-
-export function computeDefaultFieldChoices(
-  preview: PersonMergePreviewDto
-): Record<string, 'target' | 'source'> {
-  const tgt = preview.target;
-  const src = preview.source;
-
-  const isBlank = (val: unknown): boolean => {
-    if (val === null || val === undefined) return true;
-    const str = String(val).trim();
-    return str === '' || str === '—' || str === '-';
-  };
-
-  const isSexEmpty = (val: unknown): boolean => {
-    if (isBlank(val)) return true;
-    const str = String(val).trim();
-    return str === 'U';
-  };
-
-  const isDateApproximate = (dateStr: string): boolean => {
-    return (
-      /^(abt|about|calc|bef|before|aft|after|est|estimated|ок\.|около|до|после)\b/i.test(
-        dateStr.trim()
-      ) || dateStr.includes('?')
-    );
-  };
-
-  const getDateSpecificity = (dateStr: string): number => {
-    const trimmed = dateStr.trim();
-    if (isBlank(trimmed)) return 0;
-
-    const approx = isDateApproximate(trimmed);
-
-    // Full date: YYYY-MM-DD or DD.MM.YYYY
-    const isFullIso = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
-    const isFullDmy = /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(trimmed);
-    // Year + Month: YYYY-MM
-    const isYearMonth = /^\d{4}-\d{2}$/.test(trimmed);
-    // Year only: YYYY
-    const isYearOnly = /^\d{4}$/.test(trimmed);
-
-    let score = 10;
-    if (isFullIso || isFullDmy) {
-      score = 50;
-    } else if (isYearMonth) {
-      score = 35;
-    } else if (isYearOnly) {
-      score = 20;
-    } else {
-      const digitCount = (trimmed.match(/\d/g) || []).length;
-      score = 15 + Math.min(digitCount, 8);
-    }
-
-    if (approx) {
-      score -= 10;
-    }
-
-    // Tie-breaker: longer date string usually has more precision/detail
-    score += Math.min(trimmed.length, 20) * 0.1;
-
-    return score;
-  };
-
-  const fields = [
-    'name',
-    'sex',
-    'birth_date',
-    'birth_place',
-    'death_date',
-    'biography',
-  ] as const;
-
-  const result: Record<string, 'target' | 'source'> = {};
-
-  for (const field of fields) {
-    let targetVal = '';
-    let sourceVal = '';
-    let targetEmpty = false;
-    let sourceEmpty = false;
-
-    switch (field) {
-      case 'name': {
-        targetVal = [
-          tgt.primary_name?.given_name,
-          tgt.primary_name?.patronymic,
-          tgt.primary_name?.surname,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-        sourceVal = [
-          src.primary_name?.given_name,
-          src.primary_name?.patronymic,
-          src.primary_name?.surname,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-        targetEmpty = isBlank(targetVal);
-        sourceEmpty = isBlank(sourceVal);
-        break;
-      }
-      case 'sex': {
-        targetVal = tgt.sex ?? '';
-        sourceVal = src.sex ?? '';
-        targetEmpty = isSexEmpty(targetVal);
-        sourceEmpty = isSexEmpty(sourceVal);
-        break;
-      }
-      case 'birth_date': {
-        targetVal = tgt.birth?.date ?? '';
-        sourceVal = src.birth?.date ?? '';
-        targetEmpty = isBlank(targetVal);
-        sourceEmpty = isBlank(sourceVal);
-        break;
-      }
-      case 'birth_place': {
-        targetVal = tgt.birth?.place ?? '';
-        sourceVal = src.birth?.place ?? '';
-        targetEmpty = isBlank(targetVal);
-        sourceEmpty = isBlank(sourceVal);
-        break;
-      }
-      case 'death_date': {
-        targetVal = tgt.death?.date ?? '';
-        sourceVal = src.death?.date ?? '';
-        targetEmpty = isBlank(targetVal);
-        sourceEmpty = isBlank(sourceVal);
-        break;
-      }
-      case 'biography': {
-        targetVal = (tgt.biography || tgt.notes || '').trim();
-        sourceVal = (src.biography || src.notes || '').trim();
-        targetEmpty = isBlank(targetVal);
-        sourceEmpty = isBlank(sourceVal);
-        break;
-      }
-    }
-
-    if (!targetEmpty && sourceEmpty) {
-      result[field] = 'target';
-    } else if (targetEmpty && !sourceEmpty) {
-      result[field] = 'source';
-    } else if (!targetEmpty && !sourceEmpty) {
-      if (field === 'birth_date' || field === 'death_date') {
-        const targetSpec = getDateSpecificity(targetVal);
-        const sourceSpec = getDateSpecificity(sourceVal);
-        if (sourceSpec > targetSpec) {
-          result[field] = 'source';
-        } else {
-          result[field] = 'target';
-        }
-      } else {
-        result[field] = 'target';
-      }
-    } else {
-      // Both are empty
-      result[field] = 'target';
-    }
-  }
-
-  return result;
-}
-
-export function normalizeMergePreviewResponse(
-  res: Partial<PersonMergePreviewDto> & Record<string, unknown>,
-  targetId: string,
-  sourceId: string
-): PersonMergePreviewDto {
-  const def = buildDefaultMergePreview(targetId, sourceId);
-  const rawTarget = (res.target ?? res.keep_person) as
-    | Record<string, unknown>
-    | undefined;
-  const rawSource = (res.source ?? res.merge_person) as
-    | Record<string, unknown>
-    | undefined;
-  const target = normalizeMergeSide(rawTarget, def.target);
-  const source = normalizeMergeSide(rawSource, def.source);
-
-  const counts = res.combined_counts ?? {
-    events: countTransferField(
-      res.events_to_transfer,
-      (Array.isArray(target.events) ? target.events.length : 0) +
-        (Array.isArray(source.events) ? source.events.length : 0) ||
-        def.combined_counts.events
-    ),
-    media: countTransferField(
-      res.media_to_transfer,
-      def.combined_counts.media
-    ),
-    families: countTransferField(
-      res.families_to_transfer,
-      (Array.isArray(target.families) ? target.families.length : 0) +
-        (Array.isArray(source.families) ? source.families.length : 0) ||
-        def.combined_counts.families
-    ),
-    notes: countTransferField(
-      res.notes_to_transfer,
-      def.combined_counts.notes
-    ),
-  };
-
-  return {
-    ...res,
-    target,
-    source,
-    combined_counts: counts,
-  };
-}
 export const PersonMergePage: React.FC<PersonMergePageProps> = ({
   initialPreview,
   targetId: propTargetId,
@@ -491,6 +160,13 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
       .filter(Boolean)
       .join(' ');
 
+    const formatSexLabel = (sex: string | undefined): string => {
+      if (sex === 'M' || sex === 'male') return `${t('person.sex.male')} (M)`;
+      if (sex === 'F' || sex === 'female') return `${t('person.sex.female')} (F)`;
+      if (sex === 'U' || sex === 'unknown') return `${t('person.sex.unknown')} (U)`;
+      return sex || '—';
+    };
+
     return [
       {
         field: 'name',
@@ -501,8 +177,8 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
       {
         field: 'sex',
         labelKey: 'merge.fields.sex',
-        targetDisplay: tgt.sex,
-        sourceDisplay: src.sex,
+        targetDisplay: formatSexLabel(tgt.sex),
+        sourceDisplay: formatSexLabel(src.sex),
       },
       {
         field: 'birth_date',
@@ -529,7 +205,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         sourceDisplay: src.biography || src.notes || '—',
       },
     ];
-  }, [preview]);
+  }, [preview, t]);
 
   if (!isAdmin) {
     return (
@@ -1001,3 +677,4 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
 };
 
 export default PersonMergePage;
+

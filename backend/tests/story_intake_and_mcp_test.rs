@@ -1,0 +1,718 @@
+use axum::{
+    body::{to_bytes, Body},
+    http::{header, Method, Request, StatusCode},
+};
+use genealogy_backend::{
+    config::AppConfig,
+    routes::create_router,
+    services::auth::{AuthService, CreateInviteRequest, InviteRegisterRequest, SetupRequest},
+    state::AppState,
+};
+use serde_json::{json, Value};
+use tower::ServiceExt;
+
+async fn setup_test_env() -> (axum::Router, String, String, String) {
+    let temp_dir =
+        std::env::temp_dir().join(format!("genealogy_story_mcp_test_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let config = AppConfig {
+        app_env: "test".to_string(),
+        tree_title: "AI Story Intake & MCP Test Tree".to_string(),
+        enable_public_access: false,
+        backup_path: temp_dir.to_string_lossy().to_string(),
+        ..AppConfig::default()
+    };
+    let state = AppState::new(None, config);
+    {
+        let mut store = state.privacy_store.write().await;
+        store.persons.clear();
+        store.families.clear();
+        store.events.clear();
+        store.places.clear();
+        store.notes.clear();
+        store.media.clear();
+        store.dismissed_warnings.clear();
+        store.not_duplicate_pairs.clear();
+        store.change_log.clear();
+        store.story_drafts.clear();
+        store.personal_access_tokens.clear();
+    }
+
+    let (admin_setup, _) = AuthService::setup_initial_admin(
+        &state,
+        SetupRequest {
+            tree_title: None,
+            first_name: "Aleksandr".to_string(),
+            last_name: "Levshits".to_string(),
+            email: "admin@levshits.family".to_string(),
+            passkey: None,
+            password: Some("AdminStrongPass123!".to_string()),
+            emergency_token: None,
+        },
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    let admin_auth = format!("Bearer {}", admin_setup.session_token);
+    let admin_id = uuid::Uuid::parse_str(&admin_setup.user.id).unwrap();
+
+    let create_role = |role: &str, email: &str, first_name: &str| {
+        let state_clone = state.clone();
+        let role_str = role.to_string();
+        let email_str = email.to_string();
+        let first_str = first_name.to_string();
+        async move {
+            let inv = AuthService::create_invitation(
+                &state_clone,
+                Some(admin_id),
+                CreateInviteRequest {
+                    role: role_str.clone(),
+                    email: Some(email_str.clone()),
+                    invitee_name: None,
+                    person_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            let (reg, _) = AuthService::register_with_invitation(
+                &state_clone,
+                InviteRegisterRequest {
+                    invite_token: inv.token,
+                    first_name: first_str,
+                    last_name: "Levshits".to_string(),
+                    email: Some(email_str),
+                    passkey: None,
+                    password: Some("UserStrongPass123!".to_string()),
+                },
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+            format!("Bearer {}", reg.session_token)
+        }
+    };
+
+    let editor_auth = create_role("editor", "editor@levshits.family", "Elena").await;
+    let viewer_auth = create_role("viewer", "viewer@levshits.family", "Viktor").await;
+    let app = create_router(state);
+
+    (app, admin_auth, editor_auth, viewer_auth)
+}
+
+async fn post_json(
+    app: &axum::Router,
+    uri: &str,
+    auth: &str,
+    payload: Value,
+) -> (StatusCode, Value) {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(uri)
+                .header(header::AUTHORIZATION, auth)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-requested-with", "genealogy")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, body)
+}
+
+async fn get_json(app: &axum::Router, uri: &str, auth: &str) -> (StatusCode, Value) {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(uri)
+                .header(header::AUTHORIZATION, auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, body)
+}
+
+async fn delete_req(app: &axum::Router, uri: &str, auth: &str) -> StatusCode {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(uri)
+                .header(header::AUTHORIZATION, auth)
+                .header("x-requested-with", "genealogy")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    res.status()
+}
+
+#[tokio::test]
+async fn test_bilingual_story_parsing_refinement_and_sandbox_isolation() {
+    let (app, _admin_auth, editor_auth, viewer_auth) = setup_test_env().await;
+
+    // 1. Viewer is forbidden from parsing stories
+    let (v_status, _) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &viewer_auth,
+        json!({
+            "raw_text": "I am Test Test, born in 1995 June 29, my bf is Test1 Test1"
+        }),
+    )
+    .await;
+    assert_eq!(v_status, StatusCode::FORBIDDEN);
+
+    // 2. Editor parses an English family story
+    let (en_status, en_draft) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "raw_text": "I am Test Test, born in 1995 June 29, my bf is Test1 Test1, born in 1993.",
+            "is_new_speaker": true
+        }),
+    )
+    .await;
+    assert_eq!(en_status, StatusCode::CREATED, "en_draft: {en_draft}");
+    let draft_id = en_draft["id"].as_str().unwrap().to_string();
+    assert_eq!(en_draft["status"], "draft");
+
+    let persons = en_draft["extracted_data"]["persons"].as_array().unwrap();
+    assert_eq!(persons.len(), 2);
+    assert_eq!(persons[0]["given_name"], "Test");
+    assert_eq!(persons[0]["surname"], "Test");
+    assert_eq!(persons[0]["relation_to_speaker"], "self");
+    assert_eq!(persons[0]["birth_year"], 1995);
+    assert_eq!(persons[0]["birth_date_text"], "29 JUN 1995");
+
+    assert_eq!(persons[1]["given_name"], "Test1");
+    assert_eq!(persons[1]["surname"], "Test1");
+    assert_eq!(persons[1]["relation_to_speaker"], "partner");
+    assert_eq!(persons[1]["sex"], "M");
+    assert_eq!(persons[1]["birth_year"], 1993);
+
+    let unions = en_draft["extracted_data"]["unions"].as_array().unwrap();
+    assert_eq!(unions.len(), 1);
+
+    // Verify sandbox isolation: live tree still has 0 individuals
+    let (_, people_list) = get_json(&app, "/api/v1/people", &editor_auth).await;
+    assert_eq!(people_list["items"].as_array().unwrap().len(), 0);
+
+    // 3. Conversational refinement updates existing partner and adds a sister
+    let (ref_status, refined) = post_json(
+        &app,
+        "/api/v1/ai/refine-draft",
+        &editor_auth,
+        json!({
+            "draft_id": draft_id,
+            "clarification_text": "My boyfriend's surname is Smith and he was born in 1993 in London. Also my sister Maria Test was born in 1998."
+        }),
+    )
+    .await;
+    assert_eq!(ref_status, StatusCode::OK, "refined: {refined}");
+    let ref_persons = refined["extracted_data"]["persons"].as_array().unwrap();
+    assert_eq!(ref_persons.len(), 3);
+    let partner = ref_persons
+        .iter()
+        .find(|p| p["relation_to_speaker"] == "partner")
+        .unwrap();
+    assert_eq!(partner["surname"], "Smith");
+    assert_eq!(partner["birth_place"], "London");
+    let sister = ref_persons
+        .iter()
+        .find(|p| p["relation_to_speaker"] == "sister")
+        .unwrap();
+    assert_eq!(sister["given_name"], "Maria");
+    assert_eq!(sister["birth_year"], 1998);
+
+    // 4. Audio transcription endpoint works with Russian hint
+    let (tr_status, tr_body) = post_json(
+        &app,
+        "/api/v1/ai/transcribe",
+        &editor_auth,
+        json!({
+            "lang": "ru",
+            "transcript_hint": "Я Иван Сергеевич Петров, родился 29 июня 1995 в Москве."
+        }),
+    )
+    .await;
+    assert_eq!(tr_status, StatusCode::OK);
+    assert_eq!(tr_body["language"], "ru");
+    assert!(tr_body["transcript"]
+        .as_str()
+        .unwrap()
+        .contains("Иван Сергеевич Петров"));
+}
+
+#[tokio::test]
+async fn test_russian_story_reconciliation_atomic_commit_and_one_click_undo() {
+    let (app, admin_auth, editor_auth, _viewer_auth) = setup_test_env().await;
+
+    // 1. Seed existing speaker (Иван Петров, born 1995, no patronymic yet) and his mother (Елена Петрова, born 1970)
+    let (_, ivan_res) = post_json(
+        &app,
+        "/api/v1/persons",
+        &editor_auth,
+        json!({
+            "sex": "M",
+            "given_name": "Иван",
+            "surname": "Петров",
+            "is_living": true
+        }),
+    )
+    .await;
+    let ivan_id = ivan_res["id"].as_str().unwrap().to_string();
+    post_json(
+        &app,
+        "/api/v1/events",
+        &editor_auth,
+        json!({
+            "individual_id": ivan_id,
+            "event_type": "birth",
+            "gedcom_date": "29 JUN 1995"
+        }),
+    )
+    .await;
+
+    let (_, elena_res) = post_json(
+        &app,
+        "/api/v1/persons",
+        &editor_auth,
+        json!({
+            "sex": "F",
+            "given_name": "Елена",
+            "surname": "Петрова",
+            "is_living": true
+        }),
+    )
+    .await;
+    let elena_id = elena_res["id"].as_str().unwrap().to_string();
+    post_json(
+        &app,
+        "/api/v1/events",
+        &editor_auth,
+        json!({
+            "individual_id": elena_id,
+            "event_type": "birth",
+            "gedcom_date": "12 MAY 1970"
+        }),
+    )
+    .await;
+
+    // Link Elena as Ivan's mother in an existing parent family
+    let (fam_status, _) = post_json(
+        &app,
+        "/api/v1/families",
+        &editor_auth,
+        json!({
+            "partner2_id": elena_id,
+            "relationship_type": "married",
+            "children_ids": [ivan_id]
+        }),
+    )
+    .await;
+    assert_eq!(fam_status, StatusCode::CREATED);
+
+    // 2. Parse a rich Russian narrative anchored to Ivan (`speaker_person_id = ivan_id`)
+    let ru_story = "Я Иван Сергеевич Петров, родился 29 июня 1995 в Москве. Моя девушка — Анна Смирнова, родилась в 1997 году. Моя мама — Елена Ивановна Петрова (в девичестве Соколова), родилась 12 мая 1970 в Твери. Мой папа — Сергей Петров, родился в 1968 году. У нас есть дочка София, родилась в 2022 году.";
+    let (parse_status, draft) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "raw_text": ru_story,
+            "speaker_person_id": ivan_id
+        }),
+    )
+    .await;
+    assert_eq!(parse_status, StatusCode::CREATED, "draft: {draft}");
+    let draft_id = draft["id"].as_str().unwrap().to_string();
+
+    // 3. Verify relationship-centric reconciliation matches speaker (100%) and mother (>= 90%) while keeping net-new relatives as create_new
+    let (rec_status, reconciled) = get_json(
+        &app,
+        &format!("/api/v1/ai/drafts/{draft_id}/reconcile"),
+        &editor_auth,
+    )
+    .await;
+    assert_eq!(rec_status, StatusCode::OK);
+    let matches = reconciled["reconciliation_matches"].as_array().unwrap();
+    let draft_persons = reconciled["extracted_data"]["persons"].as_array().unwrap();
+    assert_eq!(draft_persons.len(), 5);
+
+    let speaker_temp_id = draft_persons
+        .iter()
+        .find(|p| p["relation_to_speaker"] == "self")
+        .unwrap()["temp_id"]
+        .as_str()
+        .unwrap();
+    let mother_temp_id = draft_persons
+        .iter()
+        .find(|p| p["relation_to_speaker"] == "mother")
+        .unwrap()["temp_id"]
+        .as_str()
+        .unwrap();
+    let partner_temp_id = draft_persons
+        .iter()
+        .find(|p| p["relation_to_speaker"] == "partner")
+        .unwrap()["temp_id"]
+        .as_str()
+        .unwrap();
+
+    let speaker_match = matches
+        .iter()
+        .find(|m| m["draft_temp_id"] == speaker_temp_id)
+        .unwrap();
+    assert_eq!(speaker_match["selected_action"], "link_enrich");
+    assert_eq!(speaker_match["matched_person_id"], ivan_id);
+    assert_eq!(speaker_match["confidence"], 100);
+
+    let mother_match = matches
+        .iter()
+        .find(|m| m["draft_temp_id"] == mother_temp_id)
+        .unwrap();
+    assert_eq!(mother_match["selected_action"], "link_enrich");
+    assert_eq!(mother_match["matched_person_id"], elena_id);
+    assert!(
+        mother_match["confidence"].as_u64().unwrap() >= 90,
+        "Expected mother confidence >= 90, got: {mother_match}"
+    );
+
+    let partner_match = matches
+        .iter()
+        .find(|m| m["draft_temp_id"] == partner_temp_id)
+        .unwrap();
+    assert_eq!(partner_match["selected_action"], "create_new");
+
+    // 4. Atomically commit the draft
+    let (commit_status, commit_res) = post_json(
+        &app,
+        &format!("/api/v1/ai/drafts/{draft_id}/commit"),
+        &editor_auth,
+        json!({}),
+    )
+    .await;
+    assert_eq!(commit_status, StatusCode::OK, "commit_res: {commit_res}");
+    let tx_id = commit_res["tx_id"].as_str().unwrap().to_string();
+    assert!(!tx_id.is_empty());
+    assert_eq!(
+        commit_res["created_person_ids"].as_array().unwrap().len(),
+        3,
+        "Expected 3 net-new people (partner Anna, father Sergey, daughter Sofia)"
+    );
+    assert_eq!(
+        commit_res["updated_person_ids"].as_array().unwrap().len(),
+        2,
+        "Expected 2 enriched people (Ivan and Elena)"
+    );
+
+    // Verify Ivan was enriched with patronymic Сергеевич and Elena with patronymic Ивановна + maiden name Соколова
+    let (_, ivan_after) = get_json(&app, &format!("/api/v1/persons/{ivan_id}"), &editor_auth).await;
+    assert_eq!(ivan_after["primary_name"]["patronymic"], "Сергеевич");
+
+    let (_, elena_after) =
+        get_json(&app, &format!("/api/v1/persons/{elena_id}"), &editor_auth).await;
+    assert_eq!(elena_after["primary_name"]["patronymic"], "Ивановна");
+    assert_eq!(elena_after["birth_surname"], "Соколова");
+
+    // Verify total people count is now 5
+    let (_, all_people) = get_json(&app, "/api/v1/people", &editor_auth).await;
+    assert_eq!(all_people["items"].as_array().unwrap().len(), 5);
+
+    // 5. Undo the entire story commit in 1 click using the shared tx_id
+    let (undo_status, undo_res) = post_json(
+        &app,
+        &format!("/api/v1/history/tx/{tx_id}/undo"),
+        &admin_auth,
+        json!({}),
+    )
+    .await;
+    assert_eq!(undo_status, StatusCode::OK, "undo_res: {undo_res}");
+
+    // Verify all 3 net-new individuals were removed and Ivan/Elena were restored
+    let (_, people_after_undo) = get_json(&app, "/api/v1/people", &editor_auth).await;
+    assert_eq!(people_after_undo["items"].as_array().unwrap().len(), 2);
+
+    let (_, ivan_restored) =
+        get_json(&app, &format!("/api/v1/persons/{ivan_id}"), &editor_auth).await;
+    assert!(ivan_restored["primary_name"]["patronymic"].is_null());
+
+    // Verify the story draft status was reset back to "draft"
+    let (_, draft_after_undo) =
+        get_json(&app, &format!("/api/v1/ai/drafts/{draft_id}"), &editor_auth).await;
+    assert_eq!(draft_after_undo["status"], "draft");
+}
+
+#[tokio::test]
+async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
+    let (app, admin_auth, _editor_auth, viewer_auth) = setup_test_env().await;
+
+    // Seed one living person (John Doe, born 1995) and one deceased ancestor (Arthur Doe, born 1910, died 1985)
+    let (_, living_res) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "sex": "M",
+            "given_name": "John",
+            "surname": "Doe",
+            "is_living": true
+        }),
+    )
+    .await;
+    let living_id = living_res["id"].as_str().unwrap().to_string();
+    post_json(
+        &app,
+        "/api/v1/events",
+        &admin_auth,
+        json!({
+            "individual_id": living_id,
+            "event_type": "birth",
+            "date_text": "15 MAR 1995",
+            "place_path": "Boston"
+        }),
+    )
+    .await;
+
+    let (_, deceased_res) = post_json(
+        &app,
+        "/api/v1/persons",
+        &admin_auth,
+        json!({
+            "sex": "M",
+            "given_name": "Arthur",
+            "surname": "Doe",
+            "is_living": false
+        }),
+    )
+    .await;
+    let _deceased_id = deceased_res["id"].as_str().unwrap().to_string();
+
+    // 1. Unauthenticated request to /api/v1/mcp is rejected with 401
+    let unauth_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/mcp")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/list"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+    // 2. Viewer cannot mint a PAT with write:tree scope (403 Forbidden)
+    let (bad_pat_status, _) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &viewer_auth,
+        json!({
+            "name": "Escalated Token",
+            "scopes": ["read:tree", "write:tree"]
+        }),
+    )
+    .await;
+    assert_eq!(bad_pat_status, StatusCode::FORBIDDEN);
+
+    // 3. Viewer mints a read-only PAT (read:tree)
+    let (v_pat_status, v_pat_body) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &viewer_auth,
+        json!({
+            "name": "Viewer Claude Desktop",
+            "scopes": ["read:tree"],
+            "expires_in_days": 30
+        }),
+    )
+    .await;
+    assert_eq!(v_pat_status, StatusCode::CREATED);
+    let viewer_raw_pat = v_pat_body["token"].as_str().unwrap().to_string();
+    let viewer_pat_id = v_pat_body["token_info"]["id"].as_str().unwrap().to_string();
+    assert!(viewer_raw_pat.starts_with("mcp_pat_"));
+
+    // Verify GET /api/v1/mcp/tokens lists the token metadata without exposing the raw token
+    let (list_status, list_body) = get_json(&app, "/api/v1/mcp/tokens", &viewer_auth).await;
+    assert_eq!(list_status, StatusCode::OK);
+    let listed = list_body["items"].as_array().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert!(listed[0].get("token").is_none());
+    assert!(listed[0].get("token_hash").is_none());
+
+    // 4. Viewer PAT calls tools/list -> only Tier A tools are returned
+    let (v_tools_status, v_tools_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(v_tools_status, StatusCode::OK);
+    let v_tools = v_tools_res["result"]["tools"].as_array().unwrap();
+    assert!(
+        v_tools.iter().all(|t| t["tier"] == "A"),
+        "Viewer PAT must only list Tier A tools"
+    );
+
+    // 5. Viewer PAT calls get_individual on living person -> given_name is masked to initial "J." and birth date is year-only
+    let (v_get_status, v_get_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "get_individual",
+                "arguments": { "person_id": living_id }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(v_get_status, StatusCode::OK);
+    let v_person = &v_get_res["result"]["structuredContent"];
+    assert_eq!(
+        v_person["primary_name"]["given_name"], "J.",
+        "Viewer MCP call must mask living given name to initial"
+    );
+    assert_eq!(v_person["birth"]["date"], "1995");
+    assert!(v_person["birth"]["place"].is_null());
+
+    // 6. Viewer PAT attempting Tier B (create_individual) or Tier C (merge_duplicate_individuals) is rejected with 403 / -32600
+    let (v_mut_status, v_mut_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "create_individual",
+                "arguments": { "given_name": "Unauthorized", "surname": "Person" }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(v_mut_status, StatusCode::FORBIDDEN);
+    assert_eq!(v_mut_res["error"]["code"], -32600);
+
+    // 7. Admin mints a full-access PAT and invokes Tier A, B, and C tools
+    let (a_pat_status, a_pat_body) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &admin_auth,
+        json!({
+            "name": "Admin MCP Agent",
+            "scopes": ["read:tree", "write:tree", "write:ai_drafts", "admin:maintenance"]
+        }),
+    )
+    .await;
+    assert_eq!(a_pat_status, StatusCode::CREATED);
+    let admin_raw_pat = a_pat_body["token"].as_str().unwrap().to_string();
+
+    // Admin PAT sees full unredacted living person
+    let (a_get_status, a_get_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "get_individual",
+                "arguments": { "person_id": living_id }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(a_get_status, StatusCode::OK);
+    assert_eq!(
+        a_get_res["result"]["structuredContent"]["primary_name"]["given_name"],
+        "John"
+    );
+
+    // Admin PAT creates an individual via MCP tool create_individual
+    let (a_create_status, a_create_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "create_individual",
+                "arguments": {
+                    "given_name": "Clara",
+                    "surname": "Doe",
+                    "sex": "F",
+                    "birth_date": "1998"
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(a_create_status, StatusCode::OK);
+    assert_eq!(
+        a_create_res["result"]["structuredContent"]["person"]["primary_name"]["given_name"],
+        "Clara"
+    );
+
+    // 8. Revoke Viewer PAT and verify subsequent MCP call returns 401 Unauthorized
+    let rev_status = delete_req(
+        &app,
+        &format!("/api/v1/mcp/tokens/{viewer_pat_id}"),
+        &viewer_auth,
+    )
+    .await;
+    assert_eq!(rev_status, StatusCode::NO_CONTENT);
+
+    let (after_rev_status, _) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(after_rev_status, StatusCode::UNAUTHORIZED);
+}

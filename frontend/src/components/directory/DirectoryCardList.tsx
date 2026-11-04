@@ -123,7 +123,7 @@ export const DirectoryCardList: React.FC<DirectoryCardListProps> = ({
                 onClick={() => onFocusInTree(item.id)}
                 leftIcon={<GitBranch className="h-4 w-4" />}
                 aria-label={t('directory.actionTree')}
-                className="px-2"
+                className="min-h-10 min-w-10 px-2.5"
               />
               <Button
                 variant="ghost"
@@ -131,7 +131,7 @@ export const DirectoryCardList: React.FC<DirectoryCardListProps> = ({
                 onClick={() => onOpenPerson(item.id)}
                 rightIcon={<ChevronRight className="h-4 w-4" />}
                 aria-label={t('directory.actionOpen')}
-                className="px-2"
+                className="min-h-10 min-w-10 px-2.5"
               />
             </div>
           </div>

@@ -31,7 +31,7 @@
 12. EN + RU localization and anti-fluff copywriting from day 0 ([00](features/00-internationalization-localization.md)).
 13. **Progressive Web App (PWA) & Mobile/Tablet UX:** Web App Manifest, maskable and Apple touch icons, standalone launch, service worker static asset caching, mobile `BottomNav`, swipeable quick-view bottom sheets, and multi-touch tree gestures (pinch-to-zoom, pan) ([18](features/18-progressive-web-app-mobile.md)).
 
-### Phase 2 — "Delight" (Completed: Core, Milestones 2.1, 2.2, 2.3, 2.4, 2.5; In Progress: Milestones 2.6, 2.7, 2.8)
+### Phase 2 — "Delight" (Completed: Core, Milestones 2.1, 2.2, 2.3, 2.4, 2.5; In Progress: Milestones 2.6, 2.7, 2.8, 2.9)
 1. **Visualizations & Discovery:** Face tagging & primary avatar synchronization ([06](features/06-media-face-tagging.md)), fan chart (180°/360° concentric SVG, 4–8 generations, Ahnentafel indexing, quadrant colors), and Kinship Finder (LCA + bidirectional BFS, natural localized EN/RU kinship terms) ([04](features/04-tree-visualizations.md)).
 2. **Dashboard Widgets & Anniversaries:** 4 live widgets (`AnniversariesWidget` with Julian-to-Gregorian shift and round milestone badges, `RecentActivityWidget` with 1-click Undo, `TreeGlanceWidget`, `LatestPhotosWidget`), default user `start_page: "dashboard"` setting ([16 §4](features/16-dashboard-home.md#4-dashboard-widgets)).
 3. **Data Quality Warnings & Duplicate Person Merge (Admin only):** 10 soft validation rules with fuzzy-date windowing, warning dismissal memory (`dismissed_warnings`), Quick-Add duplicate detection guard, and 2-column side-by-side Person Merge wizard (`/people/merge`) with atomic transactions and GID aliases redirection ([15](features/15-data-quality-duplicates.md)).
@@ -331,6 +331,63 @@
     - Verify manual box drawing and resizing continues to work alongside auto-detection.
     - Verify living person privacy masking in public guest mode.
 
+#### Milestone 2.9 — Automated Place Hierarchy & Relationship-Centric Quality Hardening
+- **`TASK-DATA-QUALITY-PLACE-HIERARCHY-AND-RELATIONSHIP-MERGE`**: Automated Place Hierarchy Normalization & Relationship-Centric Duplicate Detection
+  - **User Story & Trigger:**
+    - "Let's create a feature into data quality area to automatically fix hierarchy based on names/locations for places" ([15 §4](features/15-data-quality-duplicates.md#4-place-hierarchy-quality-engine--automated-restructuring), [12 §3.5](features/12-places.md#35-place-hierarchy-auto-fix--quality-integration)).
+    - "merge logic should focus on relationship cause i can easily have father and son with same name and surname, but in case if we know parents, siblings and etc - this is much more important to detect if this is a duplicate, so i expect duplicates be found mostly in cases where we import and additional tree to the app which has some people which are same as ones we have in teh system. For trees created or imported but without merges i don;t expect to have any duplicates except for the case when i have detached subtrees or detached people" ([15 §3.1](features/15-data-quality-duplicates.md#31-relationship-centric-candidate-matching-engine), [09 §3.1](features/09-tree-import-merge-reconciliation.md#31-structural-kinship-disqualification--generational-separation)).
+  - **Backend Acceptance Criteria:**
+    - **Structural Kinship Disqualification & Generational Separation:**
+      - Hard disqualification (`score = 0`) for candidates that are direct ancestors/descendants (e.g. father/son sharing identical names), spouses, confirmed distinct siblings in the same family, or individuals in the same connected tree component with confirmed, non-matching biological parents and distinct generational lifespans.
+      - Name similarity alone is capped at 40%, ensuring that name matches never qualify as duplicate candidates without relational or vital date corroboration.
+      - Relational weighting: Parents alignment (35%), Spouse(s) alignment (25%), Children set overlap (20%), Vital dates/places (20%).
+      - Active duplicate candidate evaluation focused on detached subtrees, unconnected singletons, and multi-tree imports.
+    - **Place Hierarchy Analysis & Local Heuristics Engine:**
+      - Implement `GET /api/v1/quality/places/analysis`: scans all place records and detects:
+        - `unparsed_paths`: multi-part comma/semicolon-separated names (e.g. "Тверь, Тверская губерния, Российская империя") with `parent_id = NULL`.
+        - `orphans`: localities or districts with `parent_id = NULL` linkable to existing parent regions/districts.
+        - `type_mismatches`: `place_type = "other"` with recognizable administrative keywords.
+        - `redundant_duplicates`: duplicate place nodes at the same hierarchy tier.
+      - Right-to-left decomposition with abbreviation stripping (`г. `, `с. `, `д. `, `пос. `, `губ. `, `обл. `, `уезд `, `р-н `, `City of `, `County`, etc.).
+      - Keyword dictionary for `place_type` inference (`губерния`, `область`, `уезд`, `район`, `волость`, `город`, `село`, `деревня`, `Governorate`, `Oblast`, `District`, `County`, `City`, `Village`).
+      - Local offline coordinate proximity & containment calculation using Haversine formula ($d \le 40\text{ km}$ district / $d \le 200\text{ km}$ region / child cluster bounding box $[lat_{min}, lat_{max}] \times [lon_{min}, lon_{max}]$ with 15% margin). Zero external network egress.
+      - Confidence scoring: High ($\ge 85\%$), Medium ($60\% - 84\%$), Low ($< 60\%$).
+    - **Restructuring & Consolidation Execution:**
+      - Implement `POST /api/v1/quality/places/fix` and `POST /api/v1/quality/places/batch-fix`.
+      - Intermediate parent place creation when missing, reusing existing nodes.
+      - Leaf node `name` updated to clean locality name.
+      - Original unparsed string archived into `place_alt_names` (`note: "Original unparsed path"`) for lossless history and searchability.
+      - Re-point all associated `life_events` and child places to the clean leaf node.
+      - Cycle protection check (`ensure_no_place_cycle`).
+      - Recompute `full_name` for the updated branch.
+      - Atomic database transaction logged in `change_log` with 1-click Undo capability.
+      - Strict RBAC: All quality endpoints restricted to `RequireAdmin` (`403 Forbidden` for Viewers/Editors).
+  - **Frontend Acceptance Criteria:**
+    - `DataQualityPage.tsx`:
+      - Add **Place Hierarchy** tab (`places_hierarchy`) alongside All Warnings, Critical, Warnings, Info, and Duplicates.
+      - Header summary chips: display open place hierarchy fixes count.
+      - Place Hierarchy Sub-View:
+        - Category filters: *All issues*, *Unparsed paths*, *Orphan places*, *Redundant duplicates*.
+        - Prominent batch action button: *"⚡ Auto-fix All High Confidence ({count})"* with dry-run confirmation modal.
+        - Place comparison cards: Current flat place vs. Proposed hierarchy tree (`[Country] → [Region] → [District] → [Clean Leaf]`), confidence pill badge, rule explanation, and actions (`Apply Fix`, `Customize / Pick Parent`, `Dismiss`).
+        - Single-place customization modal for manual parent selection and leaf name editing.
+        - 1-Click Undo toast: immediate toast notification allowing instant transaction rollback.
+      - Duplicates Tab:
+        - Update candidate duplicate cards to display relational context badges (*Shared parents*, *Shared spouse*, *Detached singleton*) and hide disqualified kinship relations.
+    - `PlacesPage.tsx`:
+      - Add an administrative alert banner at the top of `/places`: *"N place hierarchy issues detected · [Review & Fix in Data Quality]"*.
+    - UI & i18n Quality: Full EN/RU bilingual parity, zero emojis or icon glyphs in translation JSON strings, Lucide React icons used exclusively.
+  - **QA & Verification Criteria:**
+    - Relational duplicate checks: Father and son with same name verified to produce 0% match score and zero duplicate warning.
+    - Detached singleton duplicate check: Unconnected individual matching an existing person's parents/birth date verified to be flagged.
+    - Place decomposition: "Тверь, Тверская губерния, Российская империя" decomposed into 3-tier hierarchy with clean "Тверь" leaf node.
+    - Alt-name preservation: Original string preserved in `place_alt_names`.
+    - Life events integrity: Events attached to old place verified to remain attached to leaf place.
+    - Coordinate proximity: Orphan village matching parent cluster bounding box assigned $\ge 90\%$ confidence.
+    - Batch auto-fix: Applies all $\ge 85\%$ suggestions in one atomic transaction; 1-click Undo completely restores previous place hierarchy.
+    - Offline isolation: Zero external HTTP requests made during analysis and batch fixing.
+    - Role segregation: Viewers and Editors receive `403 Forbidden` on all place quality endpoints.
+
 ### Phase 3 — "Power tools"
 - Printable PDF posters / tiles ([05](features/05-printable-tree-pdf.md), [implementation](implementation/05-printable-tree-pdf.md)) — **Complete**.
 - Append & merge import with reconciliation ([09](features/09-tree-import-merge-reconciliation.md)).
@@ -379,6 +436,52 @@
     - Verify Fan Chart layout disables incompatible collateral, partner, and sibling controls.
     - Verify living person privacy masking redacts birth dates and photos of living individuals.
 
+#### Milestone 3.2 — AI Family Story Intake ("Tell Me About My Family") & Protected Model Context Protocol (MCP) Server
+- **`TASK-AI-STORY-INTAKE-AND-MCP-SERVER`**: AI Family Story Intake Studio & Protected Model Context Protocol (MCP) Server
+  - **User Story & Trigger:** "something like tell me about my family, this is AI driven feature which allows person to send raw data about his falimy in plain text or as audio message, app call expose tools or even protected mcp server i can connect to ai model of my choice. LLM model analyses raw data and tries to prce information about people and realtionship and then using tools exposed via mcp server or tools exposed to built in agent add those records to the tree. 1. Raw message... 2. Analisis and local subtree from raw data... 3. merge into main tree... we can expose additional mcp tools to allow search in teh tree as well as modifications allowed based on user roles" ([19](features/19-ai-family-story-intake-and-mcp.md), [10 page](pages/10-ai-story-intake-page.md), [02](features/02-rbac-access-control.md)).
+  - **Backend Acceptance Criteria:**
+    - Story Intake endpoints (`/api/v1/ai/*`) and isolated Staging Sandbox (`story_intake_drafts` table).
+    - Multimodal audio ingestion: `POST /api/v1/ai/transcribe` with server Whisper/Gemini audio parsing and client Web Speech API fallback.
+    - Speaker context anchoring: binds first-person references ("I", "my mother", "my spouse", "our son") relative to designated anchor person (`user.person_id` or selected `speaker_id`).
+    - Built-in AI Agent service with dual execution:
+      - Cloud BYOK / Local LLM provider (`OpenAI-Compatible`, `Google Gemini`, `Anthropic`, `Local Ollama / LocalAI / Whisper`) with structured tool-calling (`propose_person`, `propose_relationship`, `propose_event`, `search_existing_people`, `match_places`).
+      - Deterministic offline rule/regex fallback parser for LAN / zero-API-key environments.
+    - Conversational clarification patcher (`POST /api/v1/ai/refine-draft`) updating active draft incrementally without resetting.
+    - Staged tree reconciliation & commit: reuses relationship-centric candidate matching ([09 §3](features/09-tree-import-merge-reconciliation.md), [15 §3](features/15-data-quality-duplicates.md)), commits via single atomic SQL transaction in `change_log` with 1-click Undo.
+    - Protected Model Context Protocol (MCP) Server (`/api/v1/mcp` and `/api/v1/mcp/sse`):
+      - Scoped Personal Access Tokens (`personal_access_tokens` table, `mcp_pat_...`).
+      - Role-gated tool discovery (`tools/list`) and execution (`tools/call`):
+        - **Tier A (Read & Search):** `search_tree`, `get_person_profile`, `get_tree_subgraph`, `find_kinship_path`, `search_places`, `get_place_details`, `get_upcoming_anniversaries`, `get_tree_statistics` (Viewer, Editor, Admin — living person data masked for Viewers).
+        - **Tier B (Staged Subtree & Direct Mutation):** `create_story_draft`, `upsert_draft_person`, `upsert_draft_relationship`, `remove_draft_item`, `reconcile_draft_with_tree`, `commit_story_draft`, `create_person`, `update_person`, `quick_add_relative`, `create_or_update_family`, `add_life_event`, `update_life_event`, `create_or_update_place`, `add_person_note` (Editor, Admin — `403 Forbidden` for Viewers).
+        - **Tier C (Admin Maintenance):** `get_data_quality_report`, `merge_duplicate_people`, `auto_fix_place_hierarchy`, `list_change_history`, `undo_transaction` (Admin strictly — `403 Forbidden` for Viewers/Editors).
+      - Audit trail in `change_log` (`source = "mcp"`, `token_id`).
+  - **Frontend Acceptance Criteria:**
+    - Route `/stories/intake` (`AiStoryIntakePage.tsx`):
+      - 3-step progress bar (Tell Your Story → Inspect Draft Subtree → Reconcile & Commit).
+      - Speaker Selector (`SpeakerSelectorCard`) with person combobox and "new relative" toggle.
+      - Multimodal input tabs: Text narrative, browser voice recorder (waveform visualizer, timer, pause/resume/replay), and audio upload dropzone (`.webm`, `.mp3`, `.wav`, `.m4a` up to 25MB).
+      - Interactive Visual Draft Subtree Canvas (`DraftSubtreeCanvas`) and entity breakdown cards with confidence colors (green/amber/blue).
+      - Conversational clarification input bar for incremental text/voice updates.
+      - Reconciliation Matrix card list with "Link & Enrich" vs "Create as New Relative" controls.
+      - 1-Click Undo toast upon commit.
+    - Token Management UI in `/settings/profile` (or `/settings`):
+      - Issue new scoped MCP tokens (`read:tree`, `write:draft`, `write:direct`, `admin:maintenance`).
+      - Copy token modal (shown once), active token list with prefix, last used date, and revoke action.
+    - AI Provider Settings in `/settings/ai` (Admin only):
+      - Select provider (OpenAI, Gemini, Anthropic, Ollama, Offline Fallback).
+      - Base URL, API key, model name inputs, and connection test button.
+    - UI & i18n Quality: Full EN/RU bilingual parity, zero emojis or icon characters in translation JSON strings.
+  - **QA & Verification Criteria:**
+    - Speaker anchoring verified: "my mother" correctly links to mother of designated speaker.
+    - Audio recording and upload verified to transcribe into narrative text.
+    - Draft sandbox isolation: story parsing creates zero live individuals until commit.
+    - Incremental clarification: follow-up correction updates draft without resetting.
+    - Candidate matching & kinship guard: existing relatives identified; father/son naming collisions never match.
+    - 1-click Undo: transaction completely reverted from toast or `/history`.
+    - Protected MCP: external client connects via `mcp_pat_...` Bearer token.
+    - Role gating: Viewer tokens cannot see or call Tier B/C tools (error code `-32600` / `403 Forbidden`); Editor tokens cannot call Tier C admin tools; living persons masked for Viewers.
+    - Offline fallback: functions completely with `AI_PROVIDER="offline"` without external network calls.
+
 ---
 
 ## 3. Stack
@@ -390,4 +493,5 @@
 | Background jobs | Postgres `jobs` table + in-process workers ([17 §5](features/17-api-security-operations.md#5-background-jobs)) |
 | Media storage | Local Docker volume ([17 §4.2](features/17-api-security-operations.md#42-storage-layout)), streaming multipart ingest up to 500MB |
 | Maps | MapLibre / Leaflet with configurable tile URL ([12 §4](features/12-places.md#4-geocoding--self-hosting-privacy)) |
+| AI & Story Intake | Built-in provider (OpenAI-compatible, Google Gemini, Anthropic, Ollama, Whisper.cpp) + offline deterministic regex parser fallback + protected Model Context Protocol (MCP) server over SSE/HTTP ([19](features/19-ai-family-story-intake-and-mcp.md)) |
 | PWA & Mobile | Web App Manifest, Service Worker (static asset caching only), standalone display mode, safe-area insets ([18](features/18-progressive-web-app-mobile.md)) |

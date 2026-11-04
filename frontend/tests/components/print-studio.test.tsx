@@ -115,15 +115,15 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
     expect(htmlEn).toContain('Descendant Tree');
     expect(htmlEn).toContain('Generation Depth');
     expect(htmlEn).toContain('Printing Format');
-    expect(htmlEn).toContain('Multi-Page Tiled');
+    expect(htmlEn).toContain('Multi-Page Grid');
     expect(htmlEn).toContain('Single Poster');
     expect(htmlEn).toContain('Overlap Bleed');
     expect(htmlEn).toContain('Print dashed cut lines and alignment crosshairs');
     expect(htmlEn).toContain("Include bird&#x27;s-eye assembly guide on Sheet 1");
-    expect(htmlEn).toContain('Modern Clean');
-    expect(htmlEn).toContain('Heritage Antique');
+    expect(htmlEn).toContain('Modern Light');
+    expect(htmlEn).toContain('Archival Classic');
     expect(htmlEn).toContain("Mask living individuals&#x27; dates &amp; photos");
-    expect(htmlEn).toContain('Download Printable PDF');
+    expect(htmlEn).toContain('Download PDF');
 
     const htmlRu = renderWithProviders(
       <PrintConfigSidebar
@@ -142,11 +142,11 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
     expect(htmlRu).toContain('Потомки (Нисходящая)');
     expect(htmlRu).toContain('Глубина поколений');
     expect(htmlRu).toContain('Формат печати');
-    expect(htmlRu).toContain('Составной (На листах)');
+    expect(htmlRu).toContain('Сетка листов');
     expect(htmlRu).toContain('Единый постер');
     expect(htmlRu).toContain('Нахлёст для склейки');
     expect(htmlRu).toContain('схему сборки');
-    expect(htmlRu).toContain('Скачать PDF для печати');
+    expect(htmlRu).toContain('Скачать PDF');
   });
 
   it('renders PrintSummaryBar with accurate metric badges in tiled and poster modes', () => {
@@ -432,17 +432,17 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
     expect(html).toContain('aria-label="Print Configuration"');
     expect(html).toContain('aria-label="Zoom in"');
     expect(html).toContain('aria-label="Zoom out"');
-    expect(html).toContain('aria-label="Reset zoom"');
+    expect(html).toContain('aria-label="Reset"');
   });
 
   it('satisfies UX review findings UX-087 to UX-096 (mobile toggle, sticky CTA, a11y, Russian localization, aspect ratio, fit zoom)', () => {
     // UX-087: Mobile segmented toggle
     const htmlMobileEn = renderWithProviders(<PrintExportPage userRole="admin" />, 'en');
-    expect(htmlMobileEn).toContain('Configuration');
-    expect(htmlMobileEn).toContain('Preview &amp; Summary');
+    expect(htmlMobileEn).toContain('Settings');
+    expect(htmlMobileEn).toContain('Layout Preview');
     const htmlMobileRu = renderWithProviders(<PrintExportPage userRole="admin" />, 'ru');
-    expect(htmlMobileRu).toContain('Параметры печати');
-    expect(htmlMobileRu).toContain('Предпросмотр');
+    expect(htmlMobileRu).toContain('Параметры');
+    expect(htmlMobileRu).toContain('Макет и превью');
 
     // UX-088 & UX-093 & UX-094: Sidebar bottom padding, label id linking, and sticky CTA
     const htmlSidebar = renderWithProviders(
@@ -557,7 +557,7 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
     expect(htmlSummaryRu).toContain('4 листа (сетка 2×2)');
 
     // UX-096: Fit to view button in zoom toolbar
-    expect(htmlCanvasLandscape).toContain('aria-label="Fit to view"');
+    expect(htmlCanvasLandscape).toContain('aria-label="Fit view"');
   });
 
   it('supports All Nodes layout mode, hiding generation depth and displaying branch archive note', () => {
@@ -606,8 +606,8 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
       'en'
     );
     expect(htmlHourglass).toContain('Tree Density');
-    expect(htmlHourglass).toContain('Wide (Collateral)');
-    expect(htmlHourglass).toContain('Compact (Lineal)');
+    expect(htmlHourglass).toContain('Full (All Branches)');
+    expect(htmlHourglass).toContain('Direct Line');
     expect(htmlHourglass).toContain('Includes aunts, uncles, first cousins, and collateral relatives');
 
     const configHourglassCompact: PdfExportRequest = {
@@ -623,8 +623,8 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
       'ru'
     );
     expect(htmlHourglassCompact).toContain('Детализация схемы');
-    expect(htmlHourglassCompact).toContain('Широкая (С боковыми линиями)');
-    expect(htmlHourglassCompact).toContain('Компактная (Прямая линия)');
+    expect(htmlHourglassCompact).toContain('Полная (Все ветви)');
+    expect(htmlHourglassCompact).toContain('Прямая линия');
     expect(htmlHourglassCompact).toContain('Ограничивается только прямыми предками и потомками');
 
     // Pedigree mode should NOT render Tree Density
@@ -640,7 +640,7 @@ describe('Feature 05 & Page 05 — Printable PDF Tree Export Studio', () => {
       'en'
     );
     expect(htmlPedigree).not.toContain('Tree Density');
-    expect(htmlPedigree).not.toContain('Wide (Collateral)');
+    expect(htmlPedigree).not.toContain('Full (All Branches)');
   });
 
   it('renders partner and sibling checkboxes and disables them in fan chart mode with hint', () => {

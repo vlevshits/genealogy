@@ -136,7 +136,7 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       'en'
     );
     expect(htmlEn).toContain('Hourglass');
-    expect(htmlEn).toContain('Pedigree');
+    expect(htmlEn).toContain('Ancestors');
     expect(htmlEn).toContain('Descendants');
     expect(htmlEn).toContain('4 generations');
     expect(htmlEn).toContain('100%');
@@ -156,7 +156,7 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       />,
       'ru'
     );
-    expect(htmlRu).toContain('Песочные часы');
+    expect(htmlRu).toContain('Две ветви');
     expect(htmlRu).toContain('Предки');
     expect(htmlRu).toContain('Потомки');
     expect(htmlRu).toContain('Мини-карта древа');
@@ -216,8 +216,8 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
     expect(drawerHtml).toContain('Immediate Family');
     expect(drawerHtml).toContain('Sofia Yakovlevna Levshits');
     expect(drawerHtml).toContain('Elena Alexandrovna Levshits');
-    expect(drawerHtml).toContain('Make Focal Person');
-    expect(drawerHtml).toContain('View Full Profile');
+    expect(drawerHtml).toContain('Center in Tree');
+    expect(drawerHtml).toContain('Open Profile');
 
     const sheetHtml = renderWithProviders(
       <PersonBottomSheet

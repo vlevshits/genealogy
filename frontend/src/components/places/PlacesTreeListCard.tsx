@@ -81,23 +81,20 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
   return (
     <Card>
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="space-y-1 min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4.5 w-4.5 text-brand" />
-            <h2 className="text-base font-semibold text-primary">
-              {t('places.pageTitle')}
-            </h2>
-            <Badge variant="neutral" size="sm">
-              {places.length}
-            </Badge>
-          </div>
-          <p className="text-xs text-secondary">{t('places.pageSubtitle')}</p>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <MapPin className="h-4.5 w-4.5 text-brand shrink-0" />
+          <h2 className="text-base font-semibold text-primary truncate">
+            {t('places.hierarchyCardTitle')}
+          </h2>
+          <Badge variant="neutral" size="sm">
+            {places.length}
+          </Badge>
         </div>
 
         <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2 shrink-0 sm:ml-auto">
           <SegmentedControl
             size="sm"
-            ariaLabel={t('places.pageTitle')}
+            ariaLabel={t('places.hierarchyCardTitle')}
             value={viewMode}
             onChange={(v) => setViewMode(v as 'tree' | 'table')}
             options={[
@@ -243,6 +240,7 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
                           variant="secondary"
                           leftIcon={<PenTool className="h-3 w-3" />}
                           onClick={() => onEditPlace(pl)}
+                          className="min-h-10"
                         >
                           {t('places.editPlaceBtn')}
                         </Button>
@@ -251,6 +249,7 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
                           variant="secondary"
                           leftIcon={<GitMerge className="h-3 w-3" />}
                           onClick={() => onMergePlace(pl)}
+                          className="min-h-10"
                         >
                           {t('places.mergePlaceBtn')}
                         </Button>
@@ -262,6 +261,7 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
                               <Trash2 className="h-3.5 w-3.5 text-danger" />
                             }
                             onClick={() => onDeletePlace(pl)}
+                            className="min-h-10"
                           >
                             {t('places.deletePlaceBtn')}
                           </Button>

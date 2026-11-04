@@ -111,19 +111,19 @@ describe('Milestone 2.4 — TASK-AUTH-PUBLIC-NAVIGATION Test Suite', () => {
       expect(htmlRu).toContain('Перейти к публичному архиву');
     });
 
-    it('renders "Back to Family Tree" when enablePublicAccess=true and returnUrl is /tree or /persons/:id', () => {
+    it('renders "Back to Tree" when enablePublicAccess=true and returnUrl is /tree or /persons/:id', () => {
       const htmlTree = renderWithProviders(
         <LoginCard enablePublicAccess={true} returnUrl="/tree?focus=I001" />,
         'en'
       );
-      expect(htmlTree).toContain('Back to Family Tree');
+      expect(htmlTree).toContain('Back to Tree');
       expect(htmlTree).not.toContain('Browse Public Archive');
 
       const htmlPerson = renderWithProviders(
         <LoginCard enablePublicAccess={true} returnUrl="/persons/I0042" />,
         'en'
       );
-      expect(htmlPerson).toContain('Back to Family Tree');
+      expect(htmlPerson).toContain('Back to Tree');
       expect(htmlPerson).not.toContain('Browse Public Archive');
 
       const htmlPersonRu = renderWithProviders(
@@ -140,7 +140,7 @@ describe('Milestone 2.4 — TASK-AUTH-PUBLIC-NAVIGATION Test Suite', () => {
         'en'
       );
       expect(htmlSettings).toContain('Browse Public Archive');
-      expect(htmlSettings).not.toContain('Back to Family Tree');
+      expect(htmlSettings).not.toContain('Back to Tree');
 
       const htmlPeople = renderWithProviders(
         <LoginCard enablePublicAccess={true} returnUrl="/people" />,

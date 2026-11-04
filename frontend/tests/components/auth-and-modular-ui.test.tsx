@@ -147,29 +147,29 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     expect(step2Html).toContain(
       'I have saved these recovery codes in a secure place'
     );
-    expect(step2Html).toContain('Download as Text File');
+    expect(step2Html).toContain('Download (.txt)');
   });
 
   it('renders LoginCard in default, magic_sent, and recovery modes in EN and RU', () => {
     const defaultEn = renderWithProviders(<LoginCard smtpEnabled={true} />, 'en');
     expect(defaultEn).toContain('Sign in with Passkey');
     expect(defaultEn).toContain('Sign In with Password');
-    expect(defaultEn).toContain('Send Magic Link');
+    expect(defaultEn).toContain('Send Sign-In Link');
     expect(defaultEn).toContain(
-      'Lost your device? Use Emergency Recovery Code'
+      'Lost your device? Use Recovery Code'
     );
 
     const defaultRu = renderWithProviders(<LoginCard smtpEnabled={true} />, 'ru');
     expect(defaultRu).toContain('Войти по ключу Passkey');
     expect(defaultRu).toContain('Войти по паролю');
-    expect(defaultRu).toContain('Отправить ссылку для входа');
+    expect(defaultRu).toContain('Войти по ссылке');
 
     // Test smtpEnabled={false} in EN and RU: no dead magic link button, correct divider and accessible alert
     const smtpDisabledEn = renderWithProviders(
       <LoginCard smtpEnabled={false} />,
       'en'
     );
-    expect(smtpDisabledEn).not.toContain('Send Magic Link');
+    expect(smtpDisabledEn).not.toContain('Send Sign-In Link');
     expect(smtpDisabledEn).toContain('or sign in with password');
     expect(smtpDisabledEn).not.toContain('or sign in with email link');
     expect(smtpDisabledEn).toContain('smtp-disabled-hint');
@@ -181,7 +181,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
       <LoginCard smtpEnabled={false} />,
       'ru'
     );
-    expect(smtpDisabledRu).not.toContain('Отправить ссылку для входа');
+    expect(smtpDisabledRu).not.toContain('Войти по ссылке');
     expect(smtpDisabledRu).toContain('или войти по паролю');
     expect(smtpDisabledRu).not.toContain('или получить ссылку на почту');
     expect(smtpDisabledRu).toContain(
@@ -247,7 +247,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
       'You have been invited by Vera Levshits to join Levshits Family Archive as editor.'
     );
     expect(html).toContain('I0002');
-    expect(html).toContain('Create Passkey &amp; Join Tree');
+    expect(html).toContain('Create Passkey &amp; Join');
   });
 
   it('renders SecurityPasskeysPanel and FamilyMembersInvitesPanel with passkeys, sessions, and family members', () => {
@@ -282,7 +282,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     );
 
     expect(securityHtml).toContain('MacBook Pro Touch ID');
-    expect(securityHtml).toContain('Register Another Passkey');
+    expect(securityHtml).toContain('Add Passkey');
     expect(securityHtml).toContain('10 codes generated · 9 unused remaining');
     expect(securityHtml).toContain('Safari on macOS');
     expect(securityHtml).toContain('Current Device');
@@ -369,7 +369,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
       'en'
     );
     expect(html).toContain('You are signed in');
-    expect(html).toContain('Register Passkey on This Device');
+    expect(html).toContain('Register Passkey');
     expect(html).toContain('Continue to Archive');
   });
 
@@ -396,7 +396,7 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     expect(indexCss).not.toContain("--font-serif: 'Lora'");
   });
 
-  it('renders AuthLayout with interactive accessible header brand link pointing to home', () => {
+  it('renders AuthLayout with interactive accessible header link pointing to home', () => {
     const html = renderWithProviders(
       <AuthLayout title="Sign In" instanceTitle="Levshits Family Archive">
         <div>Content</div>
@@ -424,12 +424,12 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     );
     expect(publicDefaultRu).toContain('Перейти к публичному архиву');
 
-    // 2. enablePublicAccess === true, returnUrl points to tree -> contextual "Back to Family Tree"
+    // 2. enablePublicAccess === true, returnUrl points to tree -> contextual "Back to Tree"
     const publicTreeEn = renderWithProviders(
       <LoginCard enablePublicAccess={true} returnUrl="/tree" />,
       'en'
     );
-    expect(publicTreeEn).toContain('Back to Family Tree');
+    expect(publicTreeEn).toContain('Back to Tree');
     expect(publicTreeEn).not.toContain('Browse Public Archive');
 
     const publicTreeRu = renderWithProviders(
@@ -439,12 +439,12 @@ describe('Phase 1.2 Modular UI, Reusable Toggle Buttons & Authentication Views',
     expect(publicTreeRu).toContain('Вернуться к семейному древу');
     expect(publicTreeRu).not.toContain('Перейти к публичному архиву');
 
-    // 3. enablePublicAccess === true, returnUrl points to person profile -> contextual "Back to Family Tree"
+    // 3. enablePublicAccess === true, returnUrl points to person profile -> contextual "Back to Tree"
     const publicPersonEn = renderWithProviders(
       <LoginCard enablePublicAccess={true} returnUrl="/persons/I0001" />,
       'en'
     );
-    expect(publicPersonEn).toContain('Back to Family Tree');
+    expect(publicPersonEn).toContain('Back to Tree');
 
     // 4. enablePublicAccess === true, returnUrl points to restricted route (e.g. /settings, /people) -> safe fallback to "Browse Public Archive"
     const publicRestrictedEn = renderWithProviders(

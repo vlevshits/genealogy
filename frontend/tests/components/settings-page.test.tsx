@@ -182,7 +182,7 @@ describe('Phase 1.1 Settings & Administration Page (/settings)', () => {
       'en'
     );
 
-    expect(htmlEn).toContain('Download Full Archive (Database &amp; Media)');
+    expect(htmlEn).toContain('Download Data &amp; Media');
     expect(htmlEn).toContain('0 3 * * *');
     expect(htmlEn).toContain('30 days');
     expect(htmlEn).toContain('backup-2026-10-26T030000Z.tar.gz');
@@ -205,7 +205,7 @@ describe('Phase 1.1 Settings & Administration Page (/settings)', () => {
       'ru'
     );
 
-    expect(htmlRu).toContain('Скачать полный архив (База данных и медиа)');
+    expect(htmlRu).toContain('Скачать данные и медиа');
     expect(htmlRu).toContain('По расписанию');
     expect(htmlRu).toContain('Вручную');
   });
@@ -227,8 +227,8 @@ describe('Phase 1.1 Settings & Administration Page (/settings)', () => {
         'en'
       );
       expect(html).toContain('Settings &amp; Administration');
-      expect(html).toContain('General &amp; Archive');
-      expect(html).toContain('Backups &amp; Snapshots');
+      expect(html).toContain('Archive Settings');
+      expect(html).toContain('Backups &amp; Copies');
       expect(html).toContain('aria-current="page"');
     }
   });

@@ -31,13 +31,23 @@ interfaces that follow the project's design system precisely.
 - **Stack:** React 19, TypeScript (strict), Vite 6, Tailwind CSS v4 via
   `@tailwindcss/vite` (CSS-first `@theme`, no `tailwind.config.js`),
   `lucide-react`, `clsx` + `tailwind-merge` (`cn()`), served by Nginx.
-- **Layout:** `frontend/src/{main.tsx, App.tsx, index.css, api/, components/, i18n/}`.
+- **Layout:** `frontend/src/{main.tsx, App.tsx, index.css}`, `pages/`,
+  `components/<domain>/` (DS primitives in `components/ui/`), `api/`, `lib/`
+  (incl. `tree-layouts/`), `hooks/`, `types/`, `i18n/`; tests in
+  `frontend/tests/`. Full map in `docs/memory-bank/codebase-map.md`.
 - **API:** `src/api/client.ts` — typed fetch client that always sends
   `X-Requested-With: genealogy` and parses the standard error envelope into
   `ApiError`. Backend error `code` values are i18n keys.
 
 # Source of Truth (read before coding)
 
+0. **Memory bank** (`docs/memory-bank/`, protocol `.agents/rules/memory-bank.md`):
+   `active-context.md`, the feature's `features/NN-*.md` (pages, components,
+   API client functions, i18n namespaces, tests involved),
+   `features/xx-design-system.md` (existing DS components — reuse before
+   building), `conventions-and-patterns.md`, `gotchas.md`, and `glossary.md`
+   (use its EN/RU wording in UI copy and its identifiers in code). Verify
+   against the code; report stale entries under *Memory Notes*.
 1. `docs/design-system/theme-and-tokens.md` — palette, typography, spacing,
    light/dark tokens, lineage/gender colors.
 2. `docs/design-system/components.md` — component inventory, library choices
@@ -107,3 +117,9 @@ If the spec is ambiguous, stop and report the question to the parent agent.
 - Browser self-check recordings and what they showed.
 - Anything that still needs browser verification by QA.
 - Open questions, risks, and any technical debt added.
+- `## Memory Notes` — new/changed terms (incl. UI concepts and their RU
+  wording), decisions, gotchas/root causes (e.g. hook-order, layout math),
+  code map changes (new pages, components, hooks, API client functions, i18n
+  namespaces, tests), stale memory bank entries; format in
+  `docs/memory-bank/README.md` §4 (or `- none`). Do not edit
+  `docs/memory-bank/` yourself — the curator does.

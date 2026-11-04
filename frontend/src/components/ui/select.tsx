@@ -23,6 +23,7 @@ export interface SelectProps<T extends string = string> {
   invalid?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
+  'aria-label'?: string;
   id?: string;
   className?: string;
   ref?: React.Ref<HTMLButtonElement>;
@@ -38,11 +39,13 @@ export function Select<T extends string = string>({
   invalid = false,
   disabled = false,
   ariaLabel,
+  'aria-label': ariaLabelAttr,
   id,
   className,
   ref,
 }: SelectProps<T>) {
   const { t } = useI18n();
+  const resolvedAriaLabel = ariaLabel || ariaLabelAttr;
   const [open, setOpen] = useState(false);
   const [internalVal, setInternalVal] = useState<T | undefined>(defaultValue);
   const [activeIndex, setActiveIndex] = useState<number>(0);
@@ -113,7 +116,7 @@ export function Select<T extends string = string>({
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label={ariaLabel || placeholder}
+        aria-label={resolvedAriaLabel || placeholder}
         aria-invalid={invalid || undefined}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -148,7 +151,7 @@ export function Select<T extends string = string>({
           />
           <div
             role="listbox"
-            aria-label={ariaLabel || placeholder}
+            aria-label={resolvedAriaLabel || placeholder}
             className={cn(
               'z-50 overflow-y-auto border border-border bg-surface p-1.5 shadow-lg',
               'fixed inset-x-0 bottom-0 max-h-[70vh] rounded-t-2xl md:absolute md:inset-x-auto md:bottom-auto md:mt-1.5 md:w-full md:max-h-64 md:rounded-xl'
@@ -156,7 +159,7 @@ export function Select<T extends string = string>({
           >
             <div className="flex items-center justify-between border-b border-border px-3 py-2 md:hidden">
               <span className="text-xs font-semibold text-secondary">
-                {placeholder || ariaLabel}
+                {placeholder || resolvedAriaLabel}
               </span>
               <button
                 type="button"

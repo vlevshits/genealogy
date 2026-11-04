@@ -86,6 +86,8 @@ export const MediaLightboxStudio: React.FC<MediaLightboxStudioProps> = ({
   const [isLinkPersonDialogOpen, setIsLinkPersonDialogOpen] =
     useState<boolean>(false);
 
+  const dialogRef = React.useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     setCurrentAsset(asset);
     setIsTaggingMode(false);
@@ -106,6 +108,31 @@ export const MediaLightboxStudio: React.FC<MediaLightboxStudioProps> = ({
           setTargetPersonId(null);
         } else {
           onOpenChange(false);
+        }
+        return;
+      }
+
+      if (e.key === 'Tab' && dialogRef.current && !isLinkPersonDialogOpen) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+
+        if (e.shiftKey) {
+          if (!active || active === first || !dialogRef.current.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (!active || active === last || !dialogRef.current.contains(active)) {
+            e.preventDefault();
+            first.focus();
+          }
         }
       }
     };
@@ -500,13 +527,14 @@ export const MediaLightboxStudio: React.FC<MediaLightboxStudioProps> = ({
           className="fixed inset-0 bg-primary/60 backdrop-blur-sm"
         />
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={currentAsset.title}
           className="relative z-10 flex flex-col w-full max-w-7xl max-h-[92vh] rounded-3xl border border-border bg-canvas shadow-2xl overflow-hidden"
         >
           {/* Top Studio Bar */}
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 sm:px-6 py-3 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <h2 className="font-serif text-lg font-semibold text-primary truncate">
                 {currentAsset.title}
@@ -549,8 +577,8 @@ export const MediaLightboxStudio: React.FC<MediaLightboxStudioProps> = ({
           </div>
 
           {/* Dual-Pane Workspace: Left Canvas (7 cols) + Right Metadata & Face Tags (5 cols) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-5 overflow-y-auto flex-1">
-            <div className="lg:col-span-7 flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-5 overflow-y-auto lg:overflow-hidden flex-1 min-h-0">
+            <div className="lg:col-span-7 flex flex-col min-h-0 lg:h-full">
               <FaceTagCanvas
                 asset={currentAsset}
                 canEdit={canEdit}
@@ -574,7 +602,7 @@ export const MediaLightboxStudio: React.FC<MediaLightboxStudioProps> = ({
               />
             </div>
 
-            <div className="lg:col-span-5 flex flex-col">
+            <div className="lg:col-span-5 flex flex-col min-h-0 lg:h-full lg:overflow-y-auto">
               <MediaMetadataPanel
                 asset={currentAsset}
                 canEdit={canEdit}

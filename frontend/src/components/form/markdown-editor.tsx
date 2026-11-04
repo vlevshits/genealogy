@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils';
 import { Textarea } from '../ui/textarea';
 import { MarkdownView } from '../ui/markdown-view';
 import { IconButton } from '../ui/icon-button';
+import { Button } from '../ui/button';
 import { useI18n } from '../../i18n';
 
 export interface MarkdownEditorProps {
@@ -42,34 +43,28 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     <div className={cn('rounded-xl border border-border bg-surface overflow-hidden', className)}>
       <div className="flex items-center justify-between border-b border-border bg-surface-muted/50 px-3 py-1.5">
         <div role="tablist" className="flex items-center gap-1">
-          <button
+          <Button
             type="button"
             role="tab"
+            size="sm"
+            variant={mode === 'write' ? 'secondary' : 'ghost'}
             aria-selected={mode === 'write'}
             onClick={() => setMode('write')}
-            className={cn(
-              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
-              mode === 'write'
-                ? 'bg-surface text-primary shadow-2xs'
-                : 'text-secondary hover:text-primary'
-            )}
+            className="h-7 min-h-0 px-2.5 py-1 text-xs"
           >
             {t('markdown.write')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             role="tab"
+            size="sm"
+            variant={mode === 'preview' ? 'secondary' : 'ghost'}
             aria-selected={mode === 'preview'}
             onClick={() => setMode('preview')}
-            className={cn(
-              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer',
-              mode === 'preview'
-                ? 'bg-surface text-primary shadow-2xs'
-                : 'text-secondary hover:text-primary'
-            )}
+            className="h-7 min-h-0 px-2.5 py-1 text-xs"
           >
             {t('markdown.preview')}
-          </button>
+          </Button>
         </div>
 
         {mode === 'write' && (

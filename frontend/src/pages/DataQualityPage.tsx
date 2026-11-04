@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   GitMerge,
   Info,
+  MapPin,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
@@ -20,12 +21,18 @@ import {
   useToast,
 } from '../components/ui';
 import {
+  buildDefaultPlaceHierarchyIssues,
+  PlaceHierarchySubView,
+} from '../components/quality';
+import {
   DuplicateCandidatePairDto,
   peopleApi,
+  PlaceHierarchyIssueDto,
   qualityApi,
   QualitySeverity,
   QualityWarningDto,
 } from '../api/client';
+import { DEFAULT_PLACES } from './PlacesPage';
 import { useAuth } from '../lib/auth-context';
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
@@ -35,11 +42,14 @@ export type QualityFilterTab =
   | 'critical'
   | 'warning'
   | 'info'
-  | 'duplicates';
+  | 'duplicates'
+  | 'places_hierarchy';
 
 export interface DataQualityPageProps {
   initialWarnings?: QualityWarningDto[];
   initialDuplicates?: DuplicateCandidatePairDto[];
+  initialPlaceIssues?: PlaceHierarchyIssueDto[];
+  initialFilter?: QualityFilterTab;
   userRole?: 'admin' | 'editor' | 'viewer';
   onNavigate?: (path: string) => void;
 }
@@ -94,6 +104,8 @@ export function buildDefaultDuplicatePairs(): DuplicateCandidatePairDto[] {
       person_b_birth: '1868-02-03',
       person_b_death: '1931',
       score: 92,
+      reasons: ['shared_parents', 'patronymic_match', 'vital_dates', 'detached_record'],
+      is_detached: true,
     },
   ];
 }
@@ -101,6 +113,8 @@ export function buildDefaultDuplicatePairs(): DuplicateCandidatePairDto[] {
 export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   initialWarnings,
   initialDuplicates,
+  initialPlaceIssues,
+  initialFilter,
   userRole,
   onNavigate,
 }) => {
@@ -112,14 +126,18 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   const isAdmin = effectiveRole === 'admin';
 
   const [activeTab, setActiveTab] = useState<QualityFilterTab>(() => {
+    if (initialFilter) {
+      return initialFilter;
+    }
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
       const tabParam = search.get('tab');
       if (
         tabParam === 'duplicates' ||
+        tabParam === 'places_hierarchy' ||
         tabParam === 'warning' ||
         tabParam === 'critical' ||
-        tabParam === 'dismissed'
+        tabParam === 'info'
       ) {
         return tabParam as QualityFilterTab;
       }
@@ -131,6 +149,9 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   );
   const [duplicates, setDuplicates] = useState<DuplicateCandidatePairDto[]>(
     () => initialDuplicates ?? buildDefaultDuplicatePairs()
+  );
+  const [placeIssues, setPlaceIssues] = useState<PlaceHierarchyIssueDto[]>(
+    () => initialPlaceIssues ?? buildDefaultPlaceHierarchyIssues()
   );
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -152,8 +173,9 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
     Promise.all([
       qualityApi.getWarnings().catch(() => null),
       qualityApi.getDuplicates().catch(() => null),
+      qualityApi.getPlaceHierarchyAnalysis().catch(() => null),
     ])
-      .then(([warnRes, dupRes]) => {
+      .then(([warnRes, dupRes, placeRes]) => {
         if (warnRes && Array.isArray(warnRes.warnings)) {
           setWarnings(warnRes.warnings);
           if (Array.isArray(warnRes.duplicates)) {
@@ -162,6 +184,9 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
         }
         if (Array.isArray(dupRes)) {
           setDuplicates(dupRes);
+        }
+        if (placeRes && Array.isArray(placeRes.items)) {
+          setPlaceIssues(placeRes.items);
         }
       })
       .finally(() => {
@@ -174,7 +199,9 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   }, [loadQualityData]);
 
   const filteredWarnings = useMemo(() => {
-    if (activeTab === 'duplicates') return [];
+    if (activeTab === 'duplicates' || activeTab === 'places_hierarchy') {
+      return [];
+    }
     if (activeTab === 'all') return warnings;
     return warnings.filter((w) => w.severity === activeTab);
   }, [warnings, activeTab]);
@@ -204,11 +231,36 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
       POSSIBLE_DUPLICATE: 'quality.rules.possibleDuplicate',
       MISSING_BIRTH: 'quality.rules.missingBirth',
       UNCONNECTED: 'quality.rules.unconnected',
+      PLACE_UNPARSED_PATH: 'quality.rules.placeUnparsedPath',
+      PLACE_ORPHAN_HIERARCHY: 'quality.rules.placeOrphanHierarchy',
+      PLACE_TYPE_MISMATCH: 'quality.rules.placeTypeMismatch',
+      PLACE_DUPLICATE_CANDIDATE: 'quality.rules.placeDuplicateCandidate',
     };
     if (keyMap[code]) {
       return t(keyMap[code]);
     }
     return w.message || code;
+  };
+
+  const getDuplicateReasonLabel = (reasonKey: string): string => {
+    const normalized = reasonKey.toLowerCase().trim();
+    const map: Record<string, string> = {
+      shared_parents: 'quality.duplicates.reasons.sharedParents',
+      parents: 'quality.duplicates.reasons.sharedParents',
+      shared_spouse: 'quality.duplicates.reasons.sharedSpouse',
+      spouse: 'quality.duplicates.reasons.sharedSpouse',
+      shared_children: 'quality.duplicates.reasons.sharedChildren',
+      children: 'quality.duplicates.reasons.sharedChildren',
+      shared_siblings: 'quality.duplicates.reasons.sharedSiblings',
+      siblings: 'quality.duplicates.reasons.sharedSiblings',
+      patronymic_match: 'quality.duplicates.reasons.patronymicMatch',
+      patronymic: 'quality.duplicates.reasons.patronymicMatch',
+      vital_dates: 'quality.duplicates.reasons.vitalDates',
+      vitals: 'quality.duplicates.reasons.vitalDates',
+      detached_record: 'quality.duplicates.reasons.detachedRecord',
+      detached_branch: 'quality.duplicates.reasons.detachedBranch',
+    };
+    return map[normalized] ? t(map[normalized]) : reasonKey;
   };
 
   const getSeverityBadge = (severity: QualitySeverity) => {
@@ -319,39 +371,52 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
             <Badge variant="brand">
               {t('quality.summaryDuplicates', { count: duplicates.length })}
             </Badge>
+            <Badge variant="neutral" icon={<MapPin className="h-3 w-3" />}>
+              {t('quality.summaryPlaces', { count: placeIssues.length })}
+            </Badge>
           </div>
         }
       />
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs — wrapped with horizontal scroll safety for 390px mobile (UX-110) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentedControl<QualityFilterTab>
-          ariaLabel={t('quality.filterAria')}
-          value={activeTab}
-          onChange={setActiveTab}
-          options={[
-            {
-              value: 'all',
-              label: t('quality.tabs.all', { count: warnings.length }),
-            },
-            {
-              value: 'critical',
-              label: t('quality.tabs.critical', { count: criticalCount }),
-            },
-            {
-              value: 'warning',
-              label: t('quality.tabs.warning', { count: warningCount }),
-            },
-            {
-              value: 'info',
-              label: t('quality.tabs.info', { count: infoCount }),
-            },
-            {
-              value: 'duplicates',
-              label: t('quality.tabs.duplicates', { count: duplicates.length }),
-            },
-          ]}
-        />
+        <div className="max-w-full overflow-x-auto pb-1">
+          <SegmentedControl<QualityFilterTab>
+            ariaLabel={t('quality.filterAria')}
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              {
+                value: 'all',
+                label: t('quality.tabs.all', { count: warnings.length }),
+              },
+              {
+                value: 'critical',
+                label: t('quality.tabs.critical', { count: criticalCount }),
+              },
+              {
+                value: 'warning',
+                label: t('quality.tabs.warning', { count: warningCount }),
+              },
+              {
+                value: 'info',
+                label: t('quality.tabs.info', { count: infoCount }),
+              },
+              {
+                value: 'duplicates',
+                label: t('quality.tabs.duplicates', {
+                  count: duplicates.length,
+                }),
+              },
+              {
+                value: 'places_hierarchy',
+                label: t('quality.tabs.placesHierarchy', {
+                  count: placeIssues.length,
+                }),
+              },
+            ]}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -361,8 +426,18 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Place Hierarchy Dedicated Sub-View */}
+          {activeTab === 'places_hierarchy' && (
+            <PlaceHierarchySubView
+              issues={placeIssues}
+              onIssuesChange={setPlaceIssues}
+              availablePlaces={DEFAULT_PLACES}
+              onReload={loadQualityData}
+            />
+          )}
+
           {/* Warnings List */}
-          {activeTab !== 'duplicates' && (
+          {activeTab !== 'duplicates' && activeTab !== 'places_hierarchy' && (
             <div className="space-y-3">
               {filteredWarnings.length === 0 ? (
                 <Card className="p-8">
@@ -471,19 +546,26 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                     pair.score <= 1
                       ? Math.round(pair.score * 100)
                       : Math.round(pair.score);
+                  const reasons = pair.reasons ?? [];
                   return (
                     <Card
                       key={pairKey}
                       data-testid={`duplicate-pair-card-${pairKey}`}
                       className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                     >
-                      <div className="space-y-1.5 min-w-0">
+                      <div className="space-y-2 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="warning" size="sm">
                             {t('quality.duplicates.matchScoreBadge', {
                               score: matchScore,
                             })}
                           </Badge>
+                          {pair.is_detached &&
+                            !reasons.includes('detached_record') && (
+                              <Badge variant="brand" size="sm">
+                                {t('quality.duplicates.reasons.detachedRecord')}
+                              </Badge>
+                            )}
                           <Button
                             variant="link"
                             size="sm"
@@ -516,6 +598,23 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                             </span>
                           )}
                         </div>
+
+                        {reasons.length > 0 && (
+                          <div
+                            data-testid={`duplicate-reasons-${pairKey}`}
+                            className="flex flex-wrap items-center gap-1.5"
+                          >
+                            {reasons.map((reason) => (
+                              <Badge
+                                key={reason}
+                                variant="neutral"
+                                size="sm"
+                              >
+                                {getDuplicateReasonLabel(reason)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
 
                         <p className="text-xs text-secondary">
                           {t('quality.duplicates.pairHint')}

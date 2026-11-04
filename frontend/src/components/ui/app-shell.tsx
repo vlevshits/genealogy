@@ -75,7 +75,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       <header className="sticky top-0 z-30 w-full border-b border-border bg-surface/90 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8">
           {/* Left: Mobile Hamburger + Brand + Primary Links */}
-          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+          <div className="flex items-center gap-2 lg:gap-3 min-w-0 flex-1">
             <div className="md:hidden shrink-0">
               <IconButton
                 label={t('nav.openMenu')}
@@ -92,12 +92,12 @@ export const AppShell: React.FC<AppShellProps> = ({
                 e.preventDefault();
                 navigate('/');
               }}
-              className="flex items-center gap-2 sm:gap-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus shrink-0"
+              className="flex items-center gap-2 sm:gap-2.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus min-w-0 flex-1 md:flex-initial"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-surface shadow-xs">
                 <BrandLogoIcon className="h-5 w-5" />
               </div>
-              <span className="font-sans text-base sm:text-lg font-semibold tracking-tight text-primary whitespace-nowrap truncate max-w-[150px] sm:max-w-[180px] md:max-w-[200px] lg:max-w-[250px] xl:max-w-none">
+              <span className="font-sans text-sm sm:text-base lg:text-lg font-semibold tracking-tight text-primary whitespace-nowrap truncate min-w-0">
                 {resolvedTitle}
               </span>
             </a>
@@ -151,6 +151,11 @@ export const AppShell: React.FC<AppShellProps> = ({
                     items={[
                       { id: 'places', label: t('nav.places'), onSelect: () => navigate('/places') },
                       { id: 'print', label: t('nav.print'), onSelect: () => navigate('/export/print') },
+                      ...(user?.role === 'editor' || user?.role === 'admin'
+                        ? [
+                            { id: 'story-intake', label: t('nav.storyIntake'), onSelect: () => navigate('/stories/intake') },
+                          ]
+                        : []),
                       ...(user?.role === 'admin'
                         ? [
                             {
@@ -200,13 +205,16 @@ export const AppShell: React.FC<AppShellProps> = ({
                   items={[
                     { id: 'add-person', label: t('nav.addPerson'), onSelect: () => navigate('/people') },
                     { id: 'upload-photos', label: t('nav.uploadPhotos'), onSelect: () => navigate('/media') },
+                    { id: 'story-intake', label: t('nav.storyIntake'), onSelect: () => navigate('/stories/intake') },
                   ]}
                 />
               )}
 
-            {/* Reusable Language & Theme Toggle Buttons */}
-            <LanguageToggleButton />
-            <ThemeToggleButton />
+            {/* Reusable Language & Theme Toggle Buttons (hidden on < sm; available inside mobile Drawer) */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              <LanguageToggleButton />
+              <ThemeToggleButton />
+            </div>
 
             {/* User Profile Menu or Sign-In Button in Public Mode */}
             {!isAuthenticated ? (
@@ -214,6 +222,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 variant="primary"
                 size="md"
                 leftIcon={<LogIn className="h-4 w-4" />}
+                className="hidden md:inline-flex"
                 onClick={() =>
                   navigate(
                     buildLoginUrl(
@@ -298,10 +307,20 @@ export const AppShell: React.FC<AppShellProps> = ({
               <NavLink href="/places" active={currentPath.startsWith('/places')} onNavigate={navigate}>
                 {t('nav.places')}
               </NavLink>
-              {user?.role === 'admin' && (
-                <NavLink href="/settings" active={currentPath.startsWith('/settings')} onNavigate={navigate}>
-                  {t('nav.adminSettings')}
+              {(user?.role === 'editor' || user?.role === 'admin') && (
+                <NavLink href="/stories/intake" active={currentPath.startsWith('/stories/intake')} onNavigate={navigate}>
+                  {t('nav.storyIntake')}
                 </NavLink>
+              )}
+              {user?.role === 'admin' && (
+                <>
+                  <NavLink href="/quality" active={currentPath.startsWith('/quality')} onNavigate={navigate}>
+                    {t('nav.quality')}
+                  </NavLink>
+                  <NavLink href="/settings" active={currentPath.startsWith('/settings')} onNavigate={navigate}>
+                    {t('nav.adminSettings')}
+                  </NavLink>
+                </>
               )}
             </>
           ) : (
@@ -324,6 +343,15 @@ export const AppShell: React.FC<AppShellProps> = ({
               </Button>
             </div>
           )}
+
+          {/* Mobile Drawer Language & Theme Controls */}
+          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-secondary">{t('settings.tabs.appearance')}</span>
+            <div className="flex items-center gap-1.5">
+              <LanguageToggleButton />
+              <ThemeToggleButton />
+            </div>
+          </div>
         </div>
       </Drawer>
 

@@ -50,6 +50,12 @@ the closing step of the feature workflow — you may *recommend* entries).
 - `docs/design-system/*.md` — tokens and reusable components.
 - `docs/implementation/*.md` and `docs/technical-debt.md` — what is already
   built and what was postponed (read-only context for you).
+- `docs/memory-bank/` (read-only for you; protocol
+  `.agents/rules/memory-bank.md`) — `glossary.md` is the **controlled
+  vocabulary**: use its terms (EN and RU) in specs and do not coin synonyms;
+  `features/NN-*.md` tells you how a feature is *actually* implemented (use it
+  for impact analysis and to flag rework); `decisions.md` lists ADRs your
+  requirements must respect or explicitly challenge.
 
 # Workflow
 
@@ -148,4 +154,10 @@ the closing step of the feature workflow — you may *recommend* entries).
 ## Suggested Next Steps
 - architect-reviewer: design plan for <spec files>
 - Recommended technical-debt entries (if any)
+
+## Memory Notes
+- New/changed terms: <term> — EN / RU — meaning (for glossary.md)
+- Decisions: product decisions confirmed with the user and their rationale
+- Stale memory: memory bank statements that the new requirement invalidates
+(format: docs/memory-bank/README.md §4; or "- none")
 ```

@@ -1,0 +1,307 @@
+import { PersonProfileResponseDto } from "../api/client";
+
+export function buildDefaultPersonProfile(
+  personId: string = '00000000-0000-0000-0000-000000000001',
+  accessTier: string = 'admin'
+): PersonProfileResponseDto {
+  const isAnonymous = accessTier === 'public_anonymous';
+  const isLivingSample = personId === 'I0042' || personId.includes('living');
+
+  const canEdit = accessTier === 'editor' || accessTier === 'admin';
+  const canMerge = accessTier === 'admin';
+
+  if (isAnonymous && isLivingSample) {
+    return {
+      person: {
+        id: personId,
+        gid: 'I0042',
+        sex: 'F',
+        is_living: true,
+        is_private: false,
+        primary_name: {
+          given_name: 'E.',
+          patronymic: null,
+          surname: '',
+        },
+        birth: null,
+        death: null,
+        avatar_url: null,
+        notes: null,
+        version: 1,
+      },
+      kinship: null,
+      events: [],
+      families: {
+        parent_families: [],
+        spouse_families: [],
+      },
+      media: [],
+      notes: [],
+      sources_summary: [],
+      capabilities: {
+        can_edit: false,
+        can_delete: false,
+        can_merge: false,
+        is_home_person: false,
+      },
+    };
+  }
+
+  return {
+    person: {
+      id: personId,
+      gid: 'I0001',
+      sex: 'M',
+      is_living: false,
+      is_private: false,
+      primary_name: {
+        given_name: 'Alexander',
+        patronymic: 'Mikhailovich',
+        surname: 'Levshits',
+      },
+      birth_surname: null,
+      biography:
+        '## Early Life & Engineering Career\nBorn in Vitebsk in 1912. Graduated from the Leningrad Polytechnic Institute and worked as a bridge and railway engineer.\n\n- Preserved the pre-war family correspondence archive.\n- Compiled the first hand-drawn pedigree chart in 1974.',
+      birth: { date: '1912-03-19', place: 'Vitebsk, Belarus' },
+      death: { date: '1989-11-04', place: 'Leningrad, USSR' },
+      birth_sort: 19120319,
+      death_sort: 19891104,
+      avatar_url: null,
+      notes: null,
+      alt_names: [
+        {
+          id: 'alt-1',
+          name_type: 'transliteration',
+          given_name: 'Александр',
+          patronymic: 'Михайлович',
+          surname: 'Левшиц',
+          lang: 'ru',
+        },
+      ],
+      version: 1,
+    },
+    kinship: isAnonymous
+      ? null
+      : {
+          home_person_id: 'node-living-1',
+          target_person_id: personId,
+          relation_key: 'grandfather',
+          code: 'grandfather',
+          label_en: 'Grandfather',
+          label_ru: 'Дедушка',
+          steps: 2,
+          degree: 2,
+        },
+    events: [
+      {
+        id: 'ev-birth-1',
+        gid: 'E0001',
+        individual_id: personId,
+        event_type: 'birth',
+        date: {
+          mod: 'exact',
+          start: { y: 1912, m: 3, d: 19 },
+          end: null,
+          cal: 'gregorian',
+          text: '19 Mar 1912',
+        },
+        date_sort: 19120319,
+        gedcom_date: '19 MAR 1912',
+        place_id: 'pl-vitebsk',
+        place_full_name: 'Vitebsk, Belarus',
+        latitude: 55.1904,
+        longitude: 30.2049,
+        description: 'Born in the family home on Zamkovaya Street.',
+        source_text: 'Vitebsk Synagogue Metrical Book, 1912, entry #48',
+        media_ids: ['m-doc-1'],
+        scans_count: 1,
+        is_private: false,
+        age_at_event: 0,
+        version: 1,
+      },
+      {
+        id: 'ev-mar-1',
+        gid: 'E0002',
+        family_id: 'fam-1',
+        event_type: 'marriage',
+        date: {
+          mod: 'exact',
+          start: { y: 1938, m: 6, d: 12 },
+          end: null,
+          cal: 'gregorian',
+          text: '12 Jun 1938',
+        },
+        date_sort: 19380612,
+        gedcom_date: '12 JUN 1938',
+        place_id: 'pl-spb',
+        place_full_name: 'Leningrad, USSR',
+        latitude: 59.9343,
+        longitude: 30.3351,
+        description: 'Civil marriage registration in Vasileostrovsky District.',
+        source_text: 'Leningrad ZAGS Civil Registry Archive, 1938, act #214',
+        media_ids: [],
+        scans_count: 0,
+        spouse_id: 'node-deceased-2',
+        spouse_name: 'Sofia Yakovlevna Levshits',
+        is_private: false,
+        age_at_event: 26,
+        version: 1,
+      },
+      {
+        id: 'ev-death-1',
+        gid: 'E0003',
+        individual_id: personId,
+        event_type: 'death',
+        date: {
+          mod: 'exact',
+          start: { y: 1989, m: 11, d: 4 },
+          end: null,
+          cal: 'gregorian',
+          text: '4 Nov 1989',
+        },
+        date_sort: 19891104,
+        gedcom_date: '4 NOV 1989',
+        place_id: 'pl-spb',
+        place_full_name: 'Leningrad, USSR',
+        latitude: 59.9343,
+        longitude: 30.3351,
+        description: 'Buried at Preobrazhenskoye Cemetery.',
+        source_text: 'Leningrad ZAGS Civil Registry Archive, 1938, act #214',
+        media_ids: [],
+        scans_count: 0,
+        is_private: false,
+        age_at_event: 77,
+        version: 1,
+      },
+    ],
+    families: {
+      parent_families: [
+        {
+          family_id: 'fam-parents-1',
+          gid: 'F0000',
+          father: {
+            id: 'node-father-0',
+            gid: 'I0000',
+            given_name: 'Mikhail',
+            patronymic: 'Isaakovich',
+            surname: 'Levshits',
+            sex: 'M',
+            is_living: false,
+            birth_year: 1884,
+            death_year: 1952,
+            avatar_url: null,
+          },
+          mother: null,
+          siblings: [],
+          version: 1,
+        },
+      ],
+      spouse_families: [
+        {
+          family_id: 'fam-1',
+          gid: 'F0001',
+          relationship_type: 'married',
+          spouse: {
+            id: 'node-deceased-2',
+            gid: 'I0002',
+            given_name: 'Sofia',
+            patronymic: 'Yakovlevna',
+            surname: 'Levshits',
+            sex: 'F',
+            is_living: false,
+            birth_year: 1915,
+            death_year: 1996,
+            avatar_url: null,
+          },
+          marriage_date: '12 Jun 1938',
+          marriage_place: 'Leningrad, USSR',
+          children: [
+            {
+              person: {
+                id: 'node-living-1',
+                gid: 'I0042',
+                given_name: isAnonymous ? 'E.' : 'Elena',
+                patronymic: isAnonymous ? null : 'Alexandrovna',
+                surname: isAnonymous ? '' : 'Levshits',
+                sex: 'F',
+                is_living: true,
+                birth_year: isAnonymous ? null : 1994,
+                death_year: null,
+                avatar_url: null,
+              },
+              sort_order: 0,
+              rel_to_partner1: 'birth',
+              rel_to_partner2: 'birth',
+            },
+          ],
+          version: 1,
+        },
+      ],
+    },
+    media: [
+      {
+        id: 'm-photo-1',
+        gid: 'M0001',
+        title: 'Alexander Levshits Portrait (1955)',
+        mime_type: 'image/webp',
+        file_url: '/api/v1/media/00000000-0000-0000-0000-000000000101/file',
+        is_private: false,
+        only_living_persons: false,
+        linked_person_ids: [personId],
+        face_tags: [
+          {
+            id: 'ft-1',
+            person_id: personId,
+            person_name: 'Alexander Levshits',
+            is_living: false,
+            x: 0.25,
+            y: 0.25,
+            width: 0.2,
+            height: 0.2,
+          },
+        ],
+      },
+      {
+        id: 'm-doc-1',
+        gid: 'M0004',
+        title: 'Vitebsk Birth Certificate Scan (1912)',
+        mime_type: 'application/pdf',
+        file_url: '/api/v1/media/00000000-0000-0000-0000-000000000104/file',
+        is_private: false,
+        only_living_persons: false,
+        linked_person_ids: [personId],
+        face_tags: [],
+      },
+    ],
+    notes: [
+      {
+        id: 'note-1',
+        entity_type: 'individual',
+        entity_id: personId,
+        body: '### Archival Verification\nVerified birth date against **Vitebsk Rabbinate Metrical Book** (Fond 2496, Inventory 1).',
+        is_private: false,
+        sort_order: 0,
+        version: 1,
+      },
+    ],
+    sources_summary: [
+      {
+        source_text: 'Vitebsk Synagogue Metrical Book, 1912, entry #48',
+        event_ids: ['ev-birth-1'],
+        events_count: 1,
+      },
+      {
+        source_text: 'Leningrad ZAGS Civil Registry Archive, 1938, act #214',
+        event_ids: ['ev-mar-1', 'ev-death-1'],
+        events_count: 2,
+      },
+    ],
+    capabilities: {
+      can_edit: canEdit,
+      can_delete: canEdit,
+      can_merge: canMerge,
+      is_home_person: false,
+    },
+  };
+}
+

@@ -261,6 +261,6 @@ describe('Phase 1.3 RBAC Matrix, User Governance & Living-Person Privacy UI', ()
       <PublicGuestBanner onSignIn={() => {}} />,
       'en'
     );
-    expect(bannerStandalone).toContain('Sign In to Family Archive');
+    expect(bannerStandalone).toContain('Sign In');
   });
 });

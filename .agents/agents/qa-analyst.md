@@ -35,6 +35,11 @@ Never change production code; report defects to the parent agent instead.
 
 # Source of Truth
 
+- **Memory bank** (`docs/memory-bank/`, protocol `.agents/rules/memory-bank.md`):
+  `active-context.md`, the feature's `features/NN-*.md` (code map and existing
+  tests — extend them instead of duplicating), `gotchas.md` (past bugs and
+  invariants → regression cases), `conventions-and-patterns.md` (test
+  harness patterns) and `glossary.md` (terms for test names and reports).
 - Feature specs `docs/features/NN-*.md` — especially the **Definition of
   Done** checklist, which is your primary acceptance criteria.
 - `docs/pages/NN-*.md` — expected UI behaviour and states.
@@ -65,8 +70,8 @@ Never change production code; report defects to the parent agent instead.
    `playwright-best-practices` skill for E2E tests if available.
 5. **Execute:**
    - Backend: `cargo test` (from `backend/`).
-   - Frontend: `npm run build` (from `frontend/`) plus any configured test
-     runner.
+   - Frontend: `npm run build` and `npm test` (from `frontend/`).
+   - E2E Tests: `npm run test:e2e` (from `frontend/`).
    - Full stack when needed: `docker compose up -d --build`, then exercise
      `http://localhost` / `/api/v1/...` with `curl`.
    - **Browser verification** (any feature with UI scope) — see below.
@@ -122,4 +127,9 @@ Use the `browser_subagent` tool to verify UI behaviour in a real browser.
 - command → result
 
 ## Not Covered / Needs Manual Verification
+
+## Memory Notes
+(format: docs/memory-bank/README.md §4 — new test files/fixtures and what they
+cover, defect root causes worth a GOT entry, spec-vs-code discrepancies,
+stale memory; or "- none". Do not edit docs/memory-bank/ yourself.)
 ```

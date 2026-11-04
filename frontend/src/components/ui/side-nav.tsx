@@ -50,12 +50,12 @@ export const SideNav: React.FC<SideNavProps> = ({
                   : 'text-secondary hover:bg-surface-muted hover:text-primary'
               )}
             >
-              <span className="flex items-center gap-2.5 truncate">
-                {item.icon}
-                <span className="truncate">{item.label}</span>
+              <span className="flex items-center gap-2.5 min-w-0">
+                <span className="shrink-0">{item.icon}</span>
+                <span className="whitespace-normal text-left leading-snug">{item.label}</span>
               </span>
               {item.badge !== undefined && (
-                <span className="rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-secondary">
+                <span className="rounded-md bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-secondary shrink-0">
                   {item.badge}
                 </span>
               )}

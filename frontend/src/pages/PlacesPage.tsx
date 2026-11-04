@@ -8,6 +8,7 @@ import {
   PlacesMapView,
   PlacesTreeListCard,
 } from '../components/places';
+import { PlacesQualityBanner } from '../components/quality';
 import {
   deletePlace,
   fetchPlaceDetail,
@@ -15,6 +16,7 @@ import {
   LifeEventDto,
   PlaceBreadcrumbDto,
   PlaceDto,
+  qualityApi,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
@@ -25,7 +27,9 @@ export interface PlacesPageProps {
   initialPlaces?: PlaceDto[];
   initialMapTileUrl?: string;
   initialView?: 'list' | 'map';
+  initialQualityIssuesCount?: number;
   userRole?: 'admin' | 'editor' | 'viewer';
+  onNavigate?: (path: string) => void;
 }
 
 export const DEFAULT_PLACES: PlaceDto[] = [
@@ -108,13 +112,16 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
   initialPlaces,
   initialMapTileUrl = '',
   initialView,
+  initialQualityIssuesCount,
   userRole,
+  onNavigate,
 }) => {
   const { t } = useI18n();
   const { user } = useAuth();
   const { addToast } = useToast();
 
   const effectiveRole = userRole ?? user?.role ?? 'admin';
+  const isAdmin = effectiveRole === 'admin';
   const canEdit = effectiveRole === 'admin' || effectiveRole === 'editor';
 
   const resolvedInitialView: 'list' | 'map' =
@@ -143,6 +150,39 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
   const [formOpen, setFormOpen] = useState<boolean>(false);
   const [editingPlace, setEditingPlace] = useState<PlaceDto | null>(null);
   const [mergingPlace, setMergingPlace] = useState<PlaceDto | null>(null);
+  const [qualityIssuesCount, setQualityIssuesCount] = useState<number>(
+    initialQualityIssuesCount ?? 3
+  );
+  const [highConfCount, setHighConfCount] = useState<number>(2);
+
+  const navigateTo = (nextPath: string) => {
+    if (onNavigate) {
+      onNavigate(nextPath);
+    } else if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', nextPath);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin || initialQualityIssuesCount !== undefined) return;
+    let cancelled = false;
+    qualityApi
+      .getPlaceHierarchyAnalysis()
+      .then((res) => {
+        if (!cancelled && res) {
+          setQualityIssuesCount(res.counts?.total ?? res.items.length);
+          setHighConfCount(
+            res.counts?.high_confidence ??
+              res.items.filter((i) => i.confidence_tier === 'high').length
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, initialQualityIssuesCount]);
 
   const loadPlaces = (q?: string, missingCoords?: boolean) => {
     fetchPlaces({
@@ -263,6 +303,14 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
           ]}
         />
       </div>
+
+      {isAdmin && qualityIssuesCount > 0 && (
+        <PlacesQualityBanner
+          issueCount={qualityIssuesCount}
+          highConfidenceCount={highConfCount}
+          onReviewFixes={() => navigateTo('/quality?tab=places_hierarchy')}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 min-w-0 space-y-6">

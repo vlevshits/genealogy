@@ -30,13 +30,24 @@ exactly as specified in the project docs, with production-grade quality.
 
 - **Stack:** Rust (Axum 0.8, Tokio, SQLx 0.8 + PostgreSQL 16 with `pg_trgm`,
   `unaccent`, `pgcrypto`), Tower-HTTP, utoipa (OpenAPI 3.1), Docker Compose.
-- **Layout:** `backend/src/{main.rs, lib.rs, config.rs, error.rs, state.rs, routes/}`,
-  `backend/migrations/*.sql`, `backend/tests/*.rs`.
+- **Layout:** `backend/src/{main.rs, lib.rs, config.rs, error.rs, state.rs}`,
+  thin HTTP/RBAC handlers in `routes/`, business logic in `services/`,
+  domain types in `models/`, admin CLI in `bin/cli.rs`,
+  `backend/migrations/*.sql`, `backend/tests/*.rs`. The full module →
+  responsibility map and oversized-file hotspots are in
+  `docs/memory-bank/codebase-map.md`.
 - **Deployment model:** 1 instance = 1 family tree; backend sits behind the
   frontend Nginx reverse proxy and is never exposed directly.
 
 # Source of Truth (read before coding)
 
+0. **Memory bank** (`docs/memory-bank/`, protocol `.agents/rules/memory-bank.md`):
+   `active-context.md`, the feature's `features/NN-*.md` (code map: which
+   routes/services/migrations/tests are involved), `conventions-and-patterns.md`
+   (copy the proven patterns — error envelope, RBAC guard, privacy filter,
+   change log, optimistic locking, runtime SQLx queries), `gotchas.md`, and
+   `glossary.md` (use its identifiers for new types, tables, columns, codes).
+   Verify against the code; report stale entries under *Memory Notes*.
 1. `docs/features/17-api-security-operations.md` — REST conventions, error
    envelope, pagination, sessions/CSRF, rate limits, uploads, jobs, logging.
 2. `docs/features/10-core-data-model.md` — canonical schema, IDs (`gid`),
@@ -97,3 +108,8 @@ question to the parent agent instead of guessing.
 - Migration names and schema impact.
 - Verification commands run and their results.
 - Open questions, risks, and any technical debt added.
+- `## Memory Notes` — new/changed terms (incl. new error `code`s, enums,
+  tables), decisions and their rationale, gotchas/root causes found, code map
+  changes (new modules, endpoints, migrations, tests), stale memory bank
+  entries; format in `docs/memory-bank/README.md` §4 (or `- none`). Do not edit
+  `docs/memory-bank/` yourself — the curator does.

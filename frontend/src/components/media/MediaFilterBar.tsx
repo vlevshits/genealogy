@@ -117,6 +117,7 @@ export const MediaFilterBar: React.FC<MediaFilterBarProps> = ({
               size="md"
               onClick={onOpenUpload}
               leftIcon={<Upload className="h-4 w-4" />}
+              className="shrink-0 whitespace-nowrap"
             >
               {t('mediaArchive.uploadBtn')}
             </Button>
@@ -162,6 +163,7 @@ export const MediaFilterBar: React.FC<MediaFilterBarProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             <div className="w-full sm:w-64">
               <Select
+                ariaLabel={t('mediaArchive.filterPersonLabel')}
                 aria-label={t('mediaArchive.filterPersonLabel')}
                 value={filters.personId || 'all'}
                 onChange={(val) =>
@@ -214,6 +216,10 @@ export const MediaFilterBar: React.FC<MediaFilterBarProps> = ({
             </Button>
             {decades.map((dec) => {
               const active = filters.decade === dec;
+              const displayDecade =
+                locale === 'ru' && dec.endsWith('s')
+                  ? `${dec.slice(0, -1)}-е`
+                  : dec;
               return (
                 <Button
                   key={dec}
@@ -224,7 +230,7 @@ export const MediaFilterBar: React.FC<MediaFilterBarProps> = ({
                   }
                   className="h-7 min-h-0 px-2.5 text-xs"
                 >
-                  {dec}
+                  {displayDecade}
                 </Button>
               );
             })}

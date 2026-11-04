@@ -64,7 +64,7 @@ export const PublicGuestBanner: React.FC<PublicGuestBannerProps> = ({
             variant="ghost"
             label={t('common.close')}
             onClick={handleDismiss}
-            className="h-8 w-8 min-h-8 min-w-8 text-secondary hover:text-primary touch-target-expand"
+            className="min-h-10 min-w-10 text-secondary hover:text-primary"
           >
             <X className="h-4 w-4" />
           </IconButton>

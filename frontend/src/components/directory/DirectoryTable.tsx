@@ -367,10 +367,10 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({
                   </td>
 
                   {/* Born (Date + Place) */}
-                  <td className="px-4 py-2.5 text-secondary">
+                  <td className="px-4 py-2.5 text-secondary whitespace-nowrap">
                     {item.birth_date || item.birth_year ? (
                       <div>
-                        <div className="text-primary font-medium">
+                        <div className="text-primary font-medium whitespace-nowrap">
                           {item.birth_date || item.birth_year}
                         </div>
                         {item.birth_place && (
@@ -385,11 +385,11 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({
                   </td>
 
                   {/* Died (Date + Place with subtle † for deceased, — for living) */}
-                  <td className="px-4 py-2.5 text-secondary">
+                  <td className="px-4 py-2.5 text-secondary whitespace-nowrap">
                     {!item.is_living ? (
                       item.death_date || item.death_year ? (
                         <div>
-                          <div className="text-primary font-medium">
+                          <div className="text-primary font-medium whitespace-nowrap">
                             † {item.death_date || item.death_year}
                           </div>
                           {item.death_place && (

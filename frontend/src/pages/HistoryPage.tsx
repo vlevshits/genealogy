@@ -490,6 +490,13 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                   <div className="border-t border-border pt-3 space-y-2">
                     {groupEntries.map((entry) => {
                       const diffs = extractEntryDiffs(entry);
+                      const entityTypeKey = `history.entityTypes.${entry.entity_type.toLowerCase()}`;
+                      const translatedEntityType = t(entityTypeKey);
+                      const displayEntityType =
+                        translatedEntityType !== entityTypeKey
+                          ? translatedEntityType
+                          : entry.entity_type;
+
                       return (
                         <div
                           key={String(entry.id)}
@@ -498,7 +505,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-primary">
                               {entry.entity_label || entry.entity_id} (
-                              {entry.entity_type})
+                              {displayEntityType})
                             </span>
                             <span className="font-mono text-[11px] text-tertiary">
                               {entry.entity_id}
@@ -507,28 +514,36 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
                           {diffs.length > 0 && (
                             <div className="space-y-1.5">
-                              {diffs.map((d, idx) => (
-                                <div
-                                  key={`${d.field}-${idx}`}
-                                  className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-[11px]"
-                                >
-                                  <span className="font-mono font-semibold text-secondary">
-                                    {d.field}
-                                  </span>
-                                  <span className="rounded bg-danger/10 px-2 py-0.5 text-secondary line-through break-words max-w-full overflow-hidden text-ellipsis">
-                                    {formatDiffValue(
-                                      d.before,
-                                      t('history.drawer.emptyValue')
-                                    )}
-                                  </span>
-                                  <span className="rounded bg-success/10 px-2 py-0.5 font-medium text-primary break-words max-w-full overflow-hidden text-ellipsis">
-                                    {formatDiffValue(
-                                      d.after,
-                                      t('history.drawer.emptyValue')
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
+                              {diffs.map((d, idx) => {
+                                const fieldKey = `history.fields.${d.field}`;
+                                const translatedField = t(fieldKey);
+                                const displayField =
+                                  translatedField !== fieldKey
+                                    ? `${translatedField} (${d.field})`
+                                    : d.field;
+                                return (
+                                  <div
+                                    key={`${d.field}-${idx}`}
+                                    className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-[11px]"
+                                  >
+                                    <span className="font-mono font-semibold text-secondary">
+                                      {displayField}
+                                    </span>
+                                    <span className="rounded bg-danger/10 px-2 py-0.5 text-secondary line-through break-words max-w-full overflow-hidden text-ellipsis">
+                                      {formatDiffValue(
+                                        d.before,
+                                        t('history.drawer.emptyValue')
+                                      )}
+                                    </span>
+                                    <span className="rounded bg-success/10 px-2 py-0.5 font-medium text-primary break-words max-w-full overflow-hidden text-ellipsis">
+                                      {formatDiffValue(
+                                        d.after,
+                                        t('history.drawer.emptyValue')
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
