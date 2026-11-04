@@ -9,7 +9,7 @@ Global omnibox search, dedicated People Directory, and alphabetical Surname Inde
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | Trigram GIN indexes on `names.given_name`, `names.surname`, and `places.name` |
-| Routes | `backend/src/routes/rbac.rs` | `global_search`, `list_people_directory`, `list_people_surnames` |
+| Routes | `backend/src/routes/rbac/mod.rs` | `global_search`, `list_people_directory`, `list_people_surnames` |
 | Omnibox | `frontend/src/components/search/` | Global search modal in navigation bar with keyboard shortcut (`Cmd+K` / `Ctrl+K`) |
 | People Page | `frontend/src/pages/PeoplePage.tsx` | Virtualized table/cards, sorting by birth date, gender filters |
 | Surnames Page | `frontend/src/pages/SurnamesPage.tsx` | Alphabetical surname frequency index and person drilldown |

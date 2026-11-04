@@ -186,14 +186,15 @@ pub struct DraftPersonDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maiden_name: Option<String>,
     pub sex: String,
+    #[serde(default, alias = "role_to_speaker", alias = "role")]
     pub relation_to_speaker: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "birth_date")]
     pub birth_date_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub birth_year: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub birth_place: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "death_date")]
     pub death_date_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub death_year: Option<i32>,
@@ -203,10 +204,15 @@ pub struct DraftPersonDto {
     pub is_living: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub occupation: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "notes")]
     pub biography_notes: Option<String>,
+    #[serde(default, alias = "confidence_score")]
     pub confidence: u8,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "source_snippet"
+    )]
     pub grounding_quote: Option<String>,
 }
 
@@ -218,12 +224,19 @@ pub(crate) fn default_true_bool() -> bool {
 pub struct DraftUnionDto {
     pub temp_id: String,
     pub partner1_temp_id: String,
+    #[serde(default)]
     pub partner2_temp_id: String,
+    #[serde(default, alias = "relationship_type")]
     pub union_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "marriage_date"
+    )]
     pub marriage_date_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub marriage_place: Option<String>,
+    #[serde(default, alias = "confidence_score")]
     pub confidence: u8,
 }
 
@@ -233,7 +246,7 @@ pub struct DraftParentChildDto {
     pub union_temp_id: Option<String>,
     pub parent_temp_id: String,
     pub child_temp_id: String,
-    #[serde(default = "default_pedigree_birth")]
+    #[serde(default = "default_pedigree_birth", alias = "relation_type")]
     pub pedigree: String,
 }
 
@@ -248,11 +261,15 @@ pub struct DraftEventDto {
     pub event_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_text: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "place_name")]
     pub place_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "source_snippet"
+    )]
     pub grounding_quote: Option<String>,
 }
 
@@ -260,13 +277,13 @@ pub struct DraftEventDto {
 pub struct DraftExtractedDataDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speaker_temp_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "draft_people", alias = "people")]
     pub persons: Vec<DraftPersonDto>,
-    #[serde(default)]
+    #[serde(default, alias = "draft_unions")]
     pub unions: Vec<DraftUnionDto>,
-    #[serde(default)]
+    #[serde(default, alias = "draft_parent_child", alias = "parent_child")]
     pub parent_child_links: Vec<DraftParentChildDto>,
-    #[serde(default)]
+    #[serde(default, alias = "draft_events")]
     pub events: Vec<DraftEventDto>,
 }
 

@@ -9,8 +9,8 @@ Full audit change logging, transactional undo/restore, optimistic concurrency co
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `change_log` table, `tree_snapshots` table, `version` columns across tables |
-| Routes | `backend/src/routes/rbac.rs` | Audit endpoints, undo transaction, snapshot CRUD, version check |
-| Service | `backend/src/services/history.rs` | `record_change`, `undo_transaction`, `create_snapshot`, `rollback_snapshot` |
+| Routes | `backend/src/routes/rbac/mod.rs` | Audit endpoints, undo transaction, snapshot CRUD, version check |
+| Service | `backend/src/services/history/mod.rs` | `record_change`, `undo_transaction`, `create_snapshot`, `rollback_snapshot` |
 | History Page | `frontend/src/pages/HistoryPage.tsx` | Tree audit log table, user filter, date filter, snapshot manager |
 | History Drawer | `frontend/src/components/history/` | `RecordHistoryDrawer.tsx` (entity-level timeline diff view) |
 | Hooks | `frontend/src/hooks/` | `useLiveVersion.ts` (polling version updates), `useUndoToast.ts` (transient undo action) |

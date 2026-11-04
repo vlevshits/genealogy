@@ -81,7 +81,7 @@ Feature files use the same number as the spec: `features/NN-<name>.md` ↔
 ## 5. Writing rules (curator)
 
 - **Evidence-based:** every claim about code cites a repo-relative path
-  (`backend/src/services/privacy.rs`) and, where helpful, a symbol
+  (`backend/src/services/privacy/mod.rs`) and, where helpful, a symbol
   (`fn can_view_person`). Avoid line numbers except in `gotchas.md` (they rot).
 - **Concise and scannable:** tables and bullets; no narrative history (that
   belongs in `docs/implementation/`).
@@ -163,5 +163,5 @@ _Last curated: YYYY-MM-DD (<reason>)_
 | 19 | AI story intake & MCP | [features/19-ai-family-story-intake-and-mcp.md](features/19-ai-family-story-intake-and-mcp.md) |
 | xx | Design system | [features/xx-design-system.md](features/xx-design-system.md) |
 
-_Last curated: 2026-11-04 (memory bank introduced)_
+_Last curated: 2026-11-05 (Milestone 3.2 server-side Gemini 3.8 Flash)_
 

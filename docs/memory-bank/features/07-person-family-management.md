@@ -9,7 +9,7 @@ Core person, family relationship, and life-event management. Provides rich profi
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/20261026000005_core_genealogy_model.sql` | `persons`, `names`, `families`, `family_children`, `events`, `event_sources`, `notes` |
-| Routes | `backend/src/routes/rbac.rs` | Person/family/event CRUD, `get_person_profile`, `quick_add_relative`, `delete_impact` |
+| Routes | `backend/src/routes/rbac/mod.rs` | Person/family/event CRUD, `get_person_profile`, `quick_add_relative`, `delete_impact` |
 | Profile Page | `frontend/src/pages/PersonProfilePage.tsx` | Main profile view, facts tab, relatives sidebar, timeline tab, media gallery |
 | Profile Components | `frontend/src/components/profile/` | `ProfileHeroHeader.tsx`, biography facts, timeline entries |
 | Edit Dialog | `frontend/src/components/person/` | `PersonEditDialog.tsx` (names, gender, life events, patronymic auto-fill) |

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Cpu,
   FileAudio,
   FileText,
   Mic,
@@ -7,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
+  Badge,
   Button,
   Card,
   FileDropzone,
@@ -16,22 +18,25 @@ import {
 } from '../ui';
 import { useI18n } from '../../i18n';
 import { AudioRecorderWidget } from './AudioRecorderWidget';
+import { StoryExtractionEngine } from '../../api/gemini-story-extractor';
 
 export type StoryInputMethod = 'text' | 'audio_record' | 'audio_upload';
 
 export interface StoryInputPanelProps {
-  narrativeText: string;
+  narrativeText?: string;
   onNarrativeTextChange: (text: string) => void;
   language: string;
   onLanguageChange: (lang: string) => void;
   extracting?: boolean;
   transcribing?: boolean;
   onExtractSubtree: () => void;
-  onTranscribeBlob: (blob: Blob | File) => void;
+  onTranscribeBlob: (blob: Blob | File, speechTranscript?: string) => void;
+  engine?: StoryExtractionEngine;
+  onEngineChange?: (engine: StoryExtractionEngine) => void;
 }
 
 export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
-  narrativeText,
+  narrativeText = '',
   onNarrativeTextChange,
   language,
   onLanguageChange,
@@ -39,8 +44,11 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
   transcribing = false,
   onExtractSubtree,
   onTranscribeBlob,
+  engine = 'gemini',
+  onEngineChange,
 }) => {
   const { t } = useI18n();
+  const safeText = narrativeText ?? '';
   const [inputMode, setInputMode] = useState<StoryInputMethod>('text');
 
   const handleLoadSample = (templateKey: 'default' | 'parents' | 'marriage') => {
@@ -103,7 +111,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
             >
               {t('stories.input.templateParentsBtn')}
             </Button>
-            {narrativeText.length > 0 && (
+            {safeText.length > 0 && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -122,7 +130,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
         <div className="space-y-2">
           <Textarea
             data-testid="story-narrative-textarea"
-            value={narrativeText}
+            value={safeText}
             onChange={(e) => onNarrativeTextChange(e.target.value)}
             placeholder={t('stories.input.placeholder')}
             aria-label={t('stories.input.textareaAria')}
@@ -132,7 +140,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
           <div className="flex items-center justify-between text-xs text-tertiary">
             <span>
               {t('stories.input.charCount', {
-                count: narrativeText.length,
+                count: safeText.length,
               })}
             </span>
             <span>{t('stories.input.privacyHint')}</span>
@@ -144,8 +152,9 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
       {inputMode === 'audio_record' && (
         <AudioRecorderWidget
           transcribing={transcribing}
-          onTranscribe={(blob) => {
-            onTranscribeBlob(blob);
+          language={language}
+          onTranscribe={(blob, speechTranscript) => {
+            onTranscribeBlob(blob, speechTranscript);
             setInputMode('text');
           }}
         />
@@ -174,6 +183,41 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
           />
         </div>
       )}
+
+      {/* Extraction Engine & Model Selection Toolbar */}
+      <div
+        data-testid="story-engine-selector-bar"
+        className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-subtle border border-subtle"
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-xs font-medium text-secondary whitespace-nowrap">
+            {t('stories.engine.label')}:
+          </span>
+          <SegmentedControl<StoryExtractionEngine>
+            size="sm"
+            ariaLabel={t('stories.engine.label')}
+            value={engine}
+            onChange={(val) => onEngineChange?.(val)}
+            options={[
+              {
+                value: 'gemini',
+                label: t('stories.engine.gemini'),
+                icon: <Sparkles className="h-3.5 w-3.5 text-brand" />,
+              },
+              {
+                value: 'builtin',
+                label: t('stories.engine.builtin'),
+                icon: <Cpu className="h-3.5 w-3.5" />,
+              },
+            ]}
+          />
+          {engine === 'gemini' && (
+            <Badge variant="brand" size="sm" className="font-mono text-[11px]">
+              {t('stories.engine.modelBadge')}
+            </Badge>
+          )}
+        </div>
+      </div>
 
       {/* Bottom Action Bar: Language Selector + Extract Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-subtle">

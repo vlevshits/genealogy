@@ -34,3 +34,5 @@ pub mod nlp_clauses;
 pub use nlp_clauses::*;
 pub mod nlp_entities;
 pub use nlp_entities::*;
+pub mod gemini;
+pub use gemini::*;

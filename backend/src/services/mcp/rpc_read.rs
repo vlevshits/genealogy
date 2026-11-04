@@ -418,6 +418,10 @@ pub(crate) fn execute_mcp_tool(
                 .get("speaker_person_id")
                 .and_then(|v| v.as_str())
                 .map(ToString::to_string);
+            let extracted_data: Option<DraftExtractedDataDto> = args
+                .get("extracted_data")
+                .cloned()
+                .and_then(|v| serde_json::from_value(v).ok());
             let draft = parse_story_into_draft(
                 store,
                 ParseStoryRequest {
@@ -427,6 +431,8 @@ pub(crate) fn execute_mcp_tool(
                     is_new_speaker: None,
                     language: None,
                     audio_media_id: None,
+                    engine: None,
+                    extracted_data,
                 },
                 &caller.user_id,
             )?;

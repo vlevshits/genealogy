@@ -445,7 +445,7 @@ pub(crate) fn derive_story_title(raw_text: &str, extracted: &DraftExtractedDataD
     "Untitled Family Story".to_string()
 }
 
-pub(crate) fn contains_cyrillic(s: &str) -> bool {
+pub fn contains_cyrillic(s: &str) -> bool {
     s.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
 }
 
@@ -465,7 +465,7 @@ pub(crate) fn format_person_display_name(p: &TreePersonNodeDto) -> String {
     parts.join(" ")
 }
 
-pub(crate) fn extract_person_birth_year(p: &TreePersonNodeDto) -> Option<i32> {
+pub fn extract_person_birth_year(p: &TreePersonNodeDto) -> Option<i32> {
     if let Some(bs) = p.birth_sort {
         let y = bs / 10_000;
         if (1000..=2100).contains(&y) {

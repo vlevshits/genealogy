@@ -22,7 +22,7 @@ Every failing request returns the `ErrorResponse` envelope defined in [`backend/
 - The `code` string is a stable identifier corresponding to a frontend localization key under `errors.*` (e.g. `errors.record_not_found`).
 
 ### 1.2 Authentication & Request Context
-The middleware `request_context_middleware` in [`backend/src/services/security.rs`](../../backend/src/services/security.rs) inspects incoming requests and populates `RequestContext`:
+The middleware `request_context_middleware` in [`backend/src/services/security/context.rs`](../../backend/src/services/security/context.rs) inspects incoming requests and populates `RequestContext`:
 ```rust
 pub async fn some_handler(
     State(state): State<AppState>,
@@ -37,7 +37,7 @@ pub async fn some_handler(
 ```
 
 ### 1.3 Living-Person Privacy Filter & Privacy-404
-In [`backend/src/services/privacy.rs`](../../backend/src/services/privacy.rs):
+In [`backend/src/services/privacy/living.rs`](../../backend/src/services/privacy/living.rs):
 ```rust
 // Privacy check for individual access
 if privacy::is_living(&person) && !ctx.is_authenticated() {
@@ -48,7 +48,7 @@ if privacy::is_living(&person) && !ctx.is_authenticated() {
 When retrieving collections or trees, apply `privacy::redact_person(&mut person, &ctx)` to redact birth dates, places, and names into localized "Living" placeholders.
 
 ### 1.4 CSRF Protection
-Mutating HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`) are guarded by `csrf_protection_middleware` in [`backend/src/services/security.rs`](../../backend/src/services/security.rs):
+Mutating HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`) are guarded by `csrf_protection_middleware` in [`backend/src/services/security/context.rs`](../../backend/src/services/security/context.rs):
 - Must supply header `X-Requested-With: genealogy`.
 - Browser `Origin` header must match configured `APP_ORIGIN`.
 
@@ -65,7 +65,7 @@ if rows_affected == 0 {
     return Err(AppError::VersionConflict);
 }
 ```
-Inside the same transaction, record the audit entry in `change_log` via [`backend/src/services/history.rs`](../../backend/src/services/history.rs).
+Inside the same transaction, record the audit entry in `change_log` via [`backend/src/services/history/mod.rs`](../../backend/src/services/history/mod.rs).
 
 ### 1.6 Runtime SQLx Queries (No Macros)
 To allow reproducible, zero-network Docker and sandbox compilation without a running database, never use `query!` macros that require offline prepared metadata (`sqlx-data.json`).
@@ -149,4 +149,4 @@ Vitest tests in `frontend/tests/components/` use React Testing Library to verify
 - Test keyboard navigation (Enter, Tab, Escape).
 - Test role-based visibility (Editor vs Viewer).
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-04 (modular paths & Milestone 3.2)_

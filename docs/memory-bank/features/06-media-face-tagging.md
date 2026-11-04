@@ -9,7 +9,7 @@ Rich photo and document management for family archives. Supports batch uploads, 
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `media`, `media_links`, `media_face_tags`, `media_bundle_batches` |
-| Routes | `backend/src/routes/rbac.rs` | Media CRUD, `/media/bundle`, `/media/{id}/crop`, `/media/{id}/tags` |
+| Routes | `backend/src/routes/rbac/mod.rs` | Media CRUD, `/media/bundle`, `/media/{id}/crop`, `/media/{id}/tags` |
 | Bundle Service | `backend/src/services/media_bundle.rs`| ZIP extraction, file hash calculation, stub matching engine |
 | Gallery Page | `frontend/src/pages/MediaPage.tsx` | Media grid, filter by person/place/date, batch upload dropzone |
 | Lightbox Studio | `frontend/src/components/media/` | `MediaLightboxStudio.tsx` (full-screen viewer, zoom/pan) |

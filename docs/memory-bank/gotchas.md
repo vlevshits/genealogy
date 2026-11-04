@@ -14,6 +14,8 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - [GOT-006: Living Person 110-Year Assumption When Death Event is Missing](#got-006-living-person-110-year-assumption-when-death-event-is-missing)
 - [GOT-007: PDF Export Connector Drops & SVG Tiling Scaling Discrepancies](#got-007-pdf-export-connector-drops--svg-tiling-scaling-discrepancies)
 - [GOT-008: SQLx Offline Mode Compilation Failure If Compile-Time Macros Are Used](#got-008-sqlx-offline-mode-compilation-failure-if-compile-time-macros-are-used)
+- [GOT-009: Browser Audio Recording Codec Compatibility & Object URL Leaks](#got-009-browser-audio-recording-codec-compatibility--object-url-leaks)
+- [GOT-010: Server-Side Audio Transcription Requires GEMINI_API_KEY in .env](#got-010-server-side-audio-transcription-requires-gemini_api_key-in-env)
 
 ---
 
@@ -36,25 +38,25 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Rule:** Never include leading/trailing icon glyphs or emojis in `en.json` or `ru.json`. `frontend/tests/i18n/parity.test.ts` enforces this automatically.
 
 ### GOT-004: Anti-Collinear Edge Crossing and Detour Pruning in Kinship / Tree Layouts
-- **File / Area:** `backend/src/services/genealogy.rs`, `frontend/src/lib/tree-layouts/hourglass-layout.ts`
+- **File / Area:** `backend/src/services/genealogy/kinship_path.rs`, `frontend/src/lib/tree-layouts/hourglass-layout.ts`
 - **Symptom:** Visual lines in tree views overlapping cards, collinear lines obscuring each other, or kinship path finder selecting absurdly long circular routes through distant in-laws.
 - **Root Cause:** Naive breadth-first search found valid graph paths without penalizing generational leaps or partner detours.
 - **Rule:** In `services::genealogy::find_kinship_paths`, prune paths that jump across unrelated spouses or exceed the direct path weight. In layouts, apply anti-collinear clearance offsets to vertical connection buses.
 
 ### GOT-005: Reverse Proxy Origin & Host Mismatches in CSRF Middleware
-- **File / Area:** `backend/src/services/security.rs`, `frontend/nginx.conf`
+- **File / Area:** `backend/src/services/security/context.rs`, `frontend/nginx.conf`
 - **Symptom:** Legitimate mutating POST/PUT requests failing with `403 Forbidden` (`csrf_detected`) when running behind Docker Nginx.
 - **Root Cause:** Nginx forwarded `Host: localhost` while the browser sent `Origin: http://localhost:8080`, causing an origin-header string mismatch.
 - **Rule:** Ensure Nginx passes `X-Forwarded-Host`, `X-Forwarded-Proto`, and `Host` transparently, and `csrf_protection_middleware` permits same-origin reverse-proxied traffic.
 
 ### GOT-006: Living Person 110-Year Assumption When Death Event is Missing
-- **File / Area:** `backend/src/services/privacy.rs`
+- **File / Area:** `backend/src/services/privacy/living.rs`
 - **Symptom:** 19th-century historical figures being classified as "Living" and having their names/events redacted.
 - **Root Cause:** If no death event was recorded and birth date was missing or partial, the algorithm failed to evaluate estimated age.
 - **Rule:** In `privacy::is_living`, estimate birth year from child or spouse events if direct birth date is absent. If inferred birth is > 110 years ago, mark as deceased.
 
 ### GOT-007: PDF Export Connector Drops & SVG Tiling Scaling Discrepancies
-- **File / Area:** `backend/src/services/pdf/layout.rs`, `backend/src/services/pdf/render.rs`
+- **File / Area:** `backend/src/services/pdf/layout/mod.rs`, `backend/src/services/pdf/render/mod.rs`
 - **Symptom:** Lines in exported printable PDFs dropping below card boundaries or cutting off at tile page seams.
 - **Root Cause:** Inconsistency between millimetre coordinates in layout calculation and DPI rasterization in SVG renderer.
 - **Rule:** Use integer point units (`pt`) uniformly across layout generation and render passes, accounting for bleed margins and cut marks explicitly.
@@ -65,4 +67,16 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Root Cause:** Developer used `sqlx::query!` or `sqlx::query_as!` macros instead of runtime functions.
 - **Rule:** Always use `sqlx::query(...)` and `sqlx::query_as::<_, T>(...)` without the exclamation mark.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+### GOT-009: Browser Audio Recording Codec Compatibility & Object URL Leaks
+- **File / Area:** `frontend/src/components/stories/AudioRecorderWidget.tsx`
+- **Symptom:** Voice recording fails or records silence on iOS/Safari, or memory leaks occur during repeated preview playback.
+- **Root Cause:** Safari requires `audio/mp4` MIME type fallback rather than `audio/webm;codecs=opus`, and naive `recorder.start()` without timeslice chunking fails to yield incremental blobs. In addition, unreleased `URL.createObjectURL(blob)` strings leak memory across recording sessions.
+- **Rule:** Detect supported audio MIME types dynamically via `MediaRecorder.isTypeSupported()`, use `recorder.start(250)` for chunked data delivery, and clean up object URLs with `URL.revokeObjectURL()` upon unmount or re-recording.
+
+### GOT-010: Server-Side Audio Transcription Requires GEMINI_API_KEY in .env
+- **File / Area:** `backend/src/routes/rbac/ai_mcp.rs:163-176`, `backend/src/services/story_intake/gemini.rs`
+- **Symptom:** Audio file uploads to `POST /api/v1/ai/transcribe` fail with `400 Bad Request` (`gemini_api_key_not_configured` or `stt_provider_not_configured`).
+- **Root Cause:** The backend server uses Gemini multimodal audio ingestion for speech-to-text (`transcribe_audio_with_gemini`). If neither `GEMINI_API_KEY` (in `.env`) nor instance `llm_api_key` is configured, raw audio bytes cannot be transcribed server-side.
+- **Rule:** Provide `GEMINI_API_KEY` in deployment environment variables (`.env`) for zero-config audio intake. Ensure the frontend verifies `ai_enabled` via `GET /api/v1/system/info` before offering server-only transcription, and fall back to browser `SpeechRecognition` or manual text entry when unconfigured.
+
+_Last curated: 2026-11-05 (Milestone 3.2 server-side Gemini 3.8 Flash)_

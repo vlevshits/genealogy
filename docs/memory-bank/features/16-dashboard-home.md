@@ -9,7 +9,7 @@ Personalized landing dashboard, tree statistics, upcoming family anniversaries, 
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `home_person_id` column in `users`, onboarding configuration table |
-| Routes | `backend/src/routes/rbac.rs` | `/dashboard`, `/anniversaries`, `/stats`, `/onboarding/status`, `/onboarding/start-with-self` |
+| Routes | `backend/src/routes/rbac/mod.rs` | `/dashboard`, `/anniversaries`, `/stats`, `/onboarding/status`, `/onboarding/start-with-self` |
 | Service | `backend/src/services/dashboard.rs` | `get_dashboard_summary`, anniversary calendar calculator |
 | Dashboard Page | `frontend/src/pages/DashboardPage.tsx` | Overview cards, upcoming birthdays/anniversaries feed, quick shortcuts |
 | Onboarding | `frontend/src/components/onboarding/`| `EmptyTreeOnboardingCard.tsx` (wizard for brand new family trees) |

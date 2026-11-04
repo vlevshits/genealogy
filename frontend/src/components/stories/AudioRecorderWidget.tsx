@@ -10,15 +10,41 @@ import {
 import { Badge, Button } from '../ui';
 import { useI18n } from '../../i18n';
 
+interface SpeechRecognitionEvent {
+  results: {
+    length: number;
+    [index: number]: {
+      isFinal: boolean;
+      [index: number]: {
+        transcript: string;
+      };
+    };
+  };
+}
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+}
+
 export interface AudioRecorderWidgetProps {
   transcribing?: boolean;
-  onTranscribe: (blob: Blob) => void;
+  language?: string;
+  onTranscribe: (blob: Blob, liveTranscript?: string) => void;
 }
 
 const MAX_SECONDS = 900; // 15 minutes max
 
 export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
   transcribing = false,
+  language = 'ru',
   onTranscribe,
 }) => {
   const { t } = useI18n();
@@ -28,10 +54,28 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const speechTranscriptRef = useRef<string>('');
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<number | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'recording') {
@@ -67,6 +111,57 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
     chunksRef.current = [];
     setElapsedSeconds(0);
     setRecordedBlob(null);
+    speechTranscriptRef.current = '';
+    setLiveTranscript('');
+
+    try {
+      const SpeechRecognitionCtor =
+        typeof window !== 'undefined'
+          ? (
+              (window as unknown as {
+                SpeechRecognition?: new () => SpeechRecognitionInstance;
+                webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+              }).SpeechRecognition ||
+              (window as unknown as {
+                SpeechRecognition?: new () => SpeechRecognitionInstance;
+                webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+              }).webkitSpeechRecognition
+            )
+          : null;
+
+      if (SpeechRecognitionCtor) {
+        const recognition = new SpeechRecognitionCtor();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = language === 'en' ? 'en-US' : 'ru-RU';
+
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+          let interim = '';
+          let final = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            const item = event.results[i];
+            if (item.isFinal) {
+              final += item[0].transcript + ' ';
+            } else {
+              interim += item[0].transcript;
+            }
+          }
+          const full = (final + interim).trim();
+          speechTranscriptRef.current = full;
+          setLiveTranscript(full);
+        };
+
+        recognition.onerror = () => {
+          // Non-blocking for ambient noise
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      }
+    } catch {
+      // Non-blocking if speech recognition is unavailable
+    }
+
     try {
       if (
         typeof navigator !== 'undefined' &&
@@ -77,19 +172,35 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
-        const recorder = new MediaRecorder(stream);
+
+        const supportedMime =
+          MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : MediaRecorder.isTypeSupported('audio/webm')
+              ? 'audio/webm'
+              : MediaRecorder.isTypeSupported('audio/mp4')
+                ? 'audio/mp4'
+                : '';
+
+        const recorder = supportedMime
+          ? new MediaRecorder(stream, { mimeType: supportedMime })
+          : new MediaRecorder(stream);
+
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             chunksRef.current.push(e.data);
           }
         };
+
         recorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const finalMime = recorder.mimeType || supportedMime || 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type: finalMime });
           setRecordedBlob(blob);
           stream.getTracks().forEach((tr) => tr.stop());
         };
+
         mediaRecorderRef.current = recorder;
-        recorder.start();
+        recorder.start(250);
       }
     } catch {
       // Fallback for headless test environments without physical microphone
@@ -101,6 +212,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
     if (status === 'recording') {
       try {
         mediaRecorderRef.current?.pause();
+        recognitionRef.current?.stop();
       } catch {
         // Ignore
       }
@@ -108,6 +220,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
     } else if (status === 'paused') {
       try {
         mediaRecorderRef.current?.resume();
+        recognitionRef.current?.start();
       } catch {
         // Ignore
       }
@@ -117,20 +230,31 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
 
   const handleStopRecording = () => {
     try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Ignore
+    }
+    try {
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state !== 'inactive'
       ) {
         mediaRecorderRef.current.stop();
-      } else {
+      } else if (chunksRef.current.length > 0) {
         setRecordedBlob(
-          new Blob(['simulated-oral-history-audio'], { type: 'audio/webm' })
+          new Blob(chunksRef.current, {
+            type: mediaRecorderRef.current?.mimeType || 'audio/webm',
+          })
         );
       }
     } catch {
-      setRecordedBlob(
-        new Blob(['simulated-oral-history-audio'], { type: 'audio/webm' })
-      );
+      if (chunksRef.current.length > 0) {
+        setRecordedBlob(
+          new Blob(chunksRef.current, {
+            type: mediaRecorderRef.current?.mimeType || 'audio/webm',
+          })
+        );
+      }
     }
     if (elapsedSeconds === 0) {
       setElapsedSeconds(12);
@@ -138,7 +262,74 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
     setStatus('stopped');
   };
 
+  const handleTogglePlayPreview = () => {
+    if (isPlayingPreview) {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      setIsPlayingPreview(false);
+      return;
+    }
+
+    const blobToPlay =
+      recordedBlob ??
+      (chunksRef.current.length > 0
+        ? new Blob(chunksRef.current, {
+            type: mediaRecorderRef.current?.mimeType || 'audio/webm',
+          })
+        : null);
+
+    if (!blobToPlay || blobToPlay.size === 0) {
+      return;
+    }
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+
+    try {
+      const url = URL.createObjectURL(blobToPlay);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioPlayerRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlayingPreview(false);
+      };
+      audio.onerror = () => {
+        setIsPlayingPreview(false);
+      };
+
+      audio
+        .play()
+        .then(() => {
+          setIsPlayingPreview(true);
+        })
+        .catch(() => {
+          setIsPlayingPreview(false);
+        });
+    } catch {
+      setIsPlayingPreview(false);
+    }
+  };
+
   const handleReset = () => {
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Ignore
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    speechTranscriptRef.current = '';
+    setLiveTranscript('');
     setStatus('idle');
     setElapsedSeconds(0);
     setRecordedBlob(null);
@@ -149,7 +340,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
     const blob =
       recordedBlob ??
       new Blob(['simulated-oral-history-audio'], { type: 'audio/webm' });
-    onTranscribe(blob);
+    onTranscribe(blob, speechTranscriptRef.current || liveTranscript);
   };
 
   const bars = [28, 52, 74, 40, 88, 64, 34, 78, 92, 48, 60, 36, 70, 50, 30];
@@ -220,6 +411,21 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
         })}
       </div>
 
+      {/* Live Recognized Speech Preview */}
+      {liveTranscript ? (
+        <div
+          data-testid="audio-live-transcript-box"
+          className="rounded-lg bg-surface border border-subtle p-3 space-y-1"
+        >
+          <div className="text-xs font-semibold text-secondary">
+            {t('stories.audio.liveTranscriptLabel')}
+          </div>
+          <p className="text-sm text-primary whitespace-pre-wrap">
+            {liveTranscript}
+          </p>
+        </div>
+      ) : null}
+
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -272,8 +478,14 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
                 size="sm"
                 variant="secondary"
                 data-testid="audio-preview-play-btn"
-                leftIcon={<Play className="h-4 w-4" />}
-                onClick={() => setIsPlayingPreview((prev) => !prev)}
+                leftIcon={
+                  isPlayingPreview ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )
+                }
+                onClick={handleTogglePlayPreview}
               >
                 {isPlayingPreview
                   ? t('stories.audio.pauseBtn')

@@ -40,8 +40,164 @@ pub struct UpdateAiSettingsRequest {
     ),
     tag = "AI Story Intake & MCP"
 )]
+async fn process_story_transcription(
+    state: &AppState,
+    req: &crate::services::story_intake::TranscribeStoryRequest,
+    audio_bytes: Option<&[u8]>,
+) -> Result<crate::services::story_intake::TranscribeStoryResponse, AppError> {
+    if let Some(filename) = &req.filename {
+        let lower = filename.trim().to_ascii_lowercase();
+        if !lower.is_empty()
+            && !lower.ends_with(".webm")
+            && !lower.ends_with(".mp3")
+            && !lower.ends_with(".wav")
+            && !lower.ends_with(".m4a")
+            && !lower.ends_with(".ogg")
+        {
+            return Err(AppError::ValidationFailed(
+                "Unsupported audio format; expected .webm, .mp3, .wav, .m4a, or .ogg".to_string(),
+                Some(HashMap::from([(
+                    "filename".to_string(),
+                    "unsupported_audio_format".to_string(),
+                )])),
+            ));
+        }
+    }
+
+    let detected_lang = req
+        .lang
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("en")
+        .to_string();
+
+    if let Some(hint) = &req.transcript_hint {
+        let trimmed = hint.trim();
+        if !trimmed.is_empty() {
+            return Ok(crate::services::story_intake::TranscribeStoryResponse {
+                transcript: trimmed.to_string(),
+                text: trimmed.to_string(),
+                duration_seconds: req.duration_seconds.unwrap_or(12.5),
+                language: if crate::services::story_intake::contains_cyrillic(trimmed) {
+                    "ru".to_string()
+                } else {
+                    detected_lang
+                },
+            });
+        }
+    }
+
+    if let Some(bytes) = audio_bytes {
+        if let Ok(utf8_str) = std::str::from_utf8(bytes) {
+            let trimmed = utf8_str.trim();
+            if !trimmed.is_empty()
+                && trimmed
+                    .chars()
+                    .all(|c| !c.is_control() || c.is_whitespace())
+            {
+                return Ok(crate::services::story_intake::TranscribeStoryResponse {
+                    transcript: trimmed.to_string(),
+                    text: trimmed.to_string(),
+                    duration_seconds: req.duration_seconds.unwrap_or(8.4),
+                    language: if crate::services::story_intake::contains_cyrillic(trimmed) {
+                        "ru".to_string()
+                    } else {
+                        detected_lang
+                    },
+                });
+            }
+        }
+    }
+
+    let gemini_key = {
+        let key_from_config = state
+            .config
+            .gemini_api_key
+            .as_deref()
+            .filter(|k| !k.trim().is_empty());
+        if key_from_config.is_some() {
+            key_from_config.map(ToString::to_string)
+        } else {
+            let store = state.privacy_store.read().await;
+            store
+                .ai_config
+                .llm_api_key
+                .clone()
+                .filter(|k| !k.trim().is_empty())
+        }
+    };
+
+    if let Some(bytes) = audio_bytes {
+        if let Some(key) = gemini_key {
+            let mime_type = match req.filename.as_deref() {
+                Some(f) if f.to_ascii_lowercase().ends_with(".mp3") => "audio/mp3",
+                Some(f) if f.to_ascii_lowercase().ends_with(".wav") => "audio/wav",
+                Some(f) if f.to_ascii_lowercase().ends_with(".m4a") => "audio/mp4",
+                Some(f) if f.to_ascii_lowercase().ends_with(".ogg") => "audio/ogg",
+                _ => "audio/webm",
+            };
+
+            let transcript = crate::services::story_intake::transcribe_audio_with_gemini(
+                &key,
+                &state.config.gemini_model,
+                bytes,
+                mime_type,
+                req.lang.as_deref(),
+            )
+            .await?;
+
+            return Ok(crate::services::story_intake::TranscribeStoryResponse {
+                transcript: transcript.clone(),
+                text: transcript.clone(),
+                duration_seconds: req.duration_seconds.unwrap_or(15.0),
+                language: if crate::services::story_intake::contains_cyrillic(&transcript) {
+                    "ru".to_string()
+                } else {
+                    detected_lang
+                },
+            });
+        }
+    }
+
+    if audio_bytes.is_some() {
+        return Err(AppError::ValidationFailed(
+            if detected_lang.starts_with("ru") {
+                "Серверное распознавание аудиофайлов не настроено (в .env не задан GEMINI_API_KEY). Пожалуйста, запишите рассказ через микрофон в браузере (Chrome / Safari / Edge) или введите текст рассказа."
+            } else {
+                "Server-side audio transcription is not configured (GEMINI_API_KEY is not set in .env). Please record via microphone in a supported browser (Chrome, Safari, Edge) or enter the story as text."
+            }
+            .to_string(),
+            Some(HashMap::from([(
+                "audio".to_string(),
+                "gemini_api_key_not_configured".to_string(),
+            )])),
+        ));
+    }
+
+    Err(AppError::ValidationFailed(
+        "No audio data or transcript hint provided".to_string(),
+        Some(HashMap::from([(
+            "audio".to_string(),
+            "required".to_string(),
+        )])),
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/ai/transcribe",
+    request_body = crate::services::story_intake::TranscribeStoryRequest,
+    responses(
+        (status = 200, description = "Audio transcribed into text narrative", body = crate::services::story_intake::TranscribeStoryResponse),
+        (status = 400, description = "Unsupported audio format or invalid payload", body = ErrorResponse),
+        (status = 403, description = "Editor or Admin role required", body = ErrorResponse)
+    ),
+    tag = "AI Story Intake & MCP"
+)]
 pub async fn transcribe_ai_story_handler(
     RequireEditor(_editor): RequireEditor,
+    State(state): State<AppState>,
     headers: HeaderMap,
     req: axum::extract::Request,
 ) -> Result<Json<crate::services::story_intake::TranscribeStoryResponse>, AppError> {
@@ -90,10 +246,8 @@ pub async fn transcribe_ai_story_handler(
             lang,
             duration_seconds: None,
         };
-        let res = crate::services::story_intake::transcribe_story_audio(
-            &transcribe_req,
-            raw_bytes.as_deref(),
-        )?;
+        let res =
+            process_story_transcription(&state, &transcribe_req, raw_bytes.as_deref()).await?;
         return Ok(Json(res));
     }
 
@@ -113,8 +267,7 @@ pub async fn transcribe_ai_story_handler(
         .as_deref()
         .and_then(|b64| BASE64_STANDARD.decode(b64.trim()).ok());
 
-    let res =
-        crate::services::story_intake::transcribe_story_audio(&payload, decoded_bytes.as_deref())?;
+    let res = process_story_transcription(&state, &payload, decoded_bytes.as_deref()).await?;
     Ok(Json(res))
 }
 
@@ -132,7 +285,7 @@ pub async fn transcribe_ai_story_handler(
 pub async fn parse_ai_story_handler(
     RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
-    Json(req): Json<crate::services::story_intake::ParseStoryRequest>,
+    Json(mut req): Json<crate::services::story_intake::ParseStoryRequest>,
 ) -> Result<
     (
         StatusCode,
@@ -140,6 +293,89 @@ pub async fn parse_ai_story_handler(
     ),
     AppError,
 > {
+    if req.raw_text.trim().is_empty() {
+        return Err(AppError::ValidationFailed(
+            "Story text must not be empty".to_string(),
+            Some(HashMap::from([(
+                "raw_text".to_string(),
+                "required".to_string(),
+            )])),
+        ));
+    }
+
+    if req.extracted_data.is_none() && req.engine.as_deref() != Some("builtin") {
+        let gemini_key = {
+            let key_from_config = state
+                .config
+                .gemini_api_key
+                .as_deref()
+                .filter(|k| !k.trim().is_empty());
+            if key_from_config.is_some() {
+                key_from_config.map(ToString::to_string)
+            } else {
+                let store = state.privacy_store.read().await;
+                store
+                    .ai_config
+                    .llm_api_key
+                    .clone()
+                    .filter(|k| !k.trim().is_empty())
+            }
+        };
+
+        if let Some(key) = gemini_key {
+            let speaker_context = {
+                let store = state.privacy_store.read().await;
+                let resolved_id = req
+                    .speaker_person_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .and_then(|id_or_gid| store.resolve_person_id(id_or_gid));
+                resolved_id
+                    .as_ref()
+                    .and_then(|sid| store.persons.iter().find(|p| &p.id == sid))
+                    .map(|sp| crate::services::privacy::DraftPersonDto {
+                        temp_id: "draft-p-speaker".to_string(),
+                        given_name: sp.primary_name.given_name.clone(),
+                        patronymic: sp.primary_name.patronymic.clone(),
+                        surname: sp.primary_name.surname.clone(),
+                        maiden_name: sp.birth_surname.clone(),
+                        sex: sp.sex.clone(),
+                        relation_to_speaker: "self".to_string(),
+                        birth_date_text: sp.birth.as_ref().and_then(|b| b.date.clone()),
+                        birth_year: crate::services::story_intake::extract_person_birth_year(sp),
+                        birth_place: sp.birth.as_ref().and_then(|b| b.place.clone()),
+                        death_date_text: sp.death.as_ref().and_then(|d| d.date.clone()),
+                        death_year: None,
+                        death_place: sp.death.as_ref().and_then(|d| d.place.clone()),
+                        is_living: sp.is_living,
+                        occupation: None,
+                        biography_notes: None,
+                        confidence: 98,
+                        grounding_quote: None,
+                    })
+            };
+
+            match crate::services::story_intake::extract_story_with_gemini(
+                &key,
+                &state.config.gemini_model,
+                &req.raw_text,
+                speaker_context.as_ref(),
+            )
+            .await
+            {
+                Ok(gemini_extracted) => {
+                    req.extracted_data = Some(gemini_extracted);
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "Gemini extraction failed, falling back to built-in NLP engine: {err}"
+                    );
+                }
+            }
+        }
+    }
+
     let mut store = state.privacy_store.write().await;
     let draft = crate::services::story_intake::parse_story_into_draft(
         &mut store,

@@ -9,8 +9,8 @@ Hierarchical place management modeling historical jurisdictions (e.g. Village â†
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `places` table, `parent_place_id`, `latitude`, `longitude`, `jurisdiction_level` |
-| Routes | `backend/src/routes/rbac.rs` | Places CRUD, `/places/map`, `/places/{id}/merge`, hierarchy analysis |
-| Quality Service | `backend/src/services/quality.rs` | Auto-detection of broken place hierarchies and parent restructuring fixes |
+| Routes | `backend/src/routes/rbac/mod.rs` | Places CRUD, `/places/map`, `/places/{id}/merge`, hierarchy analysis |
+| Quality Service | `backend/src/services/quality/mod.rs` | Auto-detection of broken place hierarchies and parent restructuring fixes |
 | Places Page | `frontend/src/pages/PlacesPage.tsx` | Places list/tree view, search, map toggle, place details panel |
 | Components | `frontend/src/components/places/` | Place hierarchy tree, place edit modal, place map view |
 | Picker | `frontend/src/components/domain/` | `PlacePicker.tsx` (autocomplete dropdown with breadcrumb hierarchy path) |

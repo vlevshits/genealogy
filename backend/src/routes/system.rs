@@ -30,6 +30,8 @@ pub struct SystemInfoResponse {
     pub enable_public_access: bool,
     pub auth_password_enabled: bool,
     pub settings_locked_from_env: bool,
+    #[serde(default)]
+    pub ai_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -99,6 +101,10 @@ pub struct TriggerBackupResponse {
 )]
 pub async fn get_system_info(State(state): State<AppState>) -> Json<SystemInfoResponse> {
     let settings = state.resolve_instance_settings().await;
+    let ai_enabled = state.config.gemini_api_key.is_some() || {
+        let store = state.privacy_store.read().await;
+        store.ai_config.has_api_key
+    };
     Json(SystemInfoResponse {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         tree_title: settings.tree_title,
@@ -106,6 +112,7 @@ pub async fn get_system_info(State(state): State<AppState>) -> Json<SystemInfoRe
         enable_public_access: settings.enable_public_access,
         auth_password_enabled: state.config.is_password_auth_effectively_enabled(),
         settings_locked_from_env: settings.settings_locked_from_env,
+        ai_enabled,
     })
 }
 

@@ -13,7 +13,7 @@ The application is fully bilingual from day 0, offering complete feature parity 
 | Name logic | `frontend/src/lib/patronymic.ts` | `suggestPatronymic(fatherName, gender)`, Slavic declensions |
 | Formatting | `frontend/src/lib/formatters.ts` | Localized date formatting, person name formatting |
 | Error formatting | `frontend/src/lib/error-formatter.ts` | `getLocalizedErrorMessage(err, t)` maps API codes to UI text |
-| Backend patronymic | `backend/src/routes/rbac.rs` | `get_patronymic_suggestion` |
+| Backend patronymic | `backend/src/routes/rbac/mod.rs` | `get_patronymic_suggestion` |
 | Backend email | `backend/src/services/email.rs` | Localized transactional HTML email templates |
 | Verification | `frontend/tests/i18n/parity.test.ts` | Enforces exact 1:1 key parity and bans icons/emojis in strings |
 

@@ -8,8 +8,8 @@ Provides high-fidelity bidirectional migration with standard GEDCOM 5.5.1 and 7.
 ## 2. Code Map
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
-| Routes | `backend/src/routes/rbac.rs` | `analyze_gedcom`, `import_gedcom`, `export_gedcom`, body limit 500MB |
-| Service | `backend/src/services/gedcom.rs` | Line tokenizer, grammar parser, tag processors (`INDI`, `FAM`, `OBJE`), serializer |
+| Routes | `backend/src/routes/rbac/mod.rs` | `analyze_gedcom`, `import_gedcom`, `export_gedcom`, body limit 500MB |
+| Service | `backend/src/services/gedcom/mod.rs` | Line tokenizer, grammar parser, tag processors (`INDI`, `FAM`, `OBJE`), serializer |
 | Media bundle | `backend/src/services/media_bundle.rs` | `reconcile_gedcom_media_bundle` matches ZIP files to imported `OBJE` stubs |
 | Frontend components| `frontend/src/components/settings/gedcom/` | `GedcomAnalysisModal.tsx`, `GedcomPostImportReport.tsx` |
 | Settings Page | `frontend/src/pages/SettingsPage.tsx` | GEDCOM management tab with file drag-and-drop |

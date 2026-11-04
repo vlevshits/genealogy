@@ -8,8 +8,8 @@ High-performance, interactive graphical tree canvas providing multiple genealogi
 ## 2. Code Map
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
-| Routes | `backend/src/routes/rbac.rs` | `get_tree`, `get_tree_view`, `get_fan_chart`, `get_kinship` |
-| Service | `backend/src/services/genealogy.rs` | Tree graph algorithms, `find_kinship_paths` (multi-trace BFS with detour pruning) |
+| Routes | `backend/src/routes/rbac/mod.rs` | `get_tree`, `get_tree_view`, `get_fan_chart`, `get_kinship` |
+| Service | `backend/src/services/genealogy/mod.rs` | Tree graph algorithms, `find_kinship_paths` (multi-trace BFS with detour pruning) |
 | Canvas component | `frontend/src/components/tree/` | `TreeCanvas.tsx` (SVG/HTML canvas with pan/zoom and viewport virtualization) |
 | Node cards | `frontend/src/components/tree/` | `PersonNodeCard.tsx` (compact card with photo, dates, lineage colors) |
 | Layout engines | `frontend/src/lib/tree-layouts/` | `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts` |

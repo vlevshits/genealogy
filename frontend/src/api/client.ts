@@ -12,3 +12,4 @@ export * from "./history-api";
 export * from "./delight-types";
 export * from "./delight-api";
 export * from "./stories-mcp-api";
+export * from "./gemini-story-extractor";

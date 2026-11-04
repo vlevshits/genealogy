@@ -716,3 +716,183 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
     .await;
     assert_eq!(after_rev_status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_parse_story_with_provided_extracted_data_and_derived_title() {
+    let (app, _admin_auth, editor_auth, _viewer_auth) = setup_test_env().await;
+
+    // 1. Post a story with pre-extracted data and no title -> title should be derived from extracted persons
+    let custom_extracted = json!({
+        "persons": [
+            {
+                "temp_id": "temp_p1",
+                "given_name": "Arthur",
+                "surname": "Pendelton",
+                "sex": "M",
+                "birth_year": 1920,
+                "birth_place": "Bristol",
+                "relation_to_speaker": "grandfather",
+                "confidence": 95,
+                "biography_notes": "Served in WWII"
+            },
+            {
+                "temp_id": "temp_p2",
+                "given_name": "Beatrice",
+                "surname": "Pendelton",
+                "sex": "F",
+                "birth_year": 1924,
+                "birth_place": "Bath",
+                "relation_to_speaker": "grandmother",
+                "confidence": 90,
+                "biography_notes": "Met Arthur in 1945"
+            }
+        ],
+        "unions": [
+            {
+                "temp_id": "temp_u1",
+                "partner1_temp_id": "temp_p1",
+                "partner2_temp_id": "temp_p2",
+                "union_type": "MARR",
+                "marriage_date_text": "1946",
+                "marriage_place": "Bristol",
+                "confidence": 95
+            }
+        ],
+        "parent_child_links": [],
+        "events": []
+    });
+
+    let (status, draft) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "raw_text": "Arthur and Beatrice met right after the war.",
+            "extracted_data": custom_extracted
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED, "draft response: {draft}");
+    assert_eq!(draft["status"], "draft");
+
+    // Title should be derived via derive_story_title(&raw_text, &extracted_data)
+    assert_eq!(draft["title"], "Family Story: Arthur Pendelton");
+
+    // Extracted data matches what was passed in directly
+    let persons = draft["extracted_data"]["persons"].as_array().unwrap();
+    assert_eq!(persons.len(), 2);
+    assert_eq!(persons[0]["temp_id"], "temp_p1");
+    assert_eq!(persons[0]["given_name"], "Arthur");
+    assert_eq!(persons[0]["surname"], "Pendelton");
+    assert_eq!(persons[0]["biography_notes"], "Served in WWII");
+
+    assert_eq!(persons[1]["temp_id"], "temp_p2");
+    assert_eq!(persons[1]["given_name"], "Beatrice");
+
+    let unions = draft["extracted_data"]["unions"].as_array().unwrap();
+    assert_eq!(unions.len(), 1);
+    assert_eq!(unions[0]["temp_id"], "temp_u1");
+
+    // Reconciliation matches should be run seamlessly on the provided extracted_data
+    let reconciliations = draft["reconciliation_matches"].as_array().unwrap();
+    assert_eq!(reconciliations.len(), 2);
+    assert_eq!(reconciliations[0]["draft_temp_id"], "temp_p1");
+    assert_eq!(reconciliations[0]["recommended_action"], "create_new");
+    assert_eq!(reconciliations[1]["draft_temp_id"], "temp_p2");
+    assert_eq!(reconciliations[1]["recommended_action"], "create_new");
+
+    // 2. Post a story with provided title alongside extracted_data -> provided title is preserved
+    let (status2, draft2) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "title": "Memoirs of Bristol 1945",
+            "raw_text": "Arthur and Beatrice met right after the war.",
+            "extracted_data": {
+                "persons": [
+                    {
+                        "temp_id": "temp_p1",
+                        "given_name": "Arthur",
+                        "surname": "Pendelton",
+                        "sex": "M",
+                        "relation_to_speaker": "relative",
+                        "confidence": 90
+                    }
+                ],
+                "unions": [],
+                "parent_child_links": [],
+                "events": []
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(status2, StatusCode::CREATED);
+    assert_eq!(draft2["title"], "Memoirs of Bristol 1945");
+}
+
+#[tokio::test]
+async fn test_gemini_config_system_info_and_missing_api_key_audio_transcription_error() {
+    let (app, _admin_auth, editor_auth, _viewer_auth) = setup_test_env().await;
+
+    // 1. GET /api/v1/system/info should show ai_enabled: false when no key is set
+    let (info_status, info_body) = get_json(&app, "/api/v1/system/info", "").await;
+    assert_eq!(info_status, StatusCode::OK);
+    assert_eq!(info_body["ai_enabled"], false);
+
+    // 2. Setting GEMINI_API_KEY in state reflects ai_enabled: true
+    let custom_cfg = AppConfig {
+        app_env: "test".to_string(),
+        gemini_api_key: Some("test-gemini-key-12345".to_string()),
+        gemini_model: "gemini-3.8-flash".to_string(),
+        ..AppConfig::default()
+    };
+    let app2_state = AppState::new(None, custom_cfg);
+    let app2 = create_router(app2_state);
+    let (info_status2, info_body2) = get_json(&app2, "/api/v1/system/info", "").await;
+    assert_eq!(info_status2, StatusCode::OK);
+    assert_eq!(info_body2["ai_enabled"], true);
+
+    // 3. Audio transcription without GEMINI_API_KEY returns clear validation error
+    let raw_fake_audio_bytes = vec![0x1a, 0x45, 0xdf, 0xa3, 0x00, 0x01, 0x02];
+    let base64_audio = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        &raw_fake_audio_bytes,
+    );
+
+    let (tr_status, tr_err) = post_json(
+        &app,
+        "/api/v1/ai/transcribe",
+        &editor_auth,
+        json!({
+            "audio_base64": base64_audio,
+            "filename": "recording.webm",
+            "lang": "en"
+        }),
+    )
+    .await;
+    assert_eq!(tr_status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        tr_err["error"]["field_errors"]["audio"],
+        "gemini_api_key_not_configured"
+    );
+
+    // 4. Story parsing with engine="builtin" extracts genealogical graph using built-in NLP
+    let (p_status, p_draft) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "raw_text": "I am William Wallace born in 1270 in Elderslie.",
+            "engine": "builtin"
+        }),
+    )
+    .await;
+    assert_eq!(p_status, StatusCode::CREATED);
+    assert_eq!(p_draft["status"], "draft");
+    let persons = p_draft["extracted_data"]["persons"].as_array().unwrap();
+    assert!(!persons.is_empty());
+    assert_eq!(persons[0]["given_name"], "William");
+}

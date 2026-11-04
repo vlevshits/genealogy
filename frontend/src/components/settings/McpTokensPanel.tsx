@@ -236,8 +236,8 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
           onSubmit={handleCreateToken}
           className="rounded-xl border border-subtle bg-surface-subtle p-4 space-y-3"
         >
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-5">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            <div className="md:col-span-4">
               <FormField
                 name="mcp_token_name"
                 label={t('settings.mcp.tokenNameLabel')}
@@ -257,7 +257,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
               <div className="text-xs font-medium text-secondary">
                 {t('settings.mcp.scopesLabel')}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-col gap-2">
                 <Checkbox
                   checked={selectedScopes.includes('read:tree')}
                   onCheckedChange={() => toggleScope('read:tree')}
@@ -287,7 +287,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
               </div>
             </div>
 
-            <div className="md:col-span-2 flex justify-end">
+            <div className="md:col-span-3 flex justify-end md:pt-5">
               <Button
                 type="submit"
                 size="sm"
@@ -296,6 +296,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
                 disabled={!tokenName.trim() || selectedScopes.length === 0}
                 data-testid="create-mcp-token-btn"
                 leftIcon={<Plus className="h-4 w-4" />}
+                className="whitespace-nowrap"
               >
                 {t('settings.mcp.createTokenBtn')}
               </Button>

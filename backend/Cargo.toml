@@ -37,6 +37,6 @@ tempfile = "3.27.0"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport"] }
 printpdf = "0.7"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
-reqwest = { version = "0.12", features = ["json"] }

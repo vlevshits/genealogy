@@ -65,6 +65,10 @@ pub struct AppConfig {
     pub history_retention_days: u32,
     pub settings_locked_from_env: bool,
     pub public_search_show_living: bool,
+
+    // 3.10 AI & Multimodal Story Intake (Gemini)
+    pub gemini_api_key: Option<String>,
+    pub gemini_model: String,
 }
 
 impl Default for AppConfig {
@@ -193,6 +197,10 @@ impl AppConfig {
         let settings_locked_from_env = parse_bool("SETTINGS_LOCKED_FROM_ENV", false);
         let public_search_show_living = parse_bool("PUBLIC_SEARCH_SHOW_LIVING", false);
 
+        // 3.10 AI & Multimodal Story Intake (Gemini)
+        let gemini_api_key = get("GEMINI_API_KEY").or_else(|| get("VITE_GEMINI_API_KEY"));
+        let gemini_model = get("GEMINI_MODEL").unwrap_or_else(|| "gemini-3.8-flash".to_string());
+
         Ok(Self {
             port,
             app_env,
@@ -236,6 +244,8 @@ impl AppConfig {
             history_retention_days,
             settings_locked_from_env,
             public_search_show_living,
+            gemini_api_key,
+            gemini_model,
         })
     }
 

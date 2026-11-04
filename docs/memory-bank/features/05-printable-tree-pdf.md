@@ -8,10 +8,10 @@ Generates print-ready high-resolution vector PDF charts of family lineages. Supp
 ## 2. Code Map
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
-| Routes | `backend/src/routes/rbac.rs` | `export_printable_pdf`, `get_pdf_preview_info` |
+| Routes | `backend/src/routes/rbac/mod.rs` | `export_printable_pdf`, `get_pdf_preview_info` |
 | PDF Engine | `backend/src/services/pdf/mod.rs` | PDF generation pipeline coordinator |
-| Layout Planner | `backend/src/services/pdf/layout.rs` | Coordinate calculations, ancestor/descendant positioning, sheet bounding boxes |
-| Vector Renderer | `backend/src/services/pdf/render.rs` | Direct PDF/SVG stream rendering with embedded TrueType fonts |
+| Layout Planner | `backend/src/services/pdf/layout/mod.rs` | Coordinate calculations, ancestor/descendant positioning, sheet bounding boxes |
+| Vector Renderer | `backend/src/services/pdf/render/mod.rs` | Direct PDF/SVG stream rendering with embedded TrueType fonts |
 | Tiling Engine | `backend/src/services/pdf/tiling.rs` | Computes tile grids, cut guides, overlap margins, page headers |
 | Themes | `backend/src/services/pdf/themes.rs` | Color themes: Modern Clean, Classic Parchment, High Contrast Monochromatic |
 | Embedded Fonts | `backend/assets/fonts/` | `PTSerif-Regular.ttf`, `PTSerif-Bold.ttf`, `Roboto-Regular.ttf`, `Roboto-Bold.ttf` |

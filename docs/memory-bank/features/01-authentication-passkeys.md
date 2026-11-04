@@ -9,9 +9,9 @@ Passwordless, modern authentication system designed for ease of use by non-techn
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/20261026000003_auth_users_sessions.sql` | `users`, `user_roles`, `sessions`, `passkeys`, `magic_links`, `invitations`, `recovery_codes` |
-| Routes | `backend/src/routes/auth.rs` | Login/register challenge endpoints, magic link request/verify, passkey CRUD, session management |
-| Service | `backend/src/services/auth.rs` | WebAuthn challenge verification, Argon2/PBKDF2 passwords, token generation, lockout counters |
-| Security | `backend/src/services/security.rs` | `RateLimiter` (10 req/min/IP for auth, 3 req/15min for magic links, 5-failure 15min lockout) |
+| Routes | `backend/src/routes/auth/mod.rs` | Login/register challenge endpoints, magic link request/verify, passkey CRUD, session management |
+| Service | `backend/src/services/auth/mod.rs` | WebAuthn challenge verification, Argon2/PBKDF2 passwords, token generation, lockout counters |
+| Security | `backend/src/services/security/mod.rs` | `RateLimiter` (10 req/min/IP for auth, 3 req/15min for magic links, 5-failure 15min lockout) |
 | Frontend context | `frontend/src/lib/auth-context.tsx` | `AuthProvider`, `useAuth`, `login`, `logout`, `user`, `role`, `isAuthenticated` |
 | WebAuthn helper | `frontend/src/lib/webauthn.ts` | Base64URL challenge decoding, `navigator.credentials.create`/`get` wrappers |
 | Auth UI | `frontend/src/pages/AuthPages.tsx` | Multi-mode card router (`login`, `magic-link`, `recovery-code`, `register-invite`) |

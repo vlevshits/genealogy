@@ -2078,7 +2078,9 @@
       "stopBtn": "Stop",
       "playPreviewBtn": "Listen",
       "reRecordBtn": "Re-record",
-      "transcribeBtn": "Transcribe Audio"
+      "transcribeBtn": "Transcribe Audio",
+      "liveTranscriptLabel": "Recognized speech",
+      "noTranscriptError": "No speech could be recognized from the audio. Please type your story or record again in a supported browser."
     },
     "input": {
       "sampleParentsText": "My father Pyotr Fyodorovich Shcheglov was born on March 14, 1945 in Tver. My mother Maria Ivanovna Volkova was born in 1948 in Kalinin. They married in 1970 in Tver.",
@@ -2100,6 +2102,18 @@
       "langRu": "Russian (Русский)",
       "langEn": "English",
       "extractBtn": "Build Draft Tree"
+    },
+    "engine": {
+      "label": "Extraction Engine",
+      "gemini": "Gemini 3.8 Flash",
+      "geminiDescription": "Cloud AI with deep genealogical reasoning",
+      "builtin": "Built-in Offline",
+      "builtinDescription": "Privacy-first pattern parser, no external API",
+      "modelBadge": "Gemini 3.8 Flash (Server AI)"
+    },
+    "gemini": {
+      "extractionError": "Gemini extraction failed: {error}",
+      "fallbackToBuiltin": "Try built-in engine"
     },
     "canvas": {
       "title": "Staged Subtree Preview",

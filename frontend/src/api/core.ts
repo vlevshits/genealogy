@@ -39,6 +39,7 @@ export interface SystemInfoResponse {
   enable_public_access: boolean;
   auth_password_enabled: boolean;
   settings_locked_from_env: boolean;
+  ai_enabled?: boolean;
 }
 
 export interface AdminDatabaseStatus {

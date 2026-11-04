@@ -71,12 +71,19 @@ impl AppState {
         };
         let cfg = Arc::new(config);
         let email_service = Arc::new(EmailService::new(Arc::clone(&cfg)));
+        let mut privacy_store = GenealogyPrivacyStore::empty();
+        if let Some(ref key) = cfg.gemini_api_key {
+            privacy_store.ai_config.llm_api_key = Some(key.clone());
+            privacy_store.ai_config.has_api_key = true;
+            privacy_store.ai_config.llm_model = cfg.gemini_model.clone();
+            privacy_store.ai_config.llm_provider = "gemini".to_string();
+        }
         Self {
             db,
             config: cfg,
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
-            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::empty())),
+            privacy_store: Arc::new(RwLock::new(privacy_store)),
             rate_limiter: RateLimiter::new(),
             email_service,
         }
@@ -98,12 +105,19 @@ impl AppState {
         };
         let cfg = Arc::new(config);
         let email_service = Arc::new(EmailService::new(Arc::clone(&cfg)));
+        let mut privacy_store = GenealogyPrivacyStore::demo();
+        if let Some(ref key) = cfg.gemini_api_key {
+            privacy_store.ai_config.llm_api_key = Some(key.clone());
+            privacy_store.ai_config.has_api_key = true;
+            privacy_store.ai_config.llm_model = cfg.gemini_model.clone();
+            privacy_store.ai_config.llm_provider = "gemini".to_string();
+        }
         Self {
             db,
             config: cfg,
             settings_override: Arc::new(RwLock::new(initial)),
             auth_store: Arc::new(RwLock::new(AuthMemoryStore::default())),
-            privacy_store: Arc::new(RwLock::new(GenealogyPrivacyStore::demo())),
+            privacy_store: Arc::new(RwLock::new(privacy_store)),
             rate_limiter: RateLimiter::new(),
             email_service,
         }

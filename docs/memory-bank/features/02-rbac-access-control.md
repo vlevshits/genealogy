@@ -9,10 +9,10 @@ Provides role-based access control (Admin, Editor, Viewer, Public/Anonymous) and
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/20261026000004_rbac_and_privacy.sql` | `user_roles`, `privacy_settings`, `living_override` |
-| Route handlers | `backend/src/routes/rbac.rs` | Massive handler file containing RBAC guards for all domain actions |
+| Route handlers | `backend/src/routes/rbac/mod.rs` | Modular handler package containing RBAC guards for all domain actions |
 | Service (RBAC) | `backend/src/services/rbac.rs` | `can_edit_tree`, `can_view_person`, `can_manage_users`, role hierarchies |
-| Service (Privacy) | `backend/src/services/privacy.rs` | `is_living(&person)`, `redact_person(&mut person, ctx)`, 110-year rule |
-| Middleware | `backend/src/services/security.rs` | `request_context_middleware` sets user role in request extensions |
+| Service (Privacy) | `backend/src/services/privacy/mod.rs` | `is_living(&person)`, `redact_person(&mut person, ctx)`, 110-year rule |
+| Middleware | `backend/src/services/security/mod.rs` | `request_context_middleware` sets user role in request extensions |
 | Frontend components| `frontend/src/components/domain/` | `RoleBadge.tsx`, role-based button hiding |
 | Frontend guards | `frontend/src/components/ui/` | `AccessDeniedCard.tsx`, public navigation segregation in `AppShell` |
 | Tests | `backend/tests/rbac_test.rs` | Permissions matrix, living-person redaction, 404 on hidden records |

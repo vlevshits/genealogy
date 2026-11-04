@@ -18,6 +18,7 @@ pub struct TranscribeStoryRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TranscribeStoryResponse {
     pub transcript: String,
+    pub text: String,
     pub duration_seconds: f64,
     pub language: String,
 }
@@ -35,6 +36,10 @@ pub struct ParseStoryRequest {
     pub language: Option<String>,
     #[serde(default)]
     pub audio_media_id: Option<String>,
+    #[serde(default)]
+    pub engine: Option<String>,
+    #[serde(default)]
+    pub extracted_data: Option<DraftExtractedDataDto>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -124,6 +129,7 @@ pub fn transcribe_story_audio(
         if !trimmed.is_empty() {
             return Ok(TranscribeStoryResponse {
                 transcript: trimmed.to_string(),
+                text: trimmed.to_string(),
                 duration_seconds: req.duration_seconds.unwrap_or(12.5),
                 language: if contains_cyrillic(trimmed) {
                     "ru".to_string()
@@ -144,6 +150,7 @@ pub fn transcribe_story_audio(
             {
                 return Ok(TranscribeStoryResponse {
                     transcript: trimmed.to_string(),
+                    text: trimmed.to_string(),
                     duration_seconds: req.duration_seconds.unwrap_or(8.4),
                     language: if contains_cyrillic(trimmed) {
                         "ru".to_string()
@@ -155,17 +162,27 @@ pub fn transcribe_story_audio(
         }
     }
 
-    let default_transcript = if detected_lang.starts_with("ru") {
-        "Я Иван Сергеевич Петров, родился 29 июня 1995 года в Москве. Моя мама — Елена Викторовна Петрова, родилась в 1968 году в Твери.".to_string()
-    } else {
-        "I am Test Test, born in 1995 June 29, my bf is Test1 Test1.".to_string()
-    };
+    if raw_bytes.is_some() || req.audio_base64.is_some() {
+        return Err(AppError::ValidationFailed(
+            if detected_lang.starts_with("ru") {
+                "Серверное распознавание аудиофайлов не настроено (требуется Whisper или внешний STT). Пожалуйста, запишите рассказ через микрофон в браузере (Chrome / Safari / Edge) или введите текст рассказа."
+            } else {
+                "Server-side audio transcription is not configured (Whisper or STT API required). Please record via microphone in a supported browser (Chrome, Safari, Edge) or enter the story as text."
+            }.to_string(),
+            Some(HashMap::from([(
+                "audio".to_string(),
+                "stt_provider_not_configured".to_string(),
+            )])),
+        ));
+    }
 
-    Ok(TranscribeStoryResponse {
-        transcript: default_transcript,
-        duration_seconds: req.duration_seconds.unwrap_or(10.0),
-        language: detected_lang,
-    })
+    Err(AppError::ValidationFailed(
+        "No audio data or transcript hint provided".to_string(),
+        Some(HashMap::from([(
+            "audio".to_string(),
+            "required".to_string(),
+        )])),
+    ))
 }
 
 /// Parses a free-form family story into a sandbox `StoryIntakeDraftDto` (`19-ai-family-story-intake-and-mcp.md §3.2`).
@@ -201,7 +218,11 @@ pub fn parse_story_into_draft(
         .as_ref()
         .and_then(|sid| store.persons.iter().find(|p| &p.id == sid).cloned());
 
-    let extracted_data = extract_narrative_graph(&raw_text, anchored_speaker.as_ref());
+    let extracted_data = if let Some(data) = req.extracted_data {
+        data
+    } else {
+        extract_narrative_graph(&raw_text, anchored_speaker.as_ref())
+    };
 
     let now = Utc::now().to_rfc3339();
     let title = req

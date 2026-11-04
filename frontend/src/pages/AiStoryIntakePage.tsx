@@ -25,6 +25,11 @@ import {
   storyApi,
   StoryDraftDto,
 } from '../api/client';
+import {
+  getExtractionEngine,
+  setExtractionEngine,
+  StoryExtractionEngine,
+} from '../api/gemini-story-extractor';
 import { useAuth } from '../lib/auth-context';
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
@@ -71,6 +76,25 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   const [extracting, setExtracting] = useState<boolean>(false);
   const [refining, setRefining] = useState<boolean>(false);
   const [committing, setCommitting] = useState<boolean>(false);
+
+  const [engine, setEngine] = useState<StoryExtractionEngine>(() =>
+    getExtractionEngine()
+  );
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.removeItem('genealogy_gemini_api_key');
+      } catch {
+        // Ignore
+      }
+    }
+  }, []);
+
+  const handleEngineChange = (nextEngine: StoryExtractionEngine) => {
+    setEngine(nextEngine);
+    setExtractionEngine(nextEngine);
+  };
 
   const [activeDraft, setActiveDraft] = useState<StoryDraftDto | null>(
     initialDraft
@@ -126,7 +150,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           );
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       cancelled = true;
     };
@@ -162,17 +186,34 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
     );
   }
 
-  const handleTranscribeAudio = async (blob: Blob | File) => {
+  const handleTranscribeAudio = async (
+    blob: Blob | File,
+    speechTranscript?: string
+  ) => {
     setTranscribing(true);
     try {
-      const res = await storyApi.transcribeAudio(blob);
-      setNarrativeText((prev) =>
-        prev.trim() ? `${prev.trim()}\n\n${res.text}` : res.text
+      const res = await storyApi.transcribeAudio(
+        blob,
+        speechTranscript,
+        language === 'auto' ? undefined : language
       );
-      addToast({
-        type: 'success',
-        title: t('stories.toast.transcribedTitle'),
-      });
+      const transcribed = (res.text || res.transcript || speechTranscript || '').trim();
+      if (transcribed) {
+        setNarrativeText((prev) => {
+          const current = (prev ?? '').trim();
+          return current ? `${current}\n\n${transcribed}` : transcribed;
+        });
+        addToast({
+          type: 'success',
+          title: t('stories.toast.transcribedTitle'),
+        });
+      } else {
+        addToast({
+          type: 'info',
+          title: t('common.errorLoading'),
+          description: t('stories.audio.noTranscriptError'),
+        });
+      }
     } catch (err) {
       addToast({
         type: 'error',
@@ -187,13 +228,16 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   const handleExtractSubtree = async () => {
     if (!narrativeText.trim() || extracting) return;
     setExtracting(true);
+
     try {
       const draft = await storyApi.parseStory({
         speaker_id: isNewSpeaker ? null : selectedSpeakerId,
         is_new_speaker: isNewSpeaker,
         raw_text: narrativeText.trim(),
         language: language === 'auto' ? undefined : language,
+        engine,
       });
+
       setActiveDraft(draft);
       syncResolutionsFromDraft(draft);
       addToast({
@@ -363,11 +407,10 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${
-              currentStage >= 2
+            className={`flex items-center gap-2 ${currentStage >= 2
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-            }`}
+              }`}
           >
             <Badge
               variant={currentStage >= 2 ? 'brand' : 'neutral'}
@@ -381,11 +424,10 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${
-              currentStage >= 2
+            className={`flex items-center gap-2 ${currentStage >= 2
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-            }`}
+              }`}
           >
             <Badge
               variant={currentStage >= 2 ? 'success' : 'neutral'}
@@ -421,7 +463,11 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
         extracting={extracting}
         transcribing={transcribing}
         onExtractSubtree={() => void handleExtractSubtree()}
-        onTranscribeBlob={(blob) => void handleTranscribeAudio(blob)}
+        onTranscribeBlob={(blob, speechTranscript) =>
+          void handleTranscribeAudio(blob, speechTranscript)
+        }
+        engine={engine}
+        onEngineChange={handleEngineChange}
       />
 
       {/* Loading Shimmer while Extracting */}

@@ -90,6 +90,7 @@ export interface StoryDraftDto {
 
 export interface TranscribeAudioResponseDto {
   text: string;
+  transcript?: string;
   language?: string;
   duration_seconds?: number;
   audio_path?: string | null;
@@ -102,6 +103,8 @@ export interface ParseStoryRequestDto {
   raw_text: string;
   language?: string;
   audio_path?: string | null;
+  engine?: 'gemini' | 'builtin';
+  extracted_data?: ExtractedStoryDataDto;
 }
 
 export interface RefineStoryDraftRequestDto {
@@ -161,121 +164,75 @@ export function buildLocalStoryDraftFallback(
   const isRu = /[А-Яа-яЁё]/.test(raw);
   const draftId = `draft-${Date.now()}`;
 
-  const speakerNode: DraftPersonNodeDto = isRu
-    ? {
-        temp_id: 'temp-speaker-1',
-        given_name: 'Анна',
-        surname: 'Волкова',
-        patronymic: 'Сергеевна',
-        sex: 'F',
-        birth_date: '1995-06-29',
-        birth_place: 'Москва',
-        is_living: true,
-        role_to_speaker: 'speaker',
-        source_snippet: raw.slice(0, 110) || 'Меня зовут Анна Волкова, родилась 29 июня 1995 в Москве.',
-        confidence_score: 98,
-      }
-    : {
-        temp_id: 'temp-speaker-1',
-        given_name: 'Anna',
-        surname: 'Volkova',
-        patronymic: null,
-        sex: 'F',
-        birth_date: '1995-06-29',
-        birth_place: 'Moscow',
-        is_living: true,
-        role_to_speaker: 'speaker',
-        source_snippet: raw.slice(0, 110) || 'My name is Anna Volkova, born June 29, 1995 in Moscow.',
-        confidence_score: 98,
-      };
+  const speakerNode: DraftPersonNodeDto = {
+    temp_id: 'temp-speaker-1',
+    given_name: isRu ? 'Анна' : 'Anna',
+    surname: isRu ? 'Волкова' : 'Volkova',
+    patronymic: isRu ? 'Сергеевна' : null,
+    sex: 'F',
+    birth_date: '1995-06-29',
+    birth_place: isRu ? 'Москва' : 'Moscow',
+    is_living: true,
+    role_to_speaker: 'speaker',
+    source_snippet:
+      raw.slice(0, 110) ||
+      (isRu
+        ? 'Меня зовут Анна Волкова, родилась 29 июня 1995 в Москве.'
+        : 'My name is Anna Volkova, born June 29, 1995 in Moscow.'),
+    confidence_score: 98,
+  };
 
-  const partnerNode: DraftPersonNodeDto = isRu
-    ? {
-        temp_id: 'temp-partner-2',
-        given_name: 'Алексей',
-        surname: 'Смирнов',
-        patronymic: 'Игоревич',
-        sex: 'M',
-        birth_date: '1993',
-        birth_place: 'Тверь',
-        is_living: true,
-        role_to_speaker: 'spouse',
-        source_snippet: 'Мой муж — Алексей Смирнов (родился в 1993 году в Твери).',
-        confidence_score: 94,
-      }
-    : {
-        temp_id: 'temp-partner-2',
-        given_name: 'Alexey',
-        surname: 'Smirnov',
-        patronymic: null,
-        sex: 'M',
-        birth_date: '1993',
-        birth_place: 'Tver',
-        is_living: true,
-        role_to_speaker: 'spouse',
-        source_snippet: 'My partner is Alexey Smirnov (born 1993 in Tver).',
-        confidence_score: 94,
-      };
+  const partnerNode: DraftPersonNodeDto = {
+    temp_id: 'temp-partner-2',
+    given_name: isRu ? 'Алексей' : 'Alexey',
+    surname: isRu ? 'Смирнов' : 'Smirnov',
+    patronymic: isRu ? 'Игоревич' : null,
+    sex: 'M',
+    birth_date: '1993',
+    birth_place: isRu ? 'Тверь' : 'Tver',
+    is_living: true,
+    role_to_speaker: 'spouse',
+    source_snippet: isRu
+      ? 'Мой муж — Алексей Смирнов (родился в 1993 году в Твери).'
+      : 'My partner is Alexey Smirnov (born 1993 in Tver).',
+    confidence_score: 94,
+  };
 
-  const childNode: DraftPersonNodeDto = isRu
-    ? {
-        temp_id: 'temp-child-3',
-        given_name: 'София',
-        surname: 'Смирнова',
-        patronymic: 'Алексеевна',
-        sex: 'F',
-        birth_date: 'abt 2021',
-        birth_place: 'Москва',
-        is_living: true,
-        role_to_speaker: 'child',
-        source_snippet: 'У нас есть дочь София, родилась в 2021 году.',
-        confidence_score: 82,
-        ambiguity_note: 'Точная дата рождения не указана',
-      }
-    : {
-        temp_id: 'temp-child-3',
-        given_name: 'Sophia',
-        surname: 'Smirnova',
-        patronymic: null,
-        sex: 'F',
-        birth_date: 'abt 2021',
-        birth_place: 'Moscow',
-        is_living: true,
-        role_to_speaker: 'child',
-        source_snippet: 'We have a daughter, Sophia, born in 2021.',
-        confidence_score: 82,
-        ambiguity_note: 'Exact day and month not specified',
-      };
+  const childNode: DraftPersonNodeDto = {
+    temp_id: 'temp-child-3',
+    given_name: isRu ? 'София' : 'Sophia',
+    surname: isRu ? 'Смирнова' : 'Smirnova',
+    patronymic: isRu ? 'Алексеевна' : null,
+    sex: 'F',
+    birth_date: 'abt 2021',
+    birth_place: isRu ? 'Москва' : 'Moscow',
+    is_living: true,
+    role_to_speaker: 'child',
+    source_snippet: isRu
+      ? 'У нас есть дочь София, родилась в 2021 году.'
+      : 'We have a daughter, Sophia, born in 2021.',
+    confidence_score: 82,
+    ambiguity_note: isRu
+      ? 'Точная дата рождения не указана'
+      : 'Exact day and month not specified',
+  };
 
-  const motherNode: DraftPersonNodeDto = isRu
-    ? {
-        temp_id: 'temp-mother-4',
-        given_name: 'Мария',
-        surname: 'Волкова',
-        maiden_name: 'Петрова',
-        patronymic: 'Ивановна',
-        sex: 'F',
-        birth_date: '1968',
-        birth_place: 'Санкт-Петербург',
-        is_living: true,
-        role_to_speaker: 'mother',
-        source_snippet: 'Моя мама — Мария Ивановна Петрова (родилась в 1968 году в Санкт-Петербурге).',
-        confidence_score: 91,
-      }
-    : {
-        temp_id: 'temp-mother-4',
-        given_name: 'Maria',
-        surname: 'Volkova',
-        maiden_name: 'Petrova',
-        patronymic: 'Ivanovna',
-        sex: 'F',
-        birth_date: '1968',
-        birth_place: 'Saint Petersburg',
-        is_living: true,
-        role_to_speaker: 'mother',
-        source_snippet: 'My mother is Maria Ivanovna Petrova (born 1968 in Saint Petersburg).',
-        confidence_score: 91,
-      };
+  const motherNode: DraftPersonNodeDto = {
+    temp_id: 'temp-mother-4',
+    given_name: isRu ? 'Мария' : 'Maria',
+    surname: isRu ? 'Волкова' : 'Volkova',
+    maiden_name: isRu ? 'Петрова' : 'Petrova',
+    patronymic: isRu ? 'Ивановна' : 'Ivanovna',
+    sex: 'F',
+    birth_date: '1968',
+    birth_place: isRu ? 'Санкт-Петербург' : 'Saint Petersburg',
+    is_living: true,
+    role_to_speaker: 'mother',
+    source_snippet: isRu
+      ? 'Моя мама — Мария Ивановна Петрова (родилась в 1968 году в Санкт-Петербурге).'
+      : 'My mother is Maria Ivanovna Petrova (born 1968 in Saint Petersburg).',
+    confidence_score: 91,
+  };
 
   const draftPeople = [speakerNode, partnerNode, childNode, motherNode];
   const draftUnions: DraftUnionDto[] = [
@@ -396,32 +353,250 @@ export function buildLocalStoryDraftFallback(
   };
 }
 
+export function normalizeStoryDraft(draft: any): StoryDraftDto {
+  if (!draft || typeof draft !== 'object') {
+    return draft;
+  }
+  const rawExtracted = draft.extracted_data || {};
+
+  const rawPeople = Array.isArray(rawExtracted.draft_people)
+    ? rawExtracted.draft_people
+    : Array.isArray(rawExtracted.persons)
+      ? rawExtracted.persons
+      : [];
+
+  const draft_people: DraftPersonNodeDto[] = rawPeople.map(
+    (p: any, idx: number) => {
+      const rawSex = String(p.sex || p.gender || 'U').toUpperCase();
+      const sex: 'M' | 'F' | 'U' =
+        rawSex === 'M' || rawSex === 'F' ? rawSex : 'U';
+      const birthDate =
+        p.birth_date ??
+        p.birth_date_text ??
+        (p.birth_year ? String(p.birth_year) : null);
+      const deathDate =
+        p.death_date ??
+        p.death_date_text ??
+        (p.death_year ? String(p.death_year) : null);
+
+      return {
+        temp_id: String(p.temp_id || `temp-person-${idx + 1}`),
+        given_name: String(p.given_name || '').trim(),
+        surname: String(p.surname || '').trim(),
+        maiden_name: p.maiden_name ? String(p.maiden_name).trim() : null,
+        patronymic: p.patronymic ? String(p.patronymic).trim() : null,
+        sex,
+        birth_date: birthDate ? String(birthDate).trim() : null,
+        birth_place: p.birth_place ? String(p.birth_place).trim() : null,
+        death_date: deathDate ? String(deathDate).trim() : null,
+        death_place: p.death_place ? String(p.death_place).trim() : null,
+        is_living:
+          typeof p.is_living === 'boolean'
+            ? p.is_living
+            : deathDate == null,
+        role_to_speaker: p.role_to_speaker ?? p.relation_to_speaker ?? null,
+        notes: p.notes ?? p.biography_notes ?? null,
+        source_snippet: p.source_snippet ?? p.grounding_quote ?? null,
+        confidence_score:
+          typeof p.confidence_score === 'number'
+            ? p.confidence_score
+            : typeof p.confidence === 'number'
+              ? p.confidence
+              : 85,
+        ambiguity_note: p.ambiguity_note ?? null,
+      };
+    }
+  );
+
+  const rawUnions = Array.isArray(rawExtracted.draft_unions)
+    ? rawExtracted.draft_unions
+    : Array.isArray(rawExtracted.unions)
+      ? rawExtracted.unions
+      : [];
+
+  const draft_unions: DraftUnionDto[] = rawUnions.map(
+    (u: any, idx: number) => ({
+      temp_id: String(u.temp_id || `temp-union-${idx + 1}`),
+      partner1_temp_id: String(u.partner1_temp_id || ''),
+      partner2_temp_id: u.partner2_temp_id
+        ? String(u.partner2_temp_id)
+        : null,
+      relationship_type: String(
+        u.relationship_type || u.union_type || 'married'
+      ),
+      marriage_date:
+        u.marriage_date ?? u.marriage_date_text ?? null,
+      marriage_place: u.marriage_place ?? null,
+      children_temp_ids: Array.isArray(u.children_temp_ids)
+        ? u.children_temp_ids.map(String)
+        : [],
+    })
+  );
+
+  const rawParentChild = Array.isArray(rawExtracted.draft_parent_child)
+    ? rawExtracted.draft_parent_child
+    : Array.isArray(rawExtracted.parent_child_links)
+      ? rawExtracted.parent_child_links
+      : [];
+
+  const draft_parent_child: DraftParentChildDto[] = rawParentChild.map(
+    (l: any) => ({
+      parent_temp_id: String(l.parent_temp_id || ''),
+      child_temp_id: String(l.child_temp_id || ''),
+      relation_type: String(l.relation_type || l.pedigree || 'biological'),
+    })
+  );
+
+  const rawEvents = Array.isArray(rawExtracted.draft_events)
+    ? rawExtracted.draft_events
+    : Array.isArray(rawExtracted.events)
+      ? rawExtracted.events
+      : [];
+
+  const draft_events: DraftEventDto[] = rawEvents.map(
+    (e: any, idx: number) => ({
+      temp_id: String(e.temp_id || `temp-event-${idx + 1}`),
+      person_temp_id: String(e.person_temp_id || ''),
+      event_type: String(e.event_type || 'fact'),
+      date_text: e.date_text ? String(e.date_text) : null,
+      place_name: e.place_name ?? e.place_text ?? null,
+      description: e.description ?? null,
+      confidence_score:
+        typeof e.confidence_score === 'number'
+          ? e.confidence_score
+          : typeof e.confidence === 'number'
+            ? e.confidence
+            : 85,
+    })
+  );
+
+  let reconciliation: StoryReconciliationCandidateDto[] | undefined =
+    Array.isArray(rawExtracted.reconciliation)
+      ? rawExtracted.reconciliation
+      : undefined;
+
+  if (!reconciliation && Array.isArray(draft.reconciliation_matches)) {
+    reconciliation = draft.reconciliation_matches.map((m: any) => {
+      const topCand =
+        Array.isArray(m.candidates) && m.candidates.length > 0
+          ? m.candidates[0]
+          : null;
+      return {
+        draft_temp_id: String(m.draft_temp_id || ''),
+        proposed_action:
+          (m.proposed_action ||
+            m.recommended_action ||
+            m.selected_action ||
+            'create_new') === 'link_existing'
+            ? 'link_existing'
+            : 'create_new',
+        matched_person_id:
+          m.matched_person_id ?? topCand?.person_id ?? null,
+        matched_person_gid:
+          m.matched_person_gid ?? topCand?.person_gid ?? null,
+        matched_person_name:
+          m.matched_person_name ?? topCand?.display_name ?? null,
+        matched_birth_date:
+          m.matched_birth_date ??
+          (topCand?.birth_year ? String(topCand.birth_year) : null),
+        matched_death_date: m.matched_death_date ?? null,
+        similarity_score:
+          typeof m.similarity_score === 'number'
+            ? m.similarity_score
+            : typeof m.confidence === 'number'
+              ? m.confidence
+              : topCand?.confidence ?? 0,
+        reasons: Array.isArray(m.reasons)
+          ? m.reasons
+          : topCand?.reasons ?? [],
+        target_anchor_label:
+          m.target_anchor_label ??
+          (topCand?.display_name
+            ? `Matches ${topCand.display_name}`
+            : null),
+        enrich_fields: Array.isArray(m.enrich_fields)
+          ? m.enrich_fields
+          : ['birth_place', 'notes'],
+      };
+    });
+  }
+
+  return {
+    ...draft,
+    id: String(draft.id || ''),
+    title: String(draft.title || ''),
+    speaker_id: draft.speaker_id ?? draft.speaker_person_id ?? null,
+    is_new_speaker: Boolean(draft.is_new_speaker),
+    raw_text: String(draft.raw_text || ''),
+    audio_path: draft.audio_path ?? draft.audio_media_id ?? null,
+    status: draft.status || 'draft',
+    extracted_data: {
+      draft_people,
+      draft_unions,
+      draft_parent_child,
+      draft_events,
+      reconciliation,
+    },
+    created_at: draft.created_at || new Date().toISOString(),
+    updated_at: draft.updated_at || new Date().toISOString(),
+  };
+}
+
 export const storyApi = {
-  async transcribeAudio(file: Blob | File): Promise<TranscribeAudioResponseDto> {
+  async transcribeAudio(
+    file: Blob | File,
+    transcriptHint?: string,
+    language?: string
+  ): Promise<TranscribeAudioResponseDto> {
     const formData = new FormData();
     const filename = file instanceof File ? file.name : 'recording.webm';
     formData.append('audio', file, filename);
     formData.append('file', file, filename);
+    if (transcriptHint && transcriptHint.trim()) {
+      formData.append('transcript_hint', transcriptHint.trim());
+      formData.append('transcript', transcriptHint.trim());
+    }
+    if (language && language !== 'auto') {
+      formData.append('lang', language);
+      formData.append('language', language);
+    }
     try {
-      return await uploadFileWithProgress<TranscribeAudioResponseDto>(
-        '/ai/transcribe',
-        formData
-      );
-    } catch {
+      const resp = await uploadFileWithProgress<{
+        transcript?: string;
+        text?: string;
+        language?: string;
+        duration_seconds?: number;
+        audio_path?: string | null;
+      }>('/ai/transcribe', formData);
+      const text = (resp.text || resp.transcript || transcriptHint || '').trim();
       return {
-        text: 'Меня зовут Анна Волкова, родилась 29 июня 1995 года в Москве. Мой муж — Алексей Смирнов (родился в 1993 году в Твери). У нас есть дочь София, родилась в 2021 году. Моя мама — Мария Ивановна Петрова (родилась в 1968 году в Санкт-Петербурге).',
-        language: 'ru',
-        duration_seconds: 14,
+        text,
+        transcript: text,
+        language: resp.language || language || 'ru',
+        duration_seconds: resp.duration_seconds || 10,
+        audio_path: resp.audio_path,
       };
+    } catch (err) {
+      if (transcriptHint && transcriptHint.trim()) {
+        const text = transcriptHint.trim();
+        return {
+          text,
+          transcript: text,
+          language: language || 'ru',
+          duration_seconds: 10,
+        };
+      }
+      throw err;
     }
   },
 
   async parseStory(payload: ParseStoryRequestDto): Promise<StoryDraftDto> {
     try {
-      return await apiFetch<StoryDraftDto>('/ai/parse-story', {
+      const res = await apiFetch<StoryDraftDto>('/ai/parse-story', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      return normalizeStoryDraft(res);
     } catch {
       return buildLocalStoryDraftFallback(payload);
     }
@@ -432,10 +607,11 @@ export const storyApi = {
     currentDraft?: StoryDraftDto
   ): Promise<StoryDraftDto> {
     try {
-      return await apiFetch<StoryDraftDto>('/ai/refine-draft', {
+      const res = await apiFetch<StoryDraftDto>('/ai/refine-draft', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      return normalizeStoryDraft(res);
     } catch {
       const base =
         currentDraft ??
@@ -481,14 +657,16 @@ export const storyApi = {
       const res = await apiFetch<StoryDraftDto[] | { items: StoryDraftDto[] }>(
         '/ai/drafts'
       );
-      return Array.isArray(res) ? res : (res.items ?? []);
+      const items = Array.isArray(res) ? res : (res.items ?? []);
+      return items.map(normalizeStoryDraft);
     } catch {
       return [];
     }
   },
 
   async getDraft(id: string): Promise<StoryDraftDto> {
-    return apiFetch<StoryDraftDto>(`/ai/drafts/${encodeURIComponent(id)}`);
+    const res = await apiFetch<StoryDraftDto>(`/ai/drafts/${encodeURIComponent(id)}`);
+    return normalizeStoryDraft(res);
   },
 
   async commitDraft(

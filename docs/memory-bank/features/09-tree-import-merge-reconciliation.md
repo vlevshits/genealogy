@@ -8,9 +8,9 @@ Provides candidate matching and side-by-side entity reconciliation for merging d
 ## 2. Code Map
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
-| Matching engine | `backend/src/services/quality.rs` | Probabilistic record linkage, phonetic name matching, birth date proximity |
-| Snapshot rollback | `backend/src/services/history.rs` | `create_manual_snapshot`, `rollback_to_snapshot` |
-| Merge handlers | `backend/src/routes/rbac.rs` | `preview_merge_people_post`, `merge_duplicate_people`, `mark_pair_not_duplicate` |
+| Matching engine | `backend/src/services/quality/mod.rs` | Probabilistic record linkage, phonetic name matching, birth date proximity |
+| Snapshot rollback | `backend/src/services/history/mod.rs` | `create_manual_snapshot`, `rollback_to_snapshot` |
+| Merge handlers | `backend/src/routes/rbac/mod.rs` | `preview_merge_people_post`, `merge_duplicate_people`, `mark_pair_not_duplicate` |
 | Merge Studio UI | `frontend/src/pages/PersonMergePage.tsx` | Side-by-side attribute comparison, radio selector per field |
 | Quality UI | `frontend/src/pages/DataQualityPage.tsx` | Duplicate candidates tab with 1-click navigation to Merge Studio |
 | Tests | `backend/tests/data_quality_places_test.rs`| Duplicate detection scoring, merge execution |

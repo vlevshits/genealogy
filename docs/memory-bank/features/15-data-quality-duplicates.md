@@ -9,8 +9,8 @@ Automated tree health analysis, soft validation warnings, relationship-centric d
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `duplicate_dismissals`, `quality_warning_dismissals` tables |
-| Routes | `backend/src/routes/rbac.rs` | Quality summary, warnings list/dismiss, duplicate candidates, place fixes |
-| Service | `backend/src/services/quality.rs` | **Massive quality engine (5,279 lines):** rule evaluators, candidate scoring, kinship guards |
+| Routes | `backend/src/routes/rbac/mod.rs` | Quality summary, warnings list/dismiss, duplicate candidates, place fixes |
+| Service | `backend/src/services/quality/mod.rs` | Modular quality engine: rule evaluators, candidate scoring, kinship guards |
 | Quality Page | `frontend/src/pages/DataQualityPage.tsx` | Overview cards, warnings tab, duplicate candidates tab, place issues tab |
 | Merge Page | `frontend/src/pages/PersonMergePage.tsx` | Interactive side-by-side reconciliation interface |
 | Components | `frontend/src/components/quality/` | Issue cards, dismissal controls, batch resolution triggers |

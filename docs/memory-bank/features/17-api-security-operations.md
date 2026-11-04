@@ -9,7 +9,7 @@ Cross-cutting API security, operations, and infrastructure controls. Enforces un
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Error model | `backend/src/error.rs` | `AppError`, `ErrorResponse`, `ErrorDetail` with machine-readable `code` |
-| Security Service | `backend/src/services/security.rs` | `csrf_protection_middleware`, `request_context_middleware`, `RateLimiter` |
+| Security Service | `backend/src/services/security/mod.rs` | `csrf_protection_middleware`, `request_context_middleware`, `RateLimiter` |
 | Health & System | `backend/src/routes/system.rs` | `/health`, `/system/info`, database ping |
 | Health Handler | `backend/src/routes/health.rs` | Minimal liveness probe |
 | Scheduler | `backend/src/services/scheduler.rs` | Tokio background task runner for periodic maintenance and cleanup |
