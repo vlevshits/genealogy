@@ -3,9 +3,11 @@ import { test as baseTest, expect, Page, Route } from '@playwright/test';
 export interface MockUser {
   id: string;
   email: string;
+  first_name?: string;
+  last_name?: string;
   display_name: string;
   role: 'admin' | 'editor' | 'viewer';
-  start_page?: 'tree' | 'home' | 'directory';
+  start_page?: 'tree' | 'home' | 'directory' | 'dashboard';
 }
 
 export interface TestFixtures {
@@ -76,7 +78,12 @@ export const test = baseTest.extend<TestFixtures>({
           body: JSON.stringify({
             app_version: '0.1.0',
             instance_title: 'Levshits Family Archive',
+            tree_title: 'Levshits Family Archive',
             default_locale: 'en',
+            enable_public_access: enablePublic,
+            auth_password_enabled: true,
+            settings_locked_from_env: false,
+            ai_enabled: true,
           }),
         });
       });
@@ -94,19 +101,28 @@ export const test = baseTest.extend<TestFixtures>({
           status: 401,
           contentType: 'application/json',
           body: JSON.stringify({
-            code: 'AUTH_REQUIRED',
-            message: 'Authentication required',
+            error: {
+              code: 'not_authenticated',
+              message: 'Authentication required',
+            },
           }),
         });
       });
 
-      await page.route('**/api/v1/tree/onboarding/status', async (route) => {
+      await page.route(/.*\/api\/v1\/(tree\/)?onboarding\/status/, async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
             is_empty: false,
             person_count: 24,
+            total_individuals: 24,
+            can_onboard: false,
+            resolved_home_person_id: 'node-root',
+            default_home_person_id: 'node-root',
+            user_home_person_id: null,
+            user_person_id: null,
+            start_page: 'dashboard',
           }),
         });
       });
@@ -120,6 +136,8 @@ export const test = baseTest.extend<TestFixtures>({
       const mockUser: MockUser = {
         id: 'usr-admin-01',
         email: 'admin@genealogy.local',
+        first_name: 'Admin',
+        last_name: 'User',
         display_name: 'Admin User',
         role: 'admin',
         start_page: 'home',
@@ -144,7 +162,12 @@ export const test = baseTest.extend<TestFixtures>({
           body: JSON.stringify({
             app_version: '0.1.0',
             instance_title: 'Levshits Family Archive',
+            tree_title: 'Levshits Family Archive',
             default_locale: 'en',
+            enable_public_access: false,
+            auth_password_enabled: true,
+            settings_locked_from_env: false,
+            ai_enabled: true,
           }),
         });
       });
@@ -165,13 +188,82 @@ export const test = baseTest.extend<TestFixtures>({
         });
       });
 
-      await page.route('**/api/v1/tree/onboarding/status', async (route) => {
+      await page.route(/.*\/api\/v1\/(tree\/)?onboarding\/status/, async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
             is_empty: false,
             person_count: 42,
+            total_individuals: 42,
+            can_onboard: false,
+            resolved_home_person_id: 'node-root',
+            default_home_person_id: 'node-root',
+            user_home_person_id: 'node-root',
+            user_person_id: 'node-root',
+            start_page: 'dashboard',
+          }),
+        });
+      });
+
+      await page.route('**/api/v1/dashboard*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            resolved_home_person_id: 'node-root',
+            anniversaries: [],
+            recent_activity: [],
+            stats: {
+              total_persons: 42,
+              total_families: 14,
+              total_photos: 12,
+              total_places: 8,
+              max_generations: 4,
+              open_warnings_count: 0,
+              missing_birth_dates_count: 0,
+            },
+            latest_photos: [],
+          }),
+        });
+      });
+
+      await page.route('**/api/v1/tree/view*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            access_tier: mockUser.role,
+            tree_title: 'Levshits Family Archive',
+            focal_id: 'node-root',
+            mode: 'hourglass',
+            generations: 3,
+            collateral: true,
+            nodes: [
+              {
+                id: 'node-root',
+                gid: 'I0001',
+                sex: 'F',
+                is_living: true,
+                is_private: false,
+                primary_name: {
+                  given_name: 'Anna',
+                  patronymic: 'Sergeyevna',
+                  surname: 'Volkova',
+                },
+                birth: { date: '1975', place: 'Tver' },
+                death: null,
+                avatar_url: null,
+                notes: null,
+                version: 1,
+                generation: 0,
+                is_direct_lineage: true,
+              },
+            ],
+            families: [],
+            edges: [],
+            resolved_home_person_id: 'node-root',
+            total_visible: 1,
           }),
         });
       });

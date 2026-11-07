@@ -11,7 +11,8 @@ Provides role-based access control (Admin, Editor, Viewer, Public/Anonymous) and
 | Migrations | `backend/migrations/20261026000004_rbac_and_privacy.sql` | `user_roles`, `privacy_settings`, `living_override` |
 | Route handlers | `backend/src/routes/rbac/mod.rs` | Modular handler package containing RBAC guards for all domain actions |
 | Service (RBAC) | `backend/src/services/rbac.rs` | `can_edit_tree`, `can_view_person`, `can_manage_users`, role hierarchies |
-| Service (Privacy) | `backend/src/services/privacy/mod.rs` | `is_living(&person)`, `redact_person(&mut person, ctx)`, 110-year rule |
+| Service (Privacy) | `backend/src/services/privacy/masking.rs` | `redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`, `redact_media_for_caller` |
+| Service (MCP Redaction) | `backend/src/services/mcp/rpc_read.rs` | `mcp_privacy_access`, `redact_person_for_mcp`, `redact_family_for_mcp` |
 | Middleware | `backend/src/services/security/mod.rs` | `request_context_middleware` sets user role in request extensions |
 | Frontend components| `frontend/src/components/domain/` | `RoleBadge.tsx`, role-based button hiding |
 | Frontend guards | `frontend/src/components/ui/` | `AccessDeniedCard.tsx`, public navigation segregation in `AppShell` |
@@ -36,4 +37,4 @@ Provides role-based access control (Admin, Editor, Viewer, Public/Anonymous) and
 ## 6. Gotchas & Known Limitations
 - `GOT-006`: Inaccurate living status when ancestral birth dates are completely absent.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

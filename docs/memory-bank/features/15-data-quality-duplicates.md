@@ -9,7 +9,7 @@ Automated tree health analysis, soft validation warnings, relationship-centric d
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `duplicate_dismissals`, `quality_warning_dismissals` tables |
-| Routes | `backend/src/routes/rbac/mod.rs` | Quality summary, warnings list/dismiss, duplicate candidates, place fixes |
+| Routes | `backend/src/routes/rbac/history_quality.rs` | Quality summary, warnings list/dismiss, duplicate candidates, place fixes |
 | Service | `backend/src/services/quality/mod.rs` | Modular quality engine: rule evaluators, candidate scoring, kinship guards |
 | Quality Page | `frontend/src/pages/DataQualityPage.tsx` | Overview cards, warnings tab, duplicate candidates tab, place issues tab |
 | Merge Page | `frontend/src/pages/PersonMergePage.tsx` | Interactive side-by-side reconciliation interface |
@@ -34,6 +34,6 @@ Automated tree health analysis, soft validation warnings, relationship-centric d
 - **Persistent Dismissals:** Editors can permanently dismiss warnings as "false positive" or "known historical exception" with a reason note.
 
 ## 6. Gotchas & Known Limitations
-- `services/quality.rs` is 5,279 lines long (see `codebase-map.md` Hotspots) and is a top candidate for modular decomposition.
+- Dismissal keys are scoped by `rule_code`, `entity_type`, `entity_id`, and optional `secondary_id` so re-evaluating the tree preserves prior user dismissals.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

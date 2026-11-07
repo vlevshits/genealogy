@@ -9,11 +9,15 @@ export class BasePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.mobileMenuButton = page.locator('button:has(svg.lucide-menu)');
-    this.languageToggle = page.locator('button:has(svg.lucide-globe)');
-    this.themeToggle = page.locator(
-      'button:has(svg.lucide-sun), button:has(svg.lucide-moon), button:has(svg.lucide-laptop)'
-    );
+    this.mobileMenuButton = page
+      .getByTestId('mobile-menu-toggle')
+      .or(page.getByRole('button', { name: /Open navigation menu|Открыть меню навигации/i }));
+    this.languageToggle = page
+      .getByTestId('language-toggle')
+      .or(page.getByRole('button', { name: /^(Language|Язык)$/i }));
+    this.themeToggle = page
+      .getByTestId('theme-toggle')
+      .or(page.getByRole('button', { name: /Select color theme|Выбрать тему оформления/i }));
     this.brandHeading = page.locator('header h1, header span').first();
   }
 
@@ -22,29 +26,38 @@ export class BasePage {
   }
 
   async ensureTogglesAccessible() {
-    const isDesktopToggleVisible = await this.languageToggle.first().isVisible().catch(() => false);
+    const isDesktopToggleVisible = await this.languageToggle.first().isVisible();
     if (!isDesktopToggleVisible) {
-      const isMobileMenuVisible = await this.mobileMenuButton.first().isVisible().catch(() => false);
+      const isMobileMenuVisible = await this.mobileMenuButton.first().isVisible();
       if (isMobileMenuVisible) {
         await this.mobileMenuButton.first().click();
-        await this.page.locator('[role="dialog"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        await this.page.getByRole('dialog').first().waitFor({ state: 'visible', timeout: 5000 });
       }
     }
   }
 
   async toggleLanguage() {
     await this.ensureTogglesAccessible();
-    await this.languageToggle.first().click();
+    const target = (await this.languageToggle.first().isVisible())
+      ? this.languageToggle.first()
+      : this.languageToggle.last();
+    await target.click();
   }
 
   async getCurrentLanguageText(): Promise<string> {
     await this.ensureTogglesAccessible();
-    return (await this.languageToggle.first().innerText()).trim();
+    const target = (await this.languageToggle.first().isVisible())
+      ? this.languageToggle.first()
+      : this.languageToggle.last();
+    return (await target.innerText()).trim();
   }
 
   async toggleTheme() {
     await this.ensureTogglesAccessible();
-    await this.themeToggle.first().click();
+    const target = (await this.themeToggle.first().isVisible())
+      ? this.themeToggle.first()
+      : this.themeToggle.last();
+    await target.click();
   }
 
   async isDarkMode(): Promise<boolean> {

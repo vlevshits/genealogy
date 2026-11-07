@@ -30,7 +30,8 @@ A comprehensive, accessible, bilingual design system built specifically for the 
 | **Layout & Scroll**| `PageHeader`, `Divider`, `ScrollArea`, `Accordion`, `Collapsible`, `TreeView`, `Kbd` |
 
 ## 4. Key Invariants & Rules
-- **Design Tokens Only:** All styling must reference semantic tokens (`bg-surface`, `text-secondary`, `border-subtle`, `primary-600`); never use hardcoded hex values (`#ffffff`, `#121212`).
+- **Design Tokens Only:** All styling must reference semantic tokens (`bg-surface`, `bg-surface-subtle`, `text-secondary`, `border-subtle`, `border-strong`, `primary-600`); never use hardcoded hex values (`#ffffff`, `#121212`).
+- **Touch Target Floor (`UX-121`):** Compact controls (`Button size="xs"`) apply `touch-target-expand` to guarantee a ≥ 44×44px interactive touch area on mobile viewports.
 - **Strictly No Raw Elements:** Pages and features must never use unstyled HTML `<button>`, `<input>`, or `<select>` elements (`ui-and-i18n-conventions.md`).
 - **Bilingual & Icon Safety:** No emojis or icon symbols may be embedded in translation strings passed to buttons or badges (`GOT-003`).
 
@@ -40,4 +41,4 @@ A comprehensive, accessible, bilingual design system built specifically for the 
 ## 6. Gotchas & Known Limitations
 - Modals and drawers must trap focus while open and restore focus to the triggering element upon closure.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

@@ -16,6 +16,8 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - [GOT-008: SQLx Offline Mode Compilation Failure If Compile-Time Macros Are Used](#got-008-sqlx-offline-mode-compilation-failure-if-compile-time-macros-are-used)
 - [GOT-009: Browser Audio Recording Codec Compatibility & Object URL Leaks](#got-009-browser-audio-recording-codec-compatibility--object-url-leaks)
 - [GOT-010: Server-Side Audio Transcription Requires GEMINI_API_KEY in .env](#got-010-server-side-audio-transcription-requires-gemini_api_key-in-env)
+- [GOT-011: Microphone MediaStream Track & SpeechRecognition Cleanup on Unmount](#got-011-microphone-mediastream-track--speechrecognition-cleanup-on-unmount)
+- [GOT-012: API Client Offline Fallback Guards Must Rethrow ApiError When status > 0](#got-012-api-client-offline-fallback-guards-must-rethrow-apierror-when-status--0)
 
 ---
 
@@ -74,9 +76,21 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Rule:** Detect supported audio MIME types dynamically via `MediaRecorder.isTypeSupported()`, use `recorder.start(250)` for chunked data delivery, and clean up object URLs with `URL.revokeObjectURL()` upon unmount or re-recording.
 
 ### GOT-010: Server-Side Audio Transcription Requires GEMINI_API_KEY in .env
-- **File / Area:** `backend/src/routes/rbac/ai_mcp.rs:163-176`, `backend/src/services/story_intake/gemini.rs`
+- **File / Area:** `backend/src/routes/rbac/ai_stories.rs:102-176`, `backend/src/services/story_intake/gemini.rs`
 - **Symptom:** Audio file uploads to `POST /api/v1/ai/transcribe` fail with `400 Bad Request` (`gemini_api_key_not_configured` or `stt_provider_not_configured`).
 - **Root Cause:** The backend server uses Gemini multimodal audio ingestion for speech-to-text (`transcribe_audio_with_gemini`). If neither `GEMINI_API_KEY` (in `.env`) nor instance `llm_api_key` is configured, raw audio bytes cannot be transcribed server-side.
 - **Rule:** Provide `GEMINI_API_KEY` in deployment environment variables (`.env`) for zero-config audio intake. Ensure the frontend verifies `ai_enabled` via `GET /api/v1/system/info` before offering server-only transcription, and fall back to browser `SpeechRecognition` or manual text entry when unconfigured.
 
-_Last curated: 2026-11-05 (Milestone 3.2 server-side Gemini 3.8 Flash)_
+### GOT-011: Microphone MediaStream Track & SpeechRecognition Cleanup on Unmount
+- **File / Area:** `frontend/src/components/stories/AudioRecorderWidget.tsx:68-101`
+- **Symptom:** Browser tab continues showing the active red microphone recording indicator and capturing audio hardware after navigating away from `AiStoryIntakePage` mid-recording.
+- **Root Cause:** Calling `mediaRecorder.stop()` alone does not release the underlying `MediaStream` hardware tracks obtained from `navigator.mediaDevices.getUserMedia()`, nor does it stop an active `SpeechRecognition` instance if the component unmounts before `onstop` fires.
+- **Rule:** Hold explicit refs (`mediaStreamRef`, `recognitionRef`, `mediaRecorderRef`) and in the unmount `useEffect` cleanup unconditionally stop `mediaRecorderRef`, iterate `mediaStreamRef.current?.getTracks().forEach(t => t.stop())`, and call `recognitionRef.current?.abort()`.
+
+### GOT-012: API Client Offline Fallback Guards Must Rethrow ApiError When status > 0
+- **File / Area:** `frontend/src/api/stories-mcp-api.ts:435-625`
+- **Symptom:** Server-side `400 ValidationFailed`, `401 Unauthorized`, `403 Forbidden`, or `404 Not Found` responses on story intake and MCP token endpoints were silently swallowed and replaced with synthetic demo data (`buildLocalStoryDraftFallback`), hiding real RBAC/validation errors from users and tests.
+- **Root Cause:** Offline workbench `catch (err)` blocks returned local fallback objects for all errors instead of distinguishing network-unreachable/offline errors from real HTTP error responses.
+- **Rule:** In API client wrappers that support offline workbench fallbacks, always check `if (err instanceof ApiError && err.status > 0) throw err;` at the top of the `catch` block so genuine HTTP 4xx/5xx responses propagate to the UI and error boundary.
+
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

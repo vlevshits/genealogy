@@ -15,7 +15,8 @@ This document records the architectural, design, and structural decisions made a
 - [ADR-007: CSS-First Design Tokens via Tailwind CSS v4 `@theme`](#adr-007-css-first-design-tokens-via-tailwind-css-v4-theme)
 - [ADR-008: In-Database Advisory Locking for Sequential Upgrades & CLI Operations](#adr-008-in-database-advisory-locking-for-sequential-upgrades--cli-operations)
 - [ADR-009: Strict Unauthenticated Navigation Segregation & Default Clean Slate](#adr-009-strict-unauthenticated-navigation-segregation--default-clean-slate)
-- [ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation](#adr-010-client-side-external-llm-extraction-with-server-side-tree-reconciliation)
+- [~~ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation~~](#adr-010-client-side-external-llm-extraction-with-server-side-tree-reconciliation)
+- [ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key)
 
 ---
 
@@ -73,17 +74,17 @@ This document records the architectural, design, and structural decisions made a
 - **Decision:** Unauthenticated navigation routes strictly isolate public vs private capabilities. If the instance has public access disabled, all routes immediately redirect to `/login`.
 - **Consequences:** Completely prevents unauthorized modification attempts and creates a clean presentation for public visitors.
 
-### ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation
-- **Status:** Superseded by ADR-011 (retained as optional client BYOK override)
-- **Context:** Extracting genealogical entities from unstructured narratives using state-of-the-art LLMs (e.g. Gemini 3.8 Flash) requires an API key. Storing and proxying external API keys through the self-hosted backend introduces security risks, server logs with sensitive keys, and complicates multi-user self-hosting.
-- **Decision:** Execute Gemini LLM calls client-side directly from the browser using a user-provided Google AI Studio API key kept in browser `localStorage`. Forward the structured extraction payload (`ParseStoryRequest.extracted_data`) to `POST /api/v1/ai/parse-story`. The backend skips internal NLP parsing but unconditionally runs database tree reconciliation against canonical family members.
-- **Consequences:** Zero external API key exposure on the server; zero cloud API credentials in backend logs or database; full benefit of backend tree reconciliation and sandboxed draft storage. Offline LAN environments continue to function seamlessly using the built-in offline NLP engine.
+### ~~ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation~~
+- **Status:** Superseded by [ADR-011](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key) (client-side BYOK removed; `GeminiApiKeyModal.tsx` deleted and `genealogy_gemini_api_key` purged from `localStorage`)
+- **Context:** Extracting genealogical entities from unstructured narratives using state-of-the-art LLMs (e.g. Gemini 3.8 Flash) requires an API key. Initially, client-side BYOK was used to avoid storing keys on the server.
+- **Decision:** ~~Execute Gemini LLM calls client-side directly from the browser using a user-provided Google AI Studio API key kept in browser `localStorage`.~~
+- **Consequences:** Superseded because requiring relatives to manage API keys in the browser hurt usability and exposed keys in client storage. Replaced by server-only `GEMINI_API_KEY` in ADR-011.
 
 ### ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY
 - **Status:** Accepted
-- **Context:** While client-side BYOK (ADR-010) avoided handling API keys on the server, requiring every family member to obtain and enter a Google AI Studio API key hindered usability, failed in mobile browsers without local storage setup, and prevented server-side transcription of uploaded audio files. Self-hosters prefer configuring `GEMINI_API_KEY` once in `.env`.
-- **Decision:** Shift primary Gemini 3.8 Flash entity extraction and speech transcription to the backend (`backend/src/services/story_intake/gemini.rs`), configured centrally via `GEMINI_API_KEY` and `GEMINI_MODEL` (defaults to `"gemini-3.8-flash"`). Expose `ai_enabled: bool` in `GET /api/v1/system/info`. Retain optional client-side BYOK keys and the built-in offline NLP engine as graceful fallbacks.
-- **Consequences:** Zero-configuration experience for family members using the web UI; server-side audio transcription accepts `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`; API key is kept securely in `.env` without client leakage; instances without an API key gracefully fall back to the built-in offline NLP engine.
+- **Context:** While client-side BYOK (ADR-010) avoided handling API keys on the server, requiring every family member to obtain and enter a Google AI Studio API key hindered usability, failed in mobile browsers without local storage setup, and prevented server-side transcription of uploaded audio files. Self-hosters prefer configuring `GEMINI_API_KEY` once in `.env` with zero client-side key exposure.
+- **Decision:** Execute Gemini 3.8 Flash entity extraction and speech transcription exclusively on the backend (`backend/src/services/story_intake/gemini.rs`), configured centrally via `GEMINI_API_KEY` and `GEMINI_MODEL` (defaults to `"gemini-3.8-flash"`), sending credentials via the `x-goog-api-key` HTTP header. Expose `ai_enabled: bool` in `GET /api/v1/system/info`. Purge any legacy client-side API key (`genealogy_gemini_api_key`) in `frontend/src/api/gemini-story-extractor.ts` and retain the built-in offline NLP engine as an automatic fallback.
+- **Consequences:** Zero-configuration experience for family members using the web UI; server-side audio transcription accepts `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`; API key is kept strictly on the server in `.env` without client leakage or URL query-string exposure; instances without an API key gracefully fall back to the built-in offline NLP engine.
 
-_Last curated: 2026-11-05 (Milestone 3.2 server-side Gemini 3.8 Flash)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
 

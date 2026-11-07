@@ -8,21 +8,21 @@ Generates print-ready high-resolution vector PDF charts of family lineages. Supp
 ## 2. Code Map
 | Layer | Location | Key symbols / notes |
 | :--- | :--- | :--- |
-| Routes | `backend/src/routes/rbac/mod.rs` | `export_printable_pdf`, `get_pdf_preview_info` |
+| Routes | `backend/src/routes/rbac/gedcom_pdf.rs` | `export_printable_pdf` (`POST /api/v1/export/pdf`), `get_pdf_preview_info` (`POST /api/v1/export/pdf/preview-info`) |
 | PDF Engine | `backend/src/services/pdf/mod.rs` | PDF generation pipeline coordinator |
 | Layout Planner | `backend/src/services/pdf/layout/mod.rs` | Coordinate calculations, ancestor/descendant positioning, sheet bounding boxes |
 | Vector Renderer | `backend/src/services/pdf/render/mod.rs` | Direct PDF/SVG stream rendering with embedded TrueType fonts |
 | Tiling Engine | `backend/src/services/pdf/tiling.rs` | Computes tile grids, cut guides, overlap margins, page headers |
 | Themes | `backend/src/services/pdf/themes.rs` | Color themes: Modern Clean, Classic Parchment, High Contrast Monochromatic |
 | Embedded Fonts | `backend/assets/fonts/` | `PTSerif-Regular.ttf`, `PTSerif-Bold.ttf`, `Roboto-Regular.ttf`, `Roboto-Bold.ttf` |
-| Frontend Studio | `frontend/src/pages/PrintExportPage.tsx` | Print studio page wrapper |
+| Frontend Studio | `frontend/src/pages/PrintExportPage.tsx` | Print studio page wrapper (`/export/print` and `/print`) |
 | UI Controls | `frontend/src/components/print/` | `PrintConfigSidebar.tsx`, `PrintPreviewCanvas.tsx`, `PrintSummaryBar.tsx` |
 | Tests | `backend/tests/printable_pdf_tests.rs` | Poster bounding box tests, multi-page tiling, Cyrillic font glyph tests |
 | UI Tests | `frontend/tests/components/` | `print-studio.test.tsx` |
 
 ## 3. Key Flows
 1. **Live Print Preview:**
-   - User navigates to `/print?root=I0001` in Print Studio.
+   - User navigates to `/export/print?root=I0001` (or `/print?root=I0001`) in Print Studio.
    - Adjusts configuration (layout type, generations, paper size, partner inclusion, theme).
    - Frontend requests `POST /api/v1/export/pdf/preview-info` → returns total sheet count, physical dimensions (mm), and node counts.
    - `PrintPreviewCanvas` displays interactive layout with tiling seam outlines.
@@ -40,4 +40,4 @@ Generates print-ready high-resolution vector PDF charts of family lineages. Supp
 ## 6. Gotchas & Known Limitations
 - `GOT-007`: Line drops or cut marks shifting when switching between portrait and landscape tiled sheets.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

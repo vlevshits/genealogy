@@ -32,22 +32,22 @@ graph TD
 ### 2.1 Layering & Separation of Concerns
 
 1. **HTTP / Routing Layer (`backend/src/routes/`):**
-   - Thin Axum adapters (`routes/mod.rs`, `routes/auth.rs`, `routes/rbac.rs`, `routes/system.rs`, `routes/health.rs`).
+   - Thin Axum adapters (`routes/mod.rs`, `routes/auth/`, `routes/rbac/`, `routes/system.rs`, `routes/health.rs`).
    - Responsible for extracting HTTP parameters (JSON payloads, Path, Query, Cookies, `RequestContext`), validating basic formats, and delegating immediately to the service layer.
    - Converts service outcomes or errors into standardized HTTP JSON responses with utoipa OpenAPI attributes.
 
 2. **Domain Service Layer (`backend/src/services/`):**
    - Pure business logic, transactional workflows, and genealogical algorithms:
-     - `auth.rs`: Passkeys, magic links, passwords, sessions, lockout counters.
+     - `auth/`: Passkeys, magic links, passwords, sessions, lockout counters.
      - `rbac.rs`: Role permissions, policy evaluation, action authorization.
-     - `privacy.rs`: Living-person detection (`is_living`), field redaction, privacy-404 generation.
-     - `genealogy.rs`: Tree traversal, pedigree, descendants, hourglass, multi-trace kinship path finding.
-     - `quality.rs`: Data validation, duplicate detection, automated place hierarchy fixes.
-     - `gedcom.rs` & `media_bundle.rs`: GEDCOM 5.5.1 / 7 parser, export, ZIP archive media reconciliation.
+     - `privacy/`: Living-person detection (`is_living`), person/event/family redaction (`redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`), privacy-404 generation.
+     - `genealogy/`: Tree traversal, pedigree, descendants, hourglass, multi-trace kinship path finding.
+     - `quality/`: Data validation, duplicate detection, automated place hierarchy fixes.
+     - `gedcom/` & `media_bundle.rs`: GEDCOM 5.5.1 / 7 parser, export, ZIP archive media reconciliation.
      - `pdf/`: Layout computation and vector rendering for single-page and tiled printable trees.
-     - `story_intake.rs` & `mcp.rs`: AI story transcription/draft staging, protected MCP server with Personal Access Tokens.
+     - `story_intake/` & `mcp/`: AI story transcription/draft staging (`gemini.rs`), protected MCP server with Personal Access Tokens (`rpc_read.rs`, `tools_mutation.rs`).
      - `backup.rs`: Database dump, media bundling, tarball restoration.
-     - `security.rs`: Sliding-window rate limiters, CSRF validation, sanitization.
+     - `security/`: Sliding-window rate limiters, CSRF validation, sanitization.
 
 3. **Domain Models (`backend/src/models/`):**
    - Strongly-typed domain representations, notably `GenDate` (`gendate.rs`) for partial, approximate, and range dates.
@@ -142,8 +142,10 @@ frontend/src/
 │   ├── kinship.ts      # Relationship calculation and description formatting
 │   └── patronymic.ts   # Slavic patronymic derivation rules
 └── api/
-    ├── client.ts       # Typed API client with standard error mapping
-    └── openapi-types.ts# Synchronized schema contracts
+    ├── core.ts         # Shared apiFetch wrapper (preserves AbortError) & ApiError
+    ├── client.ts       # Re-export facade over modular domain API clients
+    ├── openapi-types.ts# Synchronized core & domain schema contracts (with openapi-types-domain.ts)
+    └── stories-mcp-api.ts # AI story intake & MCP Personal Access Token API client
 ```
 
 ---
@@ -153,7 +155,7 @@ frontend/src/
 ### 4.1 Living-Person Privacy Redaction
 
 1. Backend checks `services::privacy::is_living(&person)` based on birth/death events and the 110-year rule.
-2. If the user is unauthenticated or has the public viewer role, `services::privacy::redact_person` replaces private attributes with localized placeholders (e.g. "Living", hidden birth dates).
+2. If the user is unauthenticated or has the public viewer role (or accesses via a `Viewer`-tier MCP token), `redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`, and `redact_family_for_mcp` replace private attributes with localized placeholders or filter out living-person events and private families.
 3. If an individual is marked private or living and the request is unauthenticated, attempting direct URL access returns `404 Not Found` (privacy-404) rather than `403 Forbidden` to prevent existence leakage.
 
 ### 4.2 Change Log & Concurrency Control
@@ -163,4 +165,4 @@ Every mutating genealogy operation (`POST`, `PATCH`, `DELETE` on persons, famili
 - Mutations supply `If-Match: "<version>"` or an equivalent payload version.
 - On mismatch, the backend yields a `409 Conflict` (`version_conflict`), which triggers the frontend conflict reconciliation dialog.
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_

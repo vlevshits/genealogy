@@ -20,9 +20,9 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `models/mod.rs` | ~15 | Module declarations and exports. |
 | `models/gendate.rs` | 517 | Genealogical date parser/serializer (`GenDate`): exact, approximate, before/after, ranges, dual years. |
 | `routes/` | | **HTTP Handlers & Adapters** |
-| `routes/mod.rs` | 850 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), middleware assembly. |
+| `routes/mod.rs` | ~780 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), middleware assembly. |
 | `routes/auth/` | ~600 | Modular authentication routes: passkey registration/login, magic links, passwords, sessions, recovery codes. |
-| `routes/rbac/` | ~3,500 | Modular domain routes: tree view, person/family/event CRUD, places, media, search, directory, data quality, merge, and AI/MCP. |
+| `routes/rbac/` | ~4,000 | Modular domain routes: tree view (`tree_view.rs`), person/family/event CRUD (`person_profile.rs`, `person_mutations.rs`, `person_delete_families.rs`, `events.rs`, `quick_add.rs`), places (`places.rs`), media (`media_list_create.rs`, `media_tags_links.rs`, `notes_media_files.rs`), search/directory (`search.rs`, `people_directory.rs`), history & quality (`history_quality.rs`), GEDCOM/PDF (`gedcom_pdf.rs`), dashboard/kinship (`dashboard_kinship.rs`), onboarding (`onboarding_tree.rs`), AI story intake (`ai_stories.rs`), and MCP (`mcp.rs`). |
 | `routes/system.rs` | 383 | Health check, system information (`ai_enabled` flag), and database readiness endpoints. |
 | `routes/health.rs` | ~40 | Minimal liveness and readiness ping handler. |
 | `services/` | | **Business Logic & Workflows** |
@@ -90,7 +90,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 
 | Directory | Responsibility |
 | :--- | :--- |
-| `api/` | `client.ts` (API client), `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (Gemini 3.8 Flash BYOK client), `openapi-types.ts`. |
+| `api/` | Modular typed API clients: `core.ts` (`apiFetch`, `ApiError`), `client.ts` (re-export facade), `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `delight-types.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (extraction engine selector), `openapi-types.ts`, and `openapi-types-domain.ts`. |
 | `components/ui/` | Reusable Design System primitives: `Button`, `IconButton`, `TextInput`, `Select`, `Modal`, `Card`, `Badge`, `Spinner`, `Tabs`, `ThemeToggle`, `LanguageToggle`. |
 | `components/domain/` | Domain-specific widgets: `GenDateInput`, `PlacePicker`, `RoleBadge`, `GenderIcon`. |
 | `components/auth/` | Auth UI: `LoginCard`, `MagicLinkVerifyCard`, `RecoveryCodesCard`, `RegisterInviteCard`. |
@@ -102,26 +102,27 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `components/quality/` | Quality dashboard cards, candidate duplicate comparisons, place issue fixes. |
 | `components/print/` | PDF configuration options, tile cut-mark previews (`PrintPreviewCanvas`). |
 | `components/history/` | Audit log tables, diff viewers, `RecordHistoryDrawer`. |
-| `components/stories/` | Audio recording widget, story input panel, Gemini API key modal, draft review canvas. |
+| `components/stories/` | Audio recording widget (`AudioRecorderWidget`), story input panel (`StoryInputPanel`), speaker selector (`SpeakerSelectorCard`), draft review canvas (`DraftSubtreeCanvas`, `ReconciliationMatrixCard`, `DraftClarificationBar`). |
 | `components/onboarding/`| First-run setup wizards (`EmptyTreeOnboardingCard`). |
 | `hooks/` | Custom React hooks (`useLiveVersion`, `useUndoToast`). |
 | `i18n/` | Localization engine (`index.tsx`), translation dictionaries (`en.json`, `ru.json`). |
-| `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts`, `tree-layouts/`. |
-| `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `AiStoryIntakePage`, etc.). |
+| `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts`, `tree-layouts/` (`hourglass/`, `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts`). |
+| `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `AiStoryIntakePage`, `PrintExportPage`, `DevUiWorkbench`, etc.). |
 | `types/` | Domain data types (`person.ts`, `place.ts`, `event.ts`, `gendate.ts`). |
 
 ---
 
-## 3. Hotspots (Files Exceeding File Size Ceilings)
+## 3. File Size Compliance & Bundle Splitting
 
-Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/modular-architecture-and-file-size.md), the hard ceiling for source code files is **800 lines**. Backend routes and business logic services were modularized into subdirectories conforming to the rule. The remaining hotspots are frontend modules scheduled for decomposition:
-
-| File | Lines | Primary Responsibility & Refactoring Recommendation |
-| :--- | :--- | :--- |
-| `frontend/src/api/client.ts` | **3,319** | Single monolithic API client. Split into domain API clients under `frontend/src/api/` (auth, people, places, media, quality). |
-| `frontend/src/lib/tree-layouts/hourglass-layout.ts` | **1,925** | Complex multi-tier hourglass positioning. Decompose calculation passes. |
-| `frontend/src/components/tree/TreeCanvas.tsx` | **1,447** | Interactive canvas rendering and gestures. Split canvas controls and edge drawing into sub-components. |
-| `frontend/src/pages/DevUiWorkbench.tsx` | **1,329** | Design system sandbox workbench. Decompose by component group. |
+Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/modular-architecture-and-file-size.md), the hard ceiling for source code files is **800 lines**.
+- **Zero hotspots remain:** Every `.rs` file in `backend/src/` (max 781 lines) and every `.ts`/`.tsx` file in `frontend/src/` (max 744 lines) is strictly ≤ 800 lines.
+- **Former hotspots decomposed:**
+  - `frontend/src/api/client.ts` → split into `core.ts`, `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, and `stories-mcp-api.ts`.
+  - `frontend/src/api/openapi-types.ts` → split into `openapi-types.ts` and `openapi-types-domain.ts`.
+  - `frontend/src/lib/tree-layouts/hourglass-layout.ts` → decomposed into `frontend/src/lib/tree-layouts/hourglass/` sub-modules.
+  - `frontend/src/components/tree/TreeCanvas.tsx` and `frontend/src/pages/DevUiWorkbench.tsx` → extracted sub-components and domain panels.
+  - `backend/src/routes/rbac/ai_mcp.rs` → split into `ai_stories.rs` and `mcp.rs`.
+- **Vite Rollup Chunking (`frontend/vite.config.ts`):** `manualChunks` splits bundles into `vendor`, `vendor-icons`, `i18n-locales`, `domain-tree`, `domain-print`, `domain-stories`, and `domain-quality` (all chunks < 420 kB).
 
 ---
 
@@ -135,4 +136,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-05 (Milestone 3.2 server-side Gemini 3.8 Flash)_
+_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
