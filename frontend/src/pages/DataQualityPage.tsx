@@ -454,7 +454,6 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                   const personName =
                     w.person?.display_name || w.person_name || personId;
                   const personGid = w.person?.gid || w.person_gid;
-                  const code = w.rule_code || w.code || 'WARNING';
                   return (
                     <Card
                       key={key}
@@ -464,9 +463,6 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                       <div className="space-y-1.5 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           {getSeverityBadge(w.severity)}
-                          <Badge variant="neutral" size="sm">
-                            {code}
-                          </Badge>
                           <Button
                             variant="link"
                             size="sm"

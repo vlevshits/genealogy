@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Sparkles } from 'lucide-react';
+import { CheckCircle2, GitMerge, Sparkles } from 'lucide-react';
 import {
   AccessDeniedCard,
   Badge,
@@ -41,10 +41,16 @@ export interface AiStoryIntakePageProps {
   onNavigate?: (path: string) => void;
 }
 
-const DEFAULT_SPEAKERS: SpeakerOption[] = [
+const DEFAULT_SPEAKERS_RU: SpeakerOption[] = [
   { id: 'node-root', gid: 'I0001', display_name: 'Анна Сергеевна Волкова' },
   { id: 'node-mother-1', gid: 'I0002', display_name: 'Мария Ивановна Волкова' },
   { id: 'node-deceased-1', gid: 'I0012', display_name: 'Пётр Фёдорович Щеглов' },
+];
+
+const DEFAULT_SPEAKERS_EN: SpeakerOption[] = [
+  { id: 'node-root', gid: 'I0001', display_name: 'Anna Sergeyevna Volkova' },
+  { id: 'node-mother-1', gid: 'I0002', display_name: 'Maria Ivanovna Volkova' },
+  { id: 'node-deceased-1', gid: 'I0012', display_name: 'Pyotr Fyodorovich Shcheglov' },
 ];
 
 export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
@@ -53,18 +59,21 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   userRole,
   onNavigate,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const { addToast } = useToast();
 
   const effectiveRole = userRole ?? user?.role ?? 'admin';
   const canEdit = effectiveRole === 'admin' || effectiveRole === 'editor';
 
+  const defaultSpeakers =
+    locale === 'ru' ? DEFAULT_SPEAKERS_RU : DEFAULT_SPEAKERS_EN;
+
   const [speakers, setSpeakers] = useState<SpeakerOption[]>(
-    initialSpeakers ?? DEFAULT_SPEAKERS
+    initialSpeakers ?? defaultSpeakers
   );
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>(
-    user?.person_id || user?.home_person_id || DEFAULT_SPEAKERS[0].id
+    user?.person_id || user?.home_person_id || defaultSpeakers[0].id
   );
   const [isNewSpeaker, setIsNewSpeaker] = useState<boolean>(false);
 
@@ -76,10 +85,28 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   const [extracting, setExtracting] = useState<boolean>(false);
   const [refining, setRefining] = useState<boolean>(false);
   const [committing, setCommitting] = useState<boolean>(false);
+  const [isCommitted, setIsCommitted] = useState<boolean>(false);
 
   const [engine, setEngine] = useState<StoryExtractionEngine>(() =>
     getExtractionEngine()
   );
+
+  useEffect(() => {
+    if (initialSpeakers) return;
+    setSpeakers((prev) => {
+      const isDefaultList = prev.every(
+        (s) =>
+          s.id === 'node-root' ||
+          s.id === 'node-mother-1' ||
+          s.id === 'node-deceased-1'
+      );
+      return isDefaultList
+        ? locale === 'ru'
+          ? DEFAULT_SPEAKERS_RU
+          : DEFAULT_SPEAKERS_EN
+        : prev;
+    });
+  }, [locale, initialSpeakers]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -239,6 +266,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
         engine,
       });
 
+      setIsCommitted(false);
       setActiveDraft(draft);
       syncResolutionsFromDraft(draft);
       addToast({
@@ -321,6 +349,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
     const id = activeDraft.id;
     await storyApi.deleteDraft(id);
     setActiveDraft(null);
+    setIsCommitted(false);
     setResolutions({});
     addToast({
       type: 'info',
@@ -337,6 +366,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
         resolutions,
       });
       setActiveDraft(null);
+      setIsCommitted(true);
       addToast({
         type: 'success',
         title: t('stories.toast.committedTitle', {
@@ -372,7 +402,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
     }
   };
 
-  const currentStage = activeDraft ? 2 : 1;
+  const currentStage = isCommitted ? 3 : activeDraft ? 2 : 1;
 
   return (
     <div
@@ -392,13 +422,18 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
       {/* 3-Stage Progression Tracker */}
       <Card
         data-testid="story-step-tracker"
-        className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-surface-subtle"
+        className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-surface-muted"
       >
         <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm">
           <div className="flex items-center gap-2 font-semibold text-primary">
             <Badge
-              variant={currentStage >= 1 ? 'brand' : 'neutral'}
+              variant={currentStage > 1 ? 'success' : 'brand'}
               size="sm"
+              icon={
+                currentStage > 1 ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : undefined
+              }
             >
               1
             </Badge>
@@ -415,8 +450,19 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
             }`}
           >
             <Badge
-              variant={currentStage >= 2 ? 'brand' : 'neutral'}
+              variant={
+                currentStage > 2
+                  ? 'success'
+                  : currentStage === 2
+                    ? 'brand'
+                    : 'neutral'
+              }
               size="sm"
+              icon={
+                currentStage > 2 ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : undefined
+              }
             >
               2
             </Badge>
@@ -427,18 +473,20 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
 
           <div
             className={`flex items-center gap-2 ${
-              currentStage >= 2
+              currentStage === 3
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
             }`}
           >
             <Badge
-              variant={currentStage >= 2 ? 'success' : 'neutral'}
+              variant={currentStage === 3 ? 'success' : 'neutral'}
               size="sm"
               icon={
-                currentStage >= 2 ? (
+                currentStage === 3 ? (
                   <CheckCircle2 className="h-3 w-3" />
-                ) : undefined
+                ) : (
+                  <GitMerge className="h-3 w-3" />
+                )
               }
             >
               3

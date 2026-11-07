@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
 import { Select } from './select';
+import { useI18n } from '../../i18n';
 
 export interface SideNavItem {
   value: string;
@@ -21,20 +22,22 @@ export const SideNav: React.FC<SideNavProps> = ({
   items,
   value,
   onChange,
-  ariaLabel = 'Section navigation',
+  ariaLabel,
   className,
 }) => {
+  const { t } = useI18n();
+  const resolvedAriaLabel = ariaLabel ?? t('settings.navAriaLabel');
   return (
     <div className={cn('w-full', className)}>
       <div className="md:hidden">
         <Select
-          ariaLabel={ariaLabel}
+          ariaLabel={resolvedAriaLabel}
           value={value}
           onChange={onChange}
           options={items.map((i) => ({ value: i.value, label: i.label, icon: i.icon }))}
         />
       </div>
-      <nav aria-label={ariaLabel} className="hidden md:flex md:flex-col md:gap-1">
+      <nav aria-label={resolvedAriaLabel} className="hidden md:flex md:flex-col md:gap-1">
         {items.map((item) => {
           const active = item.value === value;
           return (

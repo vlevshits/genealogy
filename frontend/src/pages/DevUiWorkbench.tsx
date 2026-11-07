@@ -178,6 +178,7 @@ export const DevUiWorkbench: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         <div className="lg:col-span-3 lg:sticky lg:top-20">
           <SideNav
+            ariaLabel={t('settings.navAriaLabel')}
             value={activeSection}
             onChange={(val) => {
               setActiveSection(val);
@@ -539,17 +540,18 @@ export const DevUiWorkbench: React.FC = () => {
 
             <div className="flex flex-wrap gap-1.5">
               {GENDATE_PRESETS.map((preset) => (
-                <button
+                <Button
                   key={preset}
-                  type="button"
+                  size="xs"
+                  variant="secondary"
                   onClick={() => {
                     const parsed = parseGenDate(preset, locale);
                     setGenDateValue(parsed.value);
                   }}
-                  className="rounded-lg border border-border bg-surface-muted px-2.5 py-1 font-mono text-xs text-primary hover:border-brand hover:text-brand transition-colors cursor-pointer"
+                  className="font-mono"
                 >
                   {preset}
-                </button>
+                </Button>
               ))}
             </div>
 

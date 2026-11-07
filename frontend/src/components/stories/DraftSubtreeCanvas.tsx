@@ -84,7 +84,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
         ? 'border-success/60'
         : isMedium
           ? 'border-warning/60'
-          : 'border-subtle';
+          : 'border-border';
 
     return (
       <div
@@ -128,7 +128,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
           )}
         </div>
 
-        <div className="mt-2 pt-2 border-t border-subtle flex items-center justify-between gap-2">
+        <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-2">
           <span className="text-[11px] font-medium text-tertiary">
             {person.role_to_speaker
               ? t(`stories.roles.${person.role_to_speaker}`)
@@ -173,7 +173,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
       </div>
 
       {/* Interactive Staged Tree Diagram */}
-      <div className="rounded-xl bg-canvas border border-subtle p-4 sm:p-6 overflow-x-auto min-h-[300px] flex flex-col items-center justify-center space-y-4">
+      <div className="rounded-xl bg-canvas border border-border p-4 sm:p-6 overflow-x-auto min-h-[300px] flex flex-col items-center justify-center space-y-4">
         {/* Generation -1: Parents / Ancestors */}
         {ancestors.length > 0 && (
           <>
@@ -182,7 +182,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
             </div>
             <div
               aria-hidden="true"
-              className="h-6 w-0.5 bg-border-strong"
+              className="h-6 w-0.5 bg-border-card"
             />
           </>
         )}
@@ -194,7 +194,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
               {idx > 0 && unions.length > 0 && (
                 <div
                   aria-hidden="true"
-                  className="flex items-center justify-center h-7 w-7 rounded-full bg-surface border border-subtle text-brand"
+                  className="flex items-center justify-center h-7 w-7 rounded-full bg-surface border border-border text-brand"
                 >
                   <Heart className="h-3.5 w-3.5" />
                 </div>
@@ -209,7 +209,7 @@ export const DraftSubtreeCanvas: React.FC<DraftSubtreeCanvasProps> = ({
           <>
             <div
               aria-hidden="true"
-              className="h-6 w-0.5 bg-border-strong"
+              className="h-6 w-0.5 bg-border-card"
             />
             <div className="flex flex-wrap items-center justify-center gap-4">
               {descendants.map(renderNodeCard)}

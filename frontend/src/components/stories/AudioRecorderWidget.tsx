@@ -381,11 +381,11 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
   return (
     <div
       data-testid="audio-recorder-widget"
-      className="rounded-xl border border-subtle bg-surface-subtle p-4 sm:p-5 space-y-4"
+      className="rounded-xl border border-border bg-surface-muted p-4 sm:p-5 space-y-4"
     >
       {/* Status & Timer Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" aria-live="polite">
           {status === 'recording' ? (
             <Badge variant="danger" size="sm">
               {t('stories.audio.recordingStatus')}
@@ -419,7 +419,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
       {/* Animated Waveform Visualizer */}
       <div
         aria-hidden="true"
-        className="h-16 rounded-lg bg-surface border border-subtle px-4 flex items-center justify-center gap-1.5"
+        className="h-16 rounded-lg bg-surface border border-border px-4 flex items-center justify-center gap-1.5"
       >
         {bars.map((heightPct, idx) => {
           const activeHeight =
@@ -448,7 +448,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
       {liveTranscript ? (
         <div
           data-testid="audio-live-transcript-box"
-          className="rounded-lg bg-surface border border-subtle p-3 space-y-1"
+          className="rounded-lg bg-surface border border-border p-3 space-y-1"
         >
           <div className="text-xs font-semibold text-secondary">
             {t('stories.audio.liveTranscriptLabel')}
@@ -464,7 +464,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {status === 'idle' && (
             <Button
-              size="sm"
+              size="md"
               variant="primary"
               data-testid="audio-record-start-btn"
               leftIcon={<Mic className="h-4 w-4" />}
@@ -494,7 +494,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
                   : t('stories.audio.resumeBtn')}
               </Button>
               <Button
-                size="sm"
+                size="md"
                 variant="danger"
                 data-testid="audio-record-stop-btn"
                 leftIcon={<Square className="h-4 w-4" />}
@@ -539,7 +539,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
 
         {status === 'stopped' && (
           <Button
-            size="sm"
+            size="md"
             variant="primary"
             loading={transcribing}
             data-testid="audio-transcribe-btn"

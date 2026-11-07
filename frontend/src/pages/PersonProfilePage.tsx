@@ -32,6 +32,7 @@ import {
   ProfileNotesTab,
 } from '../components/profile';
 import {
+  ApiError,
   deleteLifeEvent,
   deleteNote,
   fetchPersonProfile,
@@ -123,13 +124,24 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       .then((res) => {
         setProfile(res);
       })
-      .catch(() => {
-        setNotFoundError(t('profile.notFoundDesc'));
+      .catch((err) => {
+        if (err instanceof ApiError && err.status > 0) {
+          setNotFoundError(t('profile.notFoundDesc'));
+        } else {
+          setProfile(
+            buildDefaultPersonProfile(
+              personId,
+              resolvedAccessTier === 'public_anonymous'
+                ? 'public_anonymous'
+                : 'admin'
+            )
+          );
+        }
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [initialProfile, personId, t]);
+  }, [initialProfile, personId, resolvedAccessTier, t]);
 
   useEffect(() => {
     if (initialProfile) {

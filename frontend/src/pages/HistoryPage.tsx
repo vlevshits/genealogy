@@ -519,7 +519,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                                 const translatedField = t(fieldKey);
                                 const displayField =
                                   translatedField !== fieldKey
-                                    ? `${translatedField} (${d.field})`
+                                    ? translatedField
                                     : d.field;
                                 return (
                                   <div

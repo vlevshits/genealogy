@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Home, UserPlus } from 'lucide-react';
+import { Home, Sparkles, UserPlus } from 'lucide-react';
 import {
   Badge,
   BrandLogoIcon,
@@ -348,14 +348,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </Button>
 
             {canEdit && (
-              <Button
-                variant="secondary"
-                size="md"
-                leftIcon={<UserPlus className="h-4 w-4" />}
-                onClick={() => setQuickAddOpen(true)}
-              >
-                {t('nav.addPerson')}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<UserPlus className="h-4 w-4" />}
+                  onClick={() => setQuickAddOpen(true)}
+                >
+                  {t('nav.addPerson')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leftIcon={<Sparkles className="h-4 w-4 text-brand" />}
+                  onClick={() => navigateTo('/stories/intake')}
+                  data-testid="dashboard-story-intake-btn"
+                >
+                  {t('nav.storyIntake')}
+                </Button>
+              </>
             )}
           </div>
         </div>

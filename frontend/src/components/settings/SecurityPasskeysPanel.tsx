@@ -515,41 +515,47 @@ export const SecurityPasskeysPanel: React.FC<SecurityPasskeysPanelProps> = ({
           )}
         </CardHeader>
         <CardBody>
-          <div className="divide-y divide-border">
-            {sessions.map((sess) => (
-              <div
-                key={sess.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-primary">
-                      {sess.user_agent || 'Browser Session'}
-                    </span>
-                    {sess.is_current && (
-                      <Badge variant="success" size="sm">
-                        {t('settings.security.currentSessionBadge')}
-                      </Badge>
-                    )}
+          {sessions.length === 0 ? (
+            <p className="text-xs text-secondary">
+              {t('settings.security.noSessionsDesc')}
+            </p>
+          ) : (
+            <div className="divide-y divide-border">
+              {sessions.map((sess) => (
+                <div
+                  key={sess.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-primary">
+                        {sess.user_agent || 'Browser Session'}
+                      </span>
+                      {sess.is_current && (
+                        <Badge variant="success" size="sm">
+                          {t('settings.security.currentSessionBadge')}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-secondary">
+                      {sess.ip_address ? `${sess.ip_address} · ` : ''}
+                      {t('settings.security.lastSeenLabel')}:{' '}
+                      {formatDate(sess.last_seen_at)}
+                    </div>
                   </div>
-                  <div className="text-xs text-secondary">
-                    {sess.ip_address ? `${sess.ip_address} · ` : ''}
-                    {t('settings.security.lastSeenLabel')}:{' '}
-                    {formatDate(sess.last_seen_at)}
-                  </div>
+                  {!sess.is_current && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleRevokeSession(sess.id)}
+                    >
+                      {t('settings.security.signOutSessionBtn')}
+                    </Button>
+                  )}
                 </div>
-                {!sess.is_current && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleRevokeSession(sess.id)}
-                  >
-                    {t('settings.security.signOutSessionBtn')}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardBody>
       </Card>
 

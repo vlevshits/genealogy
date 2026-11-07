@@ -42,7 +42,7 @@ const ErrorFallback: React.FC<ErrorFallbackProps> = ({ onReset }) => {
       role="alert"
       className="min-h-screen flex items-center justify-center bg-surface p-4"
     >
-      <div className="max-w-md w-full rounded-2xl border border-subtle bg-surface p-6 shadow-sm text-center space-y-4">
+      <div className="max-w-md w-full rounded-2xl border border-border bg-surface p-6 shadow-sm text-center space-y-4">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger/10 text-danger">
           <AlertTriangle className="h-6 w-6" aria-hidden="true" />
         </div>

@@ -502,7 +502,8 @@
       "signOutSessionBtn": "Sign out",
       "signOutEverywhereBtn": "Sign Out Other Devices",
       "sessionRevokedToast": "Session signed out",
-      "otherSessionsRevokedToast": "Signed out of {count} other sessions"
+      "otherSessionsRevokedToast": "Signed out of {count} other sessions",
+      "noSessionsDesc": "No active sessions found."
     },
     "users": {
       "title": "Family Members & Access Roles",
@@ -576,6 +577,8 @@
       "createdToast": "Personal Access Token generated",
       "revokedToast": "Personal Access Token revoked",
       "revokeBtn": "Revoke",
+      "revokeConfirmTitle": "Revoke Personal Access Token",
+      "revokeConfirmDesc": "Are you sure you want to permanently revoke \"{name}\"? Connected MCP clients using this token will lose access immediately.",
       "emptyTitle": "No Personal Access Tokens issued",
       "emptyDesc": "Generate a scoped token above to connect an MCP-compatible assistant."
     }

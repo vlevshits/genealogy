@@ -661,7 +661,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
               {t('common.cancel')}
             </Button>
             <Button
-              variant="primary"
+              variant="danger"
               loading={submitting}
               data-testid="merge-execute-confirm-btn"
               leftIcon={<GitMerge className="h-4 w-4" />}

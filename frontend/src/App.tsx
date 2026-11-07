@@ -203,6 +203,8 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
       path.startsWith('/history') ||
       path.startsWith('/quality') ||
       path.startsWith('/export') ||
+      path === '/stories/intake' ||
+      path.startsWith('/stories/') ||
       (path !== '/' &&
         !path.startsWith('/tree') &&
         !path.startsWith('/persons/') &&

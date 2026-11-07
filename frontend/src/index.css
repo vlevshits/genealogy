@@ -83,8 +83,12 @@
   --color-canvas: var(--color-bg-canvas);
   --color-surface: var(--color-bg-surface);
   --color-surface-muted: var(--color-bg-muted);
+  --color-surface-subtle: var(--color-surface-muted);
   --color-border: var(--color-border-subtle);
+  --color-subtle: var(--color-border);
+  --color-border-subtle: var(--color-border);
   --color-border-card: var(--color-border-card);
+  --color-border-strong: var(--color-border-card);
   --color-border-ring: var(--color-border-focus);
   --color-focus: var(--color-border-focus);
 

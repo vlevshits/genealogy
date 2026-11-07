@@ -156,7 +156,7 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       />,
       'ru'
     );
-    expect(htmlRu).toContain('Две ветви');
+    expect(htmlRu).toContain('Песочные часы');
     expect(htmlRu).toContain('Предки');
     expect(htmlRu).toContain('Потомки');
     expect(htmlRu).toContain('Мини-карта древа');

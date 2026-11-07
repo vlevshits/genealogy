@@ -187,7 +187,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
       {/* Extraction Engine & Model Selection Toolbar */}
       <div
         data-testid="story-engine-selector-bar"
-        className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-subtle border border-subtle"
+        className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-muted border border-border"
       >
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-xs font-medium text-secondary whitespace-nowrap">
@@ -220,7 +220,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
       </div>
 
       {/* Bottom Action Bar: Language Selector + Extract Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-subtle">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-border">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-secondary whitespace-nowrap">
             {t('stories.input.languageLabel')}:

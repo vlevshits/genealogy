@@ -18,6 +18,46 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            return 'vendor';
+          }
+          if (id.includes('src/i18n/')) {
+            return 'i18n-locales';
+          }
+          if (id.includes('src/lib/tree-layouts/')) {
+            return 'domain-tree';
+          }
+          if (
+            id.includes('src/pages/PrintExportPage') ||
+            id.includes('src/components/print/')
+          ) {
+            return 'domain-print';
+          }
+          if (
+            id.includes('src/pages/AiStoryIntakePage') ||
+            id.includes('src/components/stories/')
+          ) {
+            return 'domain-stories';
+          }
+          if (
+            id.includes('src/pages/DataQualityPage') ||
+            id.includes('src/pages/PersonMergePage') ||
+            id.includes('src/components/quality/PlaceHierarchy') ||
+            id.includes('src/components/quality/BatchAutoFix')
+          ) {
+            return 'domain-quality';
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

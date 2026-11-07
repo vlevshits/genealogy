@@ -10,6 +10,7 @@ import {
   Printer,
   Settings,
   ShieldCheck,
+  Sparkles,
   Sun,
   Moon,
   Monitor,
@@ -43,7 +44,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   className,
 }) => {
   const { locale, setLocale, t } = useI18n();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const isViewer = user?.role === 'viewer';
   const [moreOpen, setMoreOpen] = useState(false);
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -106,6 +108,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       ];
 
   const moreLinks = [
+    ...(!isViewer
+      ? [
+          {
+            id: 'stories',
+            label: t('nav.storyIntake'),
+            href: '/stories/intake',
+            icon: <Sparkles className="h-4 w-4" />,
+          },
+        ]
+      : []),
     {
       id: 'places',
       label: t('nav.places'),
@@ -138,7 +150,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     },
   ];
 
-  const isMoreActive = moreLinks.some((item) => item.href === currentPath);
+  const isMoreActive =
+    moreLinks.some((item) => item.href === currentPath) ||
+    currentPath.startsWith('/stories');
 
   return (
     <>

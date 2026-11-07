@@ -14,6 +14,7 @@ import {
   CardBody,
   CardHeader,
   Checkbox,
+  Dialog,
   EmptyState,
   TextInput,
   useToast,
@@ -57,6 +58,8 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
   const [freshRawToken, setFreshRawToken] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [confirmRevokeToken, setConfirmRevokeToken] =
+    useState<McpPersonalAccessTokenDto | null>(null);
 
   useEffect(() => {
     if (initialTokens !== undefined) return;
@@ -173,8 +176,8 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <code className="rounded-lg bg-surface-subtle px-2.5 py-1.5 font-mono text-xs text-secondary border border-subtle">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">
+          <code className="rounded-lg bg-surface-muted px-2.5 py-1.5 font-mono text-xs text-secondary border border-border break-all max-w-full">
             {mcpEndpointUrl}
           </code>
           <Button
@@ -200,7 +203,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
         {freshRawToken && (
           <div
             data-testid="mcp-fresh-token-banner"
-            className="rounded-xl border border-success/40 bg-surface-subtle p-4 space-y-2"
+            className="rounded-xl border border-success/40 bg-surface-muted p-4 space-y-2"
           >
             <div className="text-xs font-semibold text-success">
               {t('settings.mcp.rawTokenOnceWarning')}
@@ -234,7 +237,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
         {/* Create New Token Form */}
         <form
           onSubmit={handleCreateToken}
-          className="rounded-xl border border-subtle bg-surface-subtle p-4 space-y-3"
+          className="rounded-xl border border-border bg-surface-muted p-4 space-y-3"
         >
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
             <div className="md:col-span-4">
@@ -346,7 +349,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
                   variant="danger"
                   data-testid={`revoke-mcp-token-btn-${tok.id}`}
                   leftIcon={<Trash2 className="h-3.5 w-3.5" />}
-                  onClick={() => void handleRevokeToken(tok.id)}
+                  onClick={() => setConfirmRevokeToken(tok)}
                 >
                   {t('settings.mcp.revokeBtn')}
                 </Button>
@@ -355,6 +358,46 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
           </div>
         )}
       </CardBody>
+
+      <Dialog
+        open={Boolean(confirmRevokeToken)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmRevokeToken(null);
+        }}
+        size="sm"
+        title={t('settings.mcp.revokeConfirmTitle')}
+        description={t('settings.mcp.revokeConfirmDesc', {
+          name: confirmRevokeToken?.name ?? '',
+        })}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setConfirmRevokeToken(null)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              data-testid="confirm-revoke-mcp-token-btn"
+              leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+              onClick={() => {
+                if (confirmRevokeToken) {
+                  const id = confirmRevokeToken.id;
+                  setConfirmRevokeToken(null);
+                  void handleRevokeToken(id);
+                }
+              }}
+            >
+              {t('settings.mcp.revokeBtn')}
+            </Button>
+          </div>
+        }
+      >
+        <div />
+      </Dialog>
     </Card>
   );
 };

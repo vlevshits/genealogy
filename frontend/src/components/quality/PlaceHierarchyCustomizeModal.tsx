@@ -114,7 +114,7 @@ export const PlaceHierarchyCustomizeModal: React.FC<
       }
     >
       <form onSubmit={handleSave} className="space-y-4">
-        <div className="rounded-lg bg-surface-subtle p-3 border border-subtle text-xs text-secondary">
+        <div className="rounded-lg bg-surface-muted p-3 border border-border text-xs text-secondary">
           <span className="font-semibold text-primary">
             {t('quality.places.currentRecordLabel')}:
           </span>{' '}

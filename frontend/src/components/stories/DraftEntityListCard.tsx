@@ -99,7 +99,7 @@ export const DraftEntityListCard: React.FC<DraftEntityListCardProps> = ({
               <div
                 key={person.temp_id}
                 data-testid={`draft-entity-item-${person.temp_id}`}
-                className="rounded-xl border border-subtle bg-surface-subtle p-3.5 space-y-2"
+                className="rounded-xl border border-border bg-surface-muted p-3.5 space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-0.5 min-w-0">
@@ -154,7 +154,7 @@ export const DraftEntityListCard: React.FC<DraftEntityListCardProps> = ({
                 </div>
 
                 {person.source_snippet && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-tertiary bg-surface rounded-lg p-2 border border-subtle">
+                  <div className="flex items-start gap-1.5 text-[11px] text-tertiary bg-surface rounded-lg p-2 border border-border">
                     <Quote className="h-3 w-3 shrink-0 mt-0.5 text-brand" />
                     <span className="italic">{person.source_snippet}</span>
                   </div>

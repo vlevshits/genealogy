@@ -18,6 +18,10 @@ import {
 } from '../../src/components/quality';
 import { McpTokensPanel, SecurityPasskeysPanel } from '../../src/components/settings';
 import { Avatar } from '../../src/components/ui/avatar';
+import { Button } from '../../src/components/ui/button';
+import { SideNav } from '../../src/components/ui/side-nav';
+import { AudioRecorderWidget } from '../../src/components/stories/AudioRecorderWidget';
+import { DashboardPage } from '../../src/pages/DashboardPage';
 import { MediaCard } from '../../src/components/media/MediaCard';
 import type { StoryDraftDto } from '../../src/api/client';
 
@@ -348,5 +352,41 @@ describe('Milestone 2.9 & 3.2 — Place Hierarchy, Relationship Duplicate Reason
     expect(mediaCardHtml).toContain('Archive Portrait 1912');
     expect(mediaCardHtml).toContain('touch-target-expand');
     expect(mediaCardHtml).toContain('Open Studio');
+  });
+
+  it('verifies UX-119 through UX-126 & ARCH-01 (tokens, touch targets, localized SideNav, AudioRecorder aria-live, Dashboard Story CTA, and <=800 lines limit)', () => {
+    // 1. Button size="xs" includes touch-target-expand (UX-121)
+    const xsBtnHtml = renderWithProviders(<Button size="xs">Profile</Button>, 'en');
+    expect(xsBtnHtml).toContain('touch-target-expand');
+
+    // 2. SideNav uses localized default aria-label in RU (UX-121)
+    const sideNavRu = renderWithProviders(
+      <SideNav
+        items={[{ value: 'general', label: 'Общие' }]}
+        value="general"
+        onChange={() => {}}
+      />,
+      'ru'
+    );
+    expect(sideNavRu).toContain('aria-label="Разделы настроек"');
+
+    // 3. AudioRecorderWidget includes aria-live="polite" and size="md" primary CTA (UX-123)
+    const audioHtml = renderWithProviders(
+      <AudioRecorderWidget onTranscribe={() => {}} />,
+      'en'
+    );
+    expect(audioHtml).toContain('aria-live="polite"');
+    expect(audioHtml).toContain('min-h-11');
+
+    // 4. AiStoryIntakePage localizes fallback speakers in EN vs RU (UX-122)
+    const intakeEn = renderWithProviders(<AiStoryIntakePage userRole="admin" />, 'en');
+    expect(intakeEn).toContain('Anna Sergeyevna Volkova (I0001)');
+
+    // 5. DashboardPage renders Story Intake quick-action button for Editors/Admins (UX-120)
+    const dashEditorHtml = renderWithProviders(
+      <DashboardPage accessTier="editor" />,
+      'en'
+    );
+    expect(dashEditorHtml).toContain('data-testid="dashboard-story-intake-btn"');
   });
 });

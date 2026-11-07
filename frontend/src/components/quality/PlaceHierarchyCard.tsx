@@ -116,7 +116,7 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
       </div>
 
       {/* Current vs Proposed Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-surface-subtle p-3.5 border border-subtle">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-surface-muted p-3.5 border border-border">
         {/* Current Place */}
         <div className="space-y-1.5 min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
@@ -184,7 +184,7 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
 
           {/* Candidate Parents Selector for Medium/Ambiguous Issues */}
           {issue.candidate_parents && issue.candidate_parents.length > 1 && (
-            <div className="pt-2 space-y-1.5 border-t border-subtle mt-2">
+            <div className="pt-2 space-y-1.5 border-t border-border mt-2">
               <div className="text-xs font-medium text-secondary">
                 {t('quality.places.selectCandidateParentLabel')}:
               </div>

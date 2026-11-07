@@ -502,7 +502,8 @@
       "signOutSessionBtn": "Завершить",
       "signOutEverywhereBtn": "Выйти на других устройствах",
       "sessionRevokedToast": "Сессия завершена",
-      "otherSessionsRevokedToast": "Завершено других сессий: {count}"
+      "otherSessionsRevokedToast": "Завершено других сессий: {count}",
+      "noSessionsDesc": "Активные сессии не найдены."
     },
     "users": {
       "title": "Участники семьи и права доступа",
@@ -576,6 +577,8 @@
       "createdToast": "Персональный токен доступа создан",
       "revokedToast": "Персональный токен доступа отозван",
       "revokeBtn": "Отозвать",
+      "revokeConfirmTitle": "Отзыв персонального токена доступа",
+      "revokeConfirmDesc": "Вы уверены, что хотите безвозвратно отозвать токен «{name}»? Подключённые клиенты MCP немедленно потеряют доступ.",
       "emptyTitle": "Персональные токены доступа ещё не созданы",
       "emptyDesc": "Выпустите токен выше для подключения внешнего клиента по протоколу MCP."
     }
@@ -623,7 +626,7 @@
       "marriagePlace": "Место брака"
     },
     "modes": {
-      "hourglass": "Две ветви",
+      "hourglass": "Песочные часы",
       "pedigree": "Предки",
       "descendants": "Потомки",
       "fan": "Веерная",

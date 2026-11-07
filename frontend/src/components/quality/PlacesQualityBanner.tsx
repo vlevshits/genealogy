@@ -21,7 +21,7 @@ export const PlacesQualityBanner: React.FC<PlacesQualityBannerProps> = ({
   return (
     <Card
       data-testid="places-quality-banner"
-      className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-brand/30 bg-surface-subtle"
+      className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-brand/30 bg-surface-muted"
     >
       <div className="flex items-start sm:items-center gap-3 min-w-0">
         <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center text-brand shrink-0">

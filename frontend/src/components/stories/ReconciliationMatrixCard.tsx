@@ -118,7 +118,7 @@ export const ReconciliationMatrixCard: React.FC<
             <div
               key={person.temp_id}
               data-testid={`reconcile-row-${person.temp_id}`}
-              className="rounded-xl border border-subtle bg-surface-subtle p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
+              className="rounded-xl border border-border bg-surface-muted p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
             >
               {/* Col 1: Draft Person */}
               <div className="lg:col-span-4 space-y-1 min-w-0">
@@ -211,7 +211,7 @@ export const ReconciliationMatrixCard: React.FC<
       </div>
 
       {/* Footer Commit & Discard */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-subtle">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border">
         <Button
           variant="ghost"
           size="sm"
