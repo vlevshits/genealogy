@@ -327,9 +327,11 @@ export const PeoplePage: React.FC<PeoplePageProps> = ({
   );
 
   const loadDirectory = useCallback(() => {
-    if (initialData) return;
+    if (initialData) return () => {};
+    let cancelled = false;
     fetchPeopleDirectory(buildQueryDto())
       .then((res) => {
+        if (cancelled) return;
         setRemoteItems(res.items);
         setNextCursor(res.next_cursor);
         setRemoteTotal(res.total);
@@ -337,12 +339,17 @@ export const PeoplePage: React.FC<PeoplePageProps> = ({
         setUsingBackendData(true);
       })
       .catch(() => {
-        setUsingBackendData(false);
+        if (!cancelled) {
+          setUsingBackendData(false);
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [buildQueryDto, initialData]);
 
   useEffect(() => {
-    loadDirectory();
+    return loadDirectory();
   }, [loadDirectory]);
 
   const handleLoadMore = async () => {

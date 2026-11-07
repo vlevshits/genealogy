@@ -18,9 +18,9 @@ pub(crate) use crate::{
         },
         history::{log_change, undo_transaction},
         privacy::{
-            redact_person_for_tree_view, DraftExtractedDataDto, FamilyChildDto, FamilyDto,
-            GenealogyPrivacyStore, LifeEventDto, NoteDto, PersonNameDto, PersonalAccessTokenDto,
-            PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
+            redact_event_for_tree_view, redact_person_for_tree_view, DraftExtractedDataDto,
+            FamilyChildDto, FamilyDto, GenealogyPrivacyStore, LifeEventDto, NoteDto, PersonNameDto,
+            PersonalAccessTokenDto, PlaceSummaryDto, TreePersonNodeDto, VitalEventSummaryDto,
         },
         quality::{
             analyze_place_hierarchies, batch_fix_places, compute_duplicate_candidates,

@@ -118,6 +118,54 @@ pub fn redact_person_for_tree_view(
     Some(person.clone())
 }
 
+/// Redacts or filters a life event for tree and MCP projections (`02-rbac-access-control.md §3.2, §4.2`, `19-ai-family-story-intake-and-mcp.md §4.2.3`).
+/// - Returns `None` if `event.is_private` and caller does not have `Editor` or `Admin` access.
+/// - For `AnonymousPublic` (which includes `Viewer` MCP tokens per `19 §4.2.3`):
+///   - If the event belongs to an individual (`individual_id`), returns `None` when the individual is missing, private, or `is_living`.
+///   - If the event belongs to a family (`family_id`), returns `None` when the family is missing, private, or has any living partner.
+pub fn redact_event_for_tree_view(
+    event: &LifeEventDto,
+    persons: &[TreePersonNodeDto],
+    families: &[FamilyDto],
+    access: &CallerAccess,
+) -> Option<LifeEventDto> {
+    if event.is_private && !access.can_view_private() {
+        return None;
+    }
+
+    if let Some(ref ind_id) = event.individual_id {
+        let person = persons.iter().find(|p| &p.id == ind_id)?;
+        redact_person_for_tree_view(person, access)?;
+        if *access == CallerAccess::AnonymousPublic && person.is_living {
+            return None;
+        }
+    }
+
+    if let Some(ref fam_id) = event.family_id {
+        let fam = families.iter().find(|f| &f.id == fam_id)?;
+        if fam.is_private && !access.can_view_private() {
+            return None;
+        }
+        if *access == CallerAccess::AnonymousPublic {
+            let p1_living = fam
+                .partner1_id
+                .as_ref()
+                .and_then(|pid| persons.iter().find(|p| &p.id == pid))
+                .is_some_and(|p| p.is_living);
+            let p2_living = fam
+                .partner2_id
+                .as_ref()
+                .and_then(|pid| persons.iter().find(|p| &p.id == pid))
+                .is_some_and(|p| p.is_living);
+            if p1_living || p2_living {
+                return None;
+            }
+        }
+    }
+
+    Some(event.clone())
+}
+
 /// Redacts a media asset for the given caller (`02-rbac-access-control.md §3.2, §7 DoD #3`).
 pub fn redact_media_for_caller(
     media: &MediaAssetSummaryDto,

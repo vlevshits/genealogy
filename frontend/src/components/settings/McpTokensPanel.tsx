@@ -327,7 +327,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
                     <code className="font-mono text-xs text-tertiary">
                       {tok.token_prefix}…
                     </code>
-                    {tok.scopes.map((sc) => (
+                    {(tok.scopes ?? []).map((sc) => (
                       <Badge key={sc} variant="neutral" size="sm">
                         {sc}
                       </Badge>

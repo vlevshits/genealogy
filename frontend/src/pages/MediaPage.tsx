@@ -269,9 +269,11 @@ export const MediaPage: React.FC<MediaPageProps> = ({
   );
 
   const loadMedia = useCallback(() => {
-    if (initialData) return;
+    if (initialData) return () => {};
+    let cancelled = false;
     fetchMediaArchive(buildQueryDto())
       .then((res) => {
+        if (cancelled) return;
         setRemoteItems(res.items);
         setNextCursor(res.next_cursor);
         setRemoteTotal(res.total);
@@ -279,18 +281,24 @@ export const MediaPage: React.FC<MediaPageProps> = ({
         setUsingBackendData(true);
       })
       .catch(() => {
-        setUsingBackendData(false);
+        if (!cancelled) {
+          setUsingBackendData(false);
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [buildQueryDto, initialData]);
 
   useEffect(() => {
-    loadMedia();
+    return loadMedia();
   }, [loadMedia]);
 
   useEffect(() => {
+    let cancelled = false;
     fetchPeopleDirectory({ limit: 100 })
       .then((res) => {
-        if (res.items.length > 0) {
+        if (!cancelled && res.items.length > 0) {
           setCandidates(
             res.items.map((p) => ({
               id: p.id,
@@ -307,6 +315,9 @@ export const MediaPage: React.FC<MediaPageProps> = ({
       .catch(() => {
         // Keep DEFAULT_FACE_CANDIDATES when offline
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const displayedItems = useMemo(() => {

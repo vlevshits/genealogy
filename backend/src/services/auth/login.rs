@@ -73,7 +73,10 @@ impl AuthService {
                 let _user_verified = (flags & 0x04) != 0;
 
                 // Sign count (bytes 33..37):
-                let raw_sign_count = u32::from_be_bytes(auth_data[33..37].try_into().unwrap());
+                let sign_count_bytes: [u8; 4] = auth_data[33..37]
+                    .try_into()
+                    .map_err(|_| AppError::PasskeyVerificationFailed)?;
+                let raw_sign_count = u32::from_be_bytes(sign_count_bytes);
                 let incoming_sign_count = i32::try_from(raw_sign_count).unwrap_or(i32::MAX);
                 Some(incoming_sign_count)
             }
@@ -489,7 +492,11 @@ impl AuthService {
                 let Some(code_rec) = store.recovery_codes.iter_mut().find(|rc| {
                     rc.user_id == uid && rc.used_at.is_none() && rc.code_hash == code_hash
                 }) else {
-                    let user_mut = store.users.iter_mut().find(|u| u.id == uid).unwrap();
+                    let user_mut = store
+                        .users
+                        .iter_mut()
+                        .find(|u| u.id == uid)
+                        .ok_or(AppError::InvalidCredentials)?;
                     user_mut.failed_login_attempts += 1;
                     if user_mut.failed_login_attempts >= 5 {
                         user_mut.locked_until = Some(now + ChronoDuration::minutes(15));
@@ -499,7 +506,11 @@ impl AuthService {
                 };
 
                 code_rec.used_at = Some(now);
-                let user_mut = store.users.iter_mut().find(|u| u.id == uid).unwrap();
+                let user_mut = store
+                    .users
+                    .iter_mut()
+                    .find(|u| u.id == uid)
+                    .ok_or(AppError::InvalidCredentials)?;
                 user_mut.failed_login_attempts = 0;
                 user_mut.locked_until = None;
                 user_mut.last_login_at = Some(now);

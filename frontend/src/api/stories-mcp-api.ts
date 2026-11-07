@@ -1,4 +1,4 @@
-import { apiFetch } from "./core";
+import { apiFetch, ApiError } from "./core";
 import { uploadFileWithProgress } from "./media-gedcom-pdf-api";
 
 // =============================================================================
@@ -53,7 +53,7 @@ export interface DraftEventDto {
 
 export interface StoryReconciliationCandidateDto {
   draft_temp_id: string;
-  proposed_action: 'link_existing' | 'create_new';
+  proposed_action: 'link_existing' | 'create_new' | 'skip';
   matched_person_id?: string | null;
   matched_person_gid?: string | null;
   matched_person_name?: string | null;
@@ -77,6 +77,7 @@ export interface StoryDraftDto {
   id: string;
   title: string;
   speaker_id?: string | null;
+  speaker_person_id?: string | null;
   speaker_name?: string | null;
   is_new_speaker?: boolean;
   raw_text: string;
@@ -99,6 +100,7 @@ export interface TranscribeAudioResponseDto {
 export interface ParseStoryRequestDto {
   title?: string;
   speaker_id?: string | null;
+  speaker_person_id?: string | null;
   is_new_speaker?: boolean;
   raw_text: string;
   language?: string;
@@ -117,11 +119,18 @@ export interface CommitStoryDraftRequestDto {
   resolutions: Record<
     string,
     {
-      action: 'link_existing' | 'create_new';
+      action: 'link_existing' | 'create_new' | 'skip';
       matched_person_id?: string | null;
       enrich_fields?: string[];
     }
   >;
+  match_overrides?: Array<{
+    draft_person_id: string;
+    draft_temp_id?: string;
+    selected_action: string;
+    target_person_id?: string;
+    matched_person_id?: string;
+  }>;
 }
 
 export interface CommitStoryDraftResponseDto {
@@ -130,6 +139,9 @@ export interface CommitStoryDraftResponseDto {
   linked_count: number;
   focal_person_id?: string | null;
   tx_id: string;
+  transaction_id: string;
+  created_person_ids: string[];
+  updated_person_ids: string[];
   status: string;
 }
 
@@ -157,228 +169,144 @@ export interface CreateMcpTokenResponseDto {
   raw_token: string;
 }
 
-export function buildLocalStoryDraftFallback(
-  payload: ParseStoryRequestDto
-): StoryDraftDto {
+export function buildLocalStoryDraftFallback(payload: ParseStoryRequestDto): StoryDraftDto {
   const raw = payload.raw_text.trim();
   const isRu = /[А-Яа-яЁё]/.test(raw);
   const draftId = `draft-${Date.now()}`;
-
   const speakerNode: DraftPersonNodeDto = {
-    temp_id: 'temp-speaker-1',
-    given_name: isRu ? 'Анна' : 'Anna',
-    surname: isRu ? 'Волкова' : 'Volkova',
-    patronymic: isRu ? 'Сергеевна' : null,
-    sex: 'F',
-    birth_date: '1995-06-29',
-    birth_place: isRu ? 'Москва' : 'Moscow',
-    is_living: true,
-    role_to_speaker: 'speaker',
-    source_snippet:
-      raw.slice(0, 110) ||
-      (isRu
-        ? 'Меня зовут Анна Волкова, родилась 29 июня 1995 в Москве.'
-        : 'My name is Anna Volkova, born June 29, 1995 in Moscow.'),
-    confidence_score: 98,
+    temp_id: 'temp-speaker-1', given_name: isRu ? 'Анна' : 'Anna', surname: isRu ? 'Волкова' : 'Volkova',
+    patronymic: isRu ? 'Сергеевна' : null, sex: 'F', birth_date: '1995-06-29', birth_place: isRu ? 'Москва' : 'Moscow',
+    is_living: true, role_to_speaker: 'speaker', confidence_score: 98,
+    source_snippet: raw.slice(0, 110) || (isRu ? 'Меня зовут Анна Волкова, родилась 29 июня 1995 в Москве.' : 'My name is Anna Volkova, born June 29, 1995 in Moscow.'),
   };
-
   const partnerNode: DraftPersonNodeDto = {
-    temp_id: 'temp-partner-2',
-    given_name: isRu ? 'Алексей' : 'Alexey',
-    surname: isRu ? 'Смирнов' : 'Smirnov',
-    patronymic: isRu ? 'Игоревич' : null,
-    sex: 'M',
-    birth_date: '1993',
-    birth_place: isRu ? 'Тверь' : 'Tver',
-    is_living: true,
-    role_to_speaker: 'spouse',
-    source_snippet: isRu
-      ? 'Мой муж — Алексей Смирнов (родился в 1993 году в Твери).'
-      : 'My partner is Alexey Smirnov (born 1993 in Tver).',
-    confidence_score: 94,
+    temp_id: 'temp-partner-2', given_name: isRu ? 'Алексей' : 'Alexey', surname: isRu ? 'Смирнов' : 'Smirnov',
+    patronymic: isRu ? 'Игоревич' : null, sex: 'M', birth_date: '1993', birth_place: isRu ? 'Тверь' : 'Tver',
+    is_living: true, role_to_speaker: 'spouse', confidence_score: 94,
+    source_snippet: isRu ? 'Мой муж — Алексей Смирнов (родился в 1993 году в Твери).' : 'My partner is Alexey Smirnov (born 1993 in Tver).',
   };
-
   const childNode: DraftPersonNodeDto = {
-    temp_id: 'temp-child-3',
-    given_name: isRu ? 'София' : 'Sophia',
-    surname: isRu ? 'Смирнова' : 'Smirnova',
-    patronymic: isRu ? 'Алексеевна' : null,
-    sex: 'F',
-    birth_date: 'abt 2021',
-    birth_place: isRu ? 'Москва' : 'Moscow',
-    is_living: true,
-    role_to_speaker: 'child',
-    source_snippet: isRu
-      ? 'У нас есть дочь София, родилась в 2021 году.'
-      : 'We have a daughter, Sophia, born in 2021.',
-    confidence_score: 82,
-    ambiguity_note: isRu
-      ? 'Точная дата рождения не указана'
-      : 'Exact day and month not specified',
+    temp_id: 'temp-child-3', given_name: isRu ? 'София' : 'Sophia', surname: isRu ? 'Смирнова' : 'Smirnova',
+    patronymic: isRu ? 'Алексеевна' : null, sex: 'F', birth_date: 'abt 2021', birth_place: isRu ? 'Москва' : 'Moscow',
+    is_living: true, role_to_speaker: 'child', confidence_score: 82,
+    source_snippet: isRu ? 'У нас есть дочь София, родилась в 2021 году.' : 'We have a daughter, Sophia, born in 2021.',
+    ambiguity_note: isRu ? 'Точная дата рождения не указана' : 'Exact day and month not specified',
   };
-
   const motherNode: DraftPersonNodeDto = {
-    temp_id: 'temp-mother-4',
-    given_name: isRu ? 'Мария' : 'Maria',
-    surname: isRu ? 'Волкова' : 'Volkova',
-    maiden_name: isRu ? 'Петрова' : 'Petrova',
-    patronymic: isRu ? 'Ивановна' : 'Ivanovna',
-    sex: 'F',
-    birth_date: '1968',
-    birth_place: isRu ? 'Санкт-Петербург' : 'Saint Petersburg',
-    is_living: true,
-    role_to_speaker: 'mother',
-    source_snippet: isRu
-      ? 'Моя мама — Мария Ивановна Петрова (родилась в 1968 году в Санкт-Петербурге).'
-      : 'My mother is Maria Ivanovna Petrova (born 1968 in Saint Petersburg).',
-    confidence_score: 91,
+    temp_id: 'temp-mother-4', given_name: isRu ? 'Мария' : 'Maria', surname: isRu ? 'Волкова' : 'Volkova',
+    maiden_name: isRu ? 'Петрова' : 'Petrova', patronymic: isRu ? 'Ивановна' : 'Ivanovna', sex: 'F',
+    birth_date: '1968', birth_place: isRu ? 'Санкт-Петербург' : 'Saint Petersburg',
+    is_living: true, role_to_speaker: 'mother', confidence_score: 91,
+    source_snippet: isRu ? 'Моя мама — Мария Ивановна Петрова (родилась в 1968 году в Санкт-Петербурге).' : 'My mother is Maria Ivanovna Petrova (born 1968 in Saint Petersburg).',
   };
-
   const draftPeople = [speakerNode, partnerNode, childNode, motherNode];
   const draftUnions: DraftUnionDto[] = [
-    {
-      temp_id: 'union-1',
-      partner1_temp_id: 'temp-speaker-1',
-      partner2_temp_id: 'temp-partner-2',
-      relationship_type: 'married',
-      children_temp_ids: ['temp-child-3'],
-    },
+    { temp_id: 'union-1', partner1_temp_id: 'temp-speaker-1', partner2_temp_id: 'temp-partner-2', relationship_type: 'married', children_temp_ids: ['temp-child-3'] },
   ];
   const draftParentChild: DraftParentChildDto[] = [
-    {
-      parent_temp_id: 'temp-mother-4',
-      child_temp_id: 'temp-speaker-1',
-      relation_type: 'biological',
-    },
-    {
-      parent_temp_id: 'temp-speaker-1',
-      child_temp_id: 'temp-child-3',
-      relation_type: 'biological',
-    },
-    {
-      parent_temp_id: 'temp-partner-2',
-      child_temp_id: 'temp-child-3',
-      relation_type: 'biological',
-    },
+    { parent_temp_id: 'temp-mother-4', child_temp_id: 'temp-speaker-1', relation_type: 'biological' },
+    { parent_temp_id: 'temp-speaker-1', child_temp_id: 'temp-child-3', relation_type: 'biological' },
+    { parent_temp_id: 'temp-partner-2', child_temp_id: 'temp-child-3', relation_type: 'biological' },
   ];
   const draftEvents: DraftEventDto[] = [
-    {
-      temp_id: 'ev-1',
-      person_temp_id: 'temp-speaker-1',
-      event_type: 'birth',
-      date_text: '1995-06-29',
-      place_name: speakerNode.birth_place,
-      confidence_score: 98,
-    },
-    {
-      temp_id: 'ev-2',
-      person_temp_id: 'temp-partner-2',
-      event_type: 'birth',
-      date_text: '1993',
-      place_name: partnerNode.birth_place,
-      confidence_score: 94,
-    },
+    { temp_id: 'ev-1', person_temp_id: 'temp-speaker-1', event_type: 'birth', date_text: '1995-06-29', place_name: speakerNode.birth_place, confidence_score: 98 },
+    { temp_id: 'ev-2', person_temp_id: 'temp-partner-2', event_type: 'birth', date_text: '1993', place_name: partnerNode.birth_place, confidence_score: 94 },
   ];
-
   const reconciliation: StoryReconciliationCandidateDto[] = [
     {
-      draft_temp_id: 'temp-speaker-1',
-      proposed_action: payload.is_new_speaker ? 'create_new' : 'link_existing',
-      matched_person_id: payload.is_new_speaker ? null : (payload.speaker_id || 'node-root'),
-      matched_person_gid: payload.is_new_speaker ? null : 'I0001',
-      matched_person_name: `${speakerNode.given_name} ${speakerNode.surname}`,
-      matched_birth_date: speakerNode.birth_date,
-      similarity_score: payload.is_new_speaker ? 0 : 100,
-      reasons: ['speaker_anchor', 'vital_dates'],
-      target_anchor_label: isRu ? 'Рассказчик (Выбранный профиль)' : 'Anchored Speaker',
-      enrich_fields: ['birth_place', 'notes'],
+      draft_temp_id: 'temp-speaker-1', proposed_action: payload.is_new_speaker ? 'create_new' : 'link_existing',
+      matched_person_id: payload.is_new_speaker ? null : (payload.speaker_id || 'node-root'), matched_person_gid: payload.is_new_speaker ? null : 'I0001',
+      matched_person_name: `${speakerNode.given_name} ${speakerNode.surname}`, matched_birth_date: speakerNode.birth_date,
+      similarity_score: payload.is_new_speaker ? 0 : 100, reasons: ['speaker_anchor', 'vital_dates'],
+      target_anchor_label: isRu ? 'Рассказчик (Выбранный профиль)' : 'Anchored Speaker', enrich_fields: ['birth_place', 'notes'],
     },
     {
-      draft_temp_id: 'temp-partner-2',
-      proposed_action: 'create_new',
-      matched_person_id: null,
-      matched_person_gid: null,
-      matched_person_name: null,
-      similarity_score: 0,
-      reasons: ['shared_spouse'],
-      target_anchor_label: isRu
-        ? `Добавить как супруга к: ${speakerNode.given_name} ${speakerNode.surname}`
-        : `Add as spouse/partner to ${speakerNode.given_name} ${speakerNode.surname}`,
-      enrich_fields: [],
+      draft_temp_id: 'temp-partner-2', proposed_action: 'create_new', matched_person_id: null, matched_person_gid: null, matched_person_name: null,
+      similarity_score: 0, reasons: ['shared_spouse'], enrich_fields: [],
+      target_anchor_label: isRu ? `Добавить как супруга к: ${speakerNode.given_name} ${speakerNode.surname}` : `Add as spouse/partner to ${speakerNode.given_name} ${speakerNode.surname}`,
     },
     {
-      draft_temp_id: 'temp-child-3',
-      proposed_action: 'create_new',
-      matched_person_id: null,
-      matched_person_gid: null,
-      matched_person_name: null,
-      similarity_score: 0,
-      reasons: ['shared_parents'],
-      target_anchor_label: isRu
-        ? `Добавить как ребёнка: ${speakerNode.given_name} и ${partnerNode.given_name}`
-        : `Add as child to ${speakerNode.given_name} & ${partnerNode.given_name}`,
-      enrich_fields: [],
+      draft_temp_id: 'temp-child-3', proposed_action: 'create_new', matched_person_id: null, matched_person_gid: null, matched_person_name: null,
+      similarity_score: 0, reasons: ['shared_parents'], enrich_fields: [],
+      target_anchor_label: isRu ? `Добавить как ребёнка: ${speakerNode.given_name} и ${partnerNode.given_name}` : `Add as child to ${speakerNode.given_name} & ${partnerNode.given_name}`,
     },
     {
-      draft_temp_id: 'temp-mother-4',
-      proposed_action: 'link_existing',
-      matched_person_id: 'node-mother-1',
-      matched_person_gid: 'I0002',
-      matched_person_name: `${motherNode.given_name} ${motherNode.patronymic ?? ''} ${motherNode.surname}`.trim(),
-      matched_birth_date: '1968',
-      similarity_score: 94,
-      reasons: ['shared_children', 'vital_dates'],
-      target_anchor_label: isRu ? 'Совпадает с матерью рассказчика' : 'Matches speaker mother',
-      enrich_fields: ['maiden_name', 'birth_place'],
+      draft_temp_id: 'temp-mother-4', proposed_action: 'link_existing', matched_person_id: 'node-mother-1', matched_person_gid: 'I0002',
+      matched_person_name: `${motherNode.given_name} ${motherNode.patronymic ?? ''} ${motherNode.surname}`.trim(), matched_birth_date: '1968',
+      similarity_score: 94, reasons: ['shared_children', 'vital_dates'],
+      target_anchor_label: isRu ? 'Совпадает с матерью рассказчика' : 'Matches speaker mother', enrich_fields: ['maiden_name', 'birth_place'],
     },
   ];
-
   return {
-    id: draftId,
-    title: payload.title || (isRu ? 'Семейный рассказ' : 'Family Story Draft'),
-    speaker_id: payload.speaker_id ?? 'node-root',
-    is_new_speaker: payload.is_new_speaker ?? false,
-    raw_text: raw,
-    audio_path: payload.audio_path ?? null,
-    status: 'draft',
-    extracted_data: {
-      draft_people: draftPeople,
-      draft_unions: draftUnions,
-      draft_parent_child: draftParentChild,
-      draft_events: draftEvents,
-      reconciliation,
-    },
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    id: draftId, title: payload.title || (isRu ? 'Семейный рассказ' : 'Family Story Draft'),
+    speaker_id: payload.speaker_id ?? 'node-root', is_new_speaker: payload.is_new_speaker ?? false,
+    raw_text: raw, audio_path: payload.audio_path ?? null, status: 'draft',
+    extracted_data: { draft_people: draftPeople, draft_unions: draftUnions, draft_parent_child: draftParentChild, draft_events: draftEvents, reconciliation },
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   };
 }
 
-export function normalizeStoryDraft(draft: any): StoryDraftDto {
-  if (!draft || typeof draft !== 'object') {
-    return draft;
-  }
-  const rawExtracted = draft.extracted_data || {};
+function normalizeReconciliationCandidate(
+  m: Record<string, unknown>
+): StoryReconciliationCandidateDto {
+  const topCand =
+    Array.isArray(m.candidates) && m.candidates.length > 0
+      ? (m.candidates[0] as Record<string, unknown>)
+      : null;
+  const rawAction = String(
+    m.proposed_action || m.selected_action || m.recommended_action || 'create_new'
+  );
+  const proposed_action: StoryReconciliationCandidateDto['proposed_action'] =
+    rawAction === 'link_existing' || rawAction === 'link_enrich'
+      ? 'link_existing'
+      : rawAction === 'skip'
+        ? 'skip'
+        : 'create_new';
+  const matchedPersonId = (m.candidate_person_id ?? m.matched_person_id ?? topCand?.person_id ?? null) as string | null;
+  const matchedPersonGid = (m.candidate_person_gid ?? m.matched_person_gid ?? topCand?.person_gid ?? null) as string | null;
+  const matchedPersonName = (m.candidate_display_name ?? m.matched_person_name ?? topCand?.display_name ?? null) as string | null;
 
-  const rawPeople = Array.isArray(rawExtracted.draft_people)
-    ? rawExtracted.draft_people
-    : Array.isArray(rawExtracted.persons)
-      ? rawExtracted.persons
-      : [];
+  return {
+    draft_temp_id: String(m.draft_temp_id || m.draft_person_id || ''),
+    proposed_action,
+    matched_person_id: matchedPersonId,
+    matched_person_gid: matchedPersonGid,
+    matched_person_name: matchedPersonName,
+    matched_birth_date: (m.matched_birth_date ?? (topCand?.birth_year ? String(topCand.birth_year) : null)) as string | null,
+    matched_death_date: (m.matched_death_date ?? null) as string | null,
+    similarity_score:
+      typeof m.similarity_score === 'number' ? m.similarity_score
+      : typeof m.confidence === 'number' ? m.confidence
+      : typeof topCand?.confidence === 'number' ? topCand.confidence : 0,
+    reasons: Array.isArray(m.reasons) ? m.reasons.map(String) : Array.isArray(topCand?.reasons) ? topCand.reasons.map(String) : [],
+    target_anchor_label:
+      m.target_anchor_label !== undefined
+        ? (m.target_anchor_label as string | null)
+        : matchedPersonName ? `Matches ${matchedPersonName}` : null,
+    enrich_fields: Array.isArray(m.enrich_fields) ? m.enrich_fields.map(String) : ['birth_place', 'notes'],
+  };
+}
+
+export function normalizeStoryDraft(
+  draftInput: StoryDraftDto | Record<string, unknown> | unknown
+): StoryDraftDto {
+  if (!draftInput || typeof draftInput !== 'object') {
+    return draftInput as StoryDraftDto;
+  }
+  const draft = draftInput as Record<string, unknown>;
+  const rawExtracted = (draft.extracted_data || {}) as Record<string, unknown>;
+
+  const rawPeople = (
+    Array.isArray(rawExtracted.draft_people) ? rawExtracted.draft_people
+    : Array.isArray(rawExtracted.persons) ? rawExtracted.persons : []
+  ) as Record<string, unknown>[];
 
   const draft_people: DraftPersonNodeDto[] = rawPeople.map(
-    (p: any, idx: number) => {
+    (p: Record<string, unknown>, idx: number) => {
       const rawSex = String(p.sex || p.gender || 'U').toUpperCase();
-      const sex: 'M' | 'F' | 'U' =
-        rawSex === 'M' || rawSex === 'F' ? rawSex : 'U';
-      const birthDate =
-        p.birth_date ??
-        p.birth_date_text ??
-        (p.birth_year ? String(p.birth_year) : null);
-      const deathDate =
-        p.death_date ??
-        p.death_date_text ??
-        (p.death_year ? String(p.death_year) : null);
-
+      const sex: 'M' | 'F' | 'U' = rawSex === 'M' || rawSex === 'F' ? rawSex : 'U';
+      const birthDate = p.birth_date ?? p.birth_date_text ?? (p.birth_year ? String(p.birth_year) : null);
+      const deathDate = p.death_date ?? p.death_date_text ?? (p.death_year ? String(p.death_year) : null);
       return {
         temp_id: String(p.temp_id || `temp-person-${idx + 1}`),
         given_name: String(p.given_name || '').trim(),
@@ -390,155 +318,98 @@ export function normalizeStoryDraft(draft: any): StoryDraftDto {
         birth_place: p.birth_place ? String(p.birth_place).trim() : null,
         death_date: deathDate ? String(deathDate).trim() : null,
         death_place: p.death_place ? String(p.death_place).trim() : null,
-        is_living:
-          typeof p.is_living === 'boolean'
-            ? p.is_living
-            : deathDate == null,
-        role_to_speaker: p.role_to_speaker ?? p.relation_to_speaker ?? null,
-        notes: p.notes ?? p.biography_notes ?? null,
-        source_snippet: p.source_snippet ?? p.grounding_quote ?? null,
+        is_living: typeof p.is_living === 'boolean' ? p.is_living : deathDate == null,
+        role_to_speaker: (p.role_to_speaker ?? p.relation_to_speaker ?? null) as string | null,
+        notes: (p.notes ?? p.biography_notes ?? null) as string | null,
+        source_snippet: (p.source_snippet ?? p.grounding_quote ?? null) as string | null,
         confidence_score:
-          typeof p.confidence_score === 'number'
-            ? p.confidence_score
-            : typeof p.confidence === 'number'
-              ? p.confidence
-              : 85,
-        ambiguity_note: p.ambiguity_note ?? null,
+          typeof p.confidence_score === 'number' ? p.confidence_score
+          : typeof p.confidence === 'number' ? p.confidence : 85,
+        ambiguity_note: (p.ambiguity_note ?? null) as string | null,
       };
     }
   );
 
-  const rawUnions = Array.isArray(rawExtracted.draft_unions)
-    ? rawExtracted.draft_unions
-    : Array.isArray(rawExtracted.unions)
-      ? rawExtracted.unions
-      : [];
+  const rawUnions = (
+    Array.isArray(rawExtracted.draft_unions) ? rawExtracted.draft_unions
+    : Array.isArray(rawExtracted.unions) ? rawExtracted.unions : []
+  ) as Record<string, unknown>[];
 
   const draft_unions: DraftUnionDto[] = rawUnions.map(
-    (u: any, idx: number) => ({
+    (u: Record<string, unknown>, idx: number) => ({
       temp_id: String(u.temp_id || `temp-union-${idx + 1}`),
       partner1_temp_id: String(u.partner1_temp_id || ''),
-      partner2_temp_id: u.partner2_temp_id
-        ? String(u.partner2_temp_id)
-        : null,
-      relationship_type: String(
-        u.relationship_type || u.union_type || 'married'
-      ),
-      marriage_date:
-        u.marriage_date ?? u.marriage_date_text ?? null,
-      marriage_place: u.marriage_place ?? null,
-      children_temp_ids: Array.isArray(u.children_temp_ids)
-        ? u.children_temp_ids.map(String)
-        : [],
+      partner2_temp_id: u.partner2_temp_id ? String(u.partner2_temp_id) : null,
+      relationship_type: String(u.relationship_type || u.union_type || 'married'),
+      marriage_date: (u.marriage_date ?? u.marriage_date_text ?? null) as string | null,
+      marriage_place: (u.marriage_place ?? null) as string | null,
+      children_temp_ids: Array.isArray(u.children_temp_ids) ? u.children_temp_ids.map(String) : [],
     })
   );
 
-  const rawParentChild = Array.isArray(rawExtracted.draft_parent_child)
-    ? rawExtracted.draft_parent_child
-    : Array.isArray(rawExtracted.parent_child_links)
-      ? rawExtracted.parent_child_links
-      : [];
+  const rawParentChild = (
+    Array.isArray(rawExtracted.draft_parent_child) ? rawExtracted.draft_parent_child
+    : Array.isArray(rawExtracted.parent_child_links) ? rawExtracted.parent_child_links : []
+  ) as Record<string, unknown>[];
 
   const draft_parent_child: DraftParentChildDto[] = rawParentChild.map(
-    (l: any) => ({
+    (l: Record<string, unknown>) => ({
       parent_temp_id: String(l.parent_temp_id || ''),
       child_temp_id: String(l.child_temp_id || ''),
       relation_type: String(l.relation_type || l.pedigree || 'biological'),
     })
   );
 
-  const rawEvents = Array.isArray(rawExtracted.draft_events)
-    ? rawExtracted.draft_events
-    : Array.isArray(rawExtracted.events)
-      ? rawExtracted.events
-      : [];
+  const rawEvents = (
+    Array.isArray(rawExtracted.draft_events) ? rawExtracted.draft_events
+    : Array.isArray(rawExtracted.events) ? rawExtracted.events : []
+  ) as Record<string, unknown>[];
 
   const draft_events: DraftEventDto[] = rawEvents.map(
-    (e: any, idx: number) => ({
+    (e: Record<string, unknown>, idx: number) => ({
       temp_id: String(e.temp_id || `temp-event-${idx + 1}`),
       person_temp_id: String(e.person_temp_id || ''),
       event_type: String(e.event_type || 'fact'),
       date_text: e.date_text ? String(e.date_text) : null,
-      place_name: e.place_name ?? e.place_text ?? null,
-      description: e.description ?? null,
+      place_name: (e.place_name ?? e.place_text ?? null) as string | null,
+      description: (e.description ?? null) as string | null,
       confidence_score:
-        typeof e.confidence_score === 'number'
-          ? e.confidence_score
-          : typeof e.confidence === 'number'
-            ? e.confidence
-            : 85,
+        typeof e.confidence_score === 'number' ? e.confidence_score
+        : typeof e.confidence === 'number' ? e.confidence : 85,
     })
   );
 
   let reconciliation: StoryReconciliationCandidateDto[] | undefined =
     Array.isArray(rawExtracted.reconciliation)
-      ? rawExtracted.reconciliation
+      ? (rawExtracted.reconciliation as Record<string, unknown>[]).map(
+          (m: Record<string, unknown>) => normalizeReconciliationCandidate(m)
+        )
       : undefined;
 
   if (!reconciliation && Array.isArray(draft.reconciliation_matches)) {
-    reconciliation = draft.reconciliation_matches.map((m: any) => {
-      const topCand =
-        Array.isArray(m.candidates) && m.candidates.length > 0
-          ? m.candidates[0]
-          : null;
-      return {
-        draft_temp_id: String(m.draft_temp_id || ''),
-        proposed_action:
-          (m.proposed_action ||
-            m.recommended_action ||
-            m.selected_action ||
-            'create_new') === 'link_existing'
-            ? 'link_existing'
-            : 'create_new',
-        matched_person_id:
-          m.matched_person_id ?? topCand?.person_id ?? null,
-        matched_person_gid:
-          m.matched_person_gid ?? topCand?.person_gid ?? null,
-        matched_person_name:
-          m.matched_person_name ?? topCand?.display_name ?? null,
-        matched_birth_date:
-          m.matched_birth_date ??
-          (topCand?.birth_year ? String(topCand.birth_year) : null),
-        matched_death_date: m.matched_death_date ?? null,
-        similarity_score:
-          typeof m.similarity_score === 'number'
-            ? m.similarity_score
-            : typeof m.confidence === 'number'
-              ? m.confidence
-              : topCand?.confidence ?? 0,
-        reasons: Array.isArray(m.reasons)
-          ? m.reasons
-          : topCand?.reasons ?? [],
-        target_anchor_label:
-          m.target_anchor_label ??
-          (topCand?.display_name
-            ? `Matches ${topCand.display_name}`
-            : null),
-        enrich_fields: Array.isArray(m.enrich_fields)
-          ? m.enrich_fields
-          : ['birth_place', 'notes'],
-      };
-    });
+    reconciliation = (draft.reconciliation_matches as Record<string, unknown>[]).map(
+      (m: Record<string, unknown>) => normalizeReconciliationCandidate(m)
+    );
   }
 
+  const rawStatus = String(draft.status || 'draft');
+  const status: StoryDraftDto['status'] =
+    rawStatus === 'reconciled' || rawStatus === 'committed' || rawStatus === 'discarded'
+      ? rawStatus : 'draft';
+
   return {
-    ...draft,
+    ...(draft as unknown as StoryDraftDto),
     id: String(draft.id || ''),
     title: String(draft.title || ''),
-    speaker_id: draft.speaker_id ?? draft.speaker_person_id ?? null,
+    speaker_id: (draft.speaker_id ?? draft.speaker_person_id ?? null) as string | null,
+    speaker_person_id: (draft.speaker_person_id ?? draft.speaker_id ?? null) as string | null,
     is_new_speaker: Boolean(draft.is_new_speaker),
     raw_text: String(draft.raw_text || ''),
-    audio_path: draft.audio_path ?? draft.audio_media_id ?? null,
-    status: draft.status || 'draft',
-    extracted_data: {
-      draft_people,
-      draft_unions,
-      draft_parent_child,
-      draft_events,
-      reconciliation,
-    },
-    created_at: draft.created_at || new Date().toISOString(),
-    updated_at: draft.updated_at || new Date().toISOString(),
+    audio_path: (draft.audio_path ?? draft.audio_media_id ?? null) as string | null,
+    status,
+    extracted_data: { draft_people, draft_unions, draft_parent_child, draft_events, reconciliation },
+    created_at: String(draft.created_at || new Date().toISOString()),
+    updated_at: String(draft.updated_at || new Date().toISOString()),
   };
 }
 
@@ -592,12 +463,17 @@ export const storyApi = {
 
   async parseStory(payload: ParseStoryRequestDto): Promise<StoryDraftDto> {
     try {
-      const res = await apiFetch<StoryDraftDto>('/ai/parse-story', {
+      const reqBody = {
+        ...payload,
+        speaker_person_id: payload.speaker_person_id ?? payload.speaker_id,
+      };
+      const res = await apiFetch<Record<string, unknown>>('/ai/parse-story', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(reqBody),
       });
       return normalizeStoryDraft(res);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
       return buildLocalStoryDraftFallback(payload);
     }
   },
@@ -607,12 +483,13 @@ export const storyApi = {
     currentDraft?: StoryDraftDto
   ): Promise<StoryDraftDto> {
     try {
-      const res = await apiFetch<StoryDraftDto>('/ai/refine-draft', {
+      const res = await apiFetch<Record<string, unknown>>('/ai/refine-draft', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
       return normalizeStoryDraft(res);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
       const base =
         currentDraft ??
         buildLocalStoryDraftFallback({ raw_text: payload.clarification_text });
@@ -673,27 +550,70 @@ export const storyApi = {
     payload: CommitStoryDraftRequestDto
   ): Promise<CommitStoryDraftResponseDto> {
     try {
-      return await apiFetch<CommitStoryDraftResponseDto>(
+      const match_overrides =
+        payload.match_overrides ??
+        Object.entries(payload.resolutions ?? {}).map(([draftId, r]) => ({
+          draft_person_id: draftId,
+          selected_action:
+            r.action === 'link_existing' ? 'link_enrich' : r.action,
+          target_person_id: r.matched_person_id ?? undefined,
+        }));
+      const raw = await apiFetch<Record<string, unknown>>(
         `/ai/drafts/${encodeURIComponent(payload.draft_id)}/commit`,
         {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, match_overrides }),
         }
       );
-    } catch {
-      const values = Object.values(payload.resolutions);
+      const createdIds = Array.isArray(raw.created_person_ids)
+        ? raw.created_person_ids.map(String)
+        : [];
+      const updatedIds = Array.isArray(raw.updated_person_ids)
+        ? raw.updated_person_ids.map(String)
+        : [];
+      const txId = String(
+        raw.tx_id ?? raw.transaction_id ?? `tx-story-${Date.now()}`
+      );
+      return {
+        draft_id: String(raw.draft_id ?? payload.draft_id),
+        created_count:
+          typeof raw.created_count === 'number'
+            ? raw.created_count
+            : createdIds.length,
+        linked_count:
+          typeof raw.linked_count === 'number'
+            ? raw.linked_count
+            : updatedIds.length,
+        focal_person_id:
+          (raw.focal_person_id as string | null | undefined) ??
+          createdIds[0] ??
+          updatedIds[0] ??
+          null,
+        tx_id: txId,
+        transaction_id: String(raw.transaction_id ?? txId),
+        created_person_ids: createdIds,
+        updated_person_ids: updatedIds,
+        status: String(raw.status ?? 'committed'),
+      };
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
+      const values = Object.values(payload.resolutions ?? {});
       const linkedCount = values.filter(
         (v) => v.action === 'link_existing'
       ).length;
       const createdCount = values.filter(
         (v) => v.action === 'create_new'
       ).length;
+      const txId = `tx-story-${Date.now()}`;
       return {
         draft_id: payload.draft_id,
         created_count: createdCount,
         linked_count: linkedCount,
         focal_person_id: 'node-root',
-        tx_id: `tx-story-${Date.now()}`,
+        tx_id: txId,
+        transaction_id: txId,
+        created_person_ids: [],
+        updated_person_ids: [],
         status: 'committed',
       };
     }
@@ -707,7 +627,8 @@ export const storyApi = {
           method: 'DELETE',
         }
       );
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
       return { status: 'discarded' };
     }
   },
@@ -719,7 +640,11 @@ export const mcpApi = {
       const res = await apiFetch<
         McpPersonalAccessTokenDto[] | { items: McpPersonalAccessTokenDto[] }
       >('/mcp/tokens');
-      return Array.isArray(res) ? res : (res.items ?? []);
+      const items = Array.isArray(res) ? res : (res.items ?? []);
+      return items.map((t) => ({
+        ...t,
+        scopes: Array.isArray(t.scopes) ? t.scopes : [],
+      }));
     } catch {
       return [
         {
@@ -740,14 +665,48 @@ export const mcpApi = {
     payload: CreateMcpTokenRequestDto
   ): Promise<CreateMcpTokenResponseDto> {
     try {
-      return await apiFetch<CreateMcpTokenResponseDto>('/mcp/tokens', {
+      const raw = await apiFetch<Record<string, unknown>>('/mcp/tokens', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-    } catch {
+      const rawTokenObj = (
+        typeof raw.token === 'object' && raw.token !== null
+          ? raw.token
+          : typeof raw.token_info === 'object' && raw.token_info !== null
+            ? raw.token_info
+            : raw
+      ) as Record<string, unknown>;
+      const rawSecret =
+        typeof raw.raw_token === 'string'
+          ? raw.raw_token
+          : typeof raw.token === 'string'
+            ? raw.token
+            : '';
+      const scopes = Array.isArray(rawTokenObj.scopes)
+        ? (rawTokenObj.scopes.map(String) as McpTokenScope[])
+        : payload.scopes ?? [];
+      const tokenDto: McpPersonalAccessTokenDto = {
+        id: String(rawTokenObj.id ?? `mcp-tok-${Date.now()}`),
+        name: String(rawTokenObj.name ?? payload.name),
+        token_prefix: String(
+          rawTokenObj.token_prefix ??
+            (rawSecret ? rawSecret.slice(0, 12) : 'mcp_pat_')
+        ),
+        scopes,
+        last_used_at: (rawTokenObj.last_used_at as string | null) ?? null,
+        expires_at: (rawTokenObj.expires_at as string | null) ?? null,
+        revoked_at: (rawTokenObj.revoked_at as string | null) ?? null,
+        created_at: String(rawTokenObj.created_at ?? new Date().toISOString()),
+      };
+      return {
+        token: tokenDto,
+        raw_token: rawSecret,
+      };
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
       const suffix = Math.random().toString(36).slice(2, 10);
       const prefix = `mcp_pat_${suffix.slice(0, 4)}`;
-      const rawToken = `${prefix}_${ suffix }9a8b7c6d5e4f3a2b1c`;
+      const rawToken = `${prefix}_${suffix}9a8b7c6d5e4f3a2b1c`;
       return {
         raw_token: rawToken,
         token: {
@@ -776,7 +735,8 @@ export const mcpApi = {
           method: 'DELETE',
         }
       );
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status > 0) throw err;
       return { status: 'revoked' };
     }
   },

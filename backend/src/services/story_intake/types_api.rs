@@ -28,7 +28,7 @@ pub struct ParseStoryRequest {
     #[serde(default)]
     pub title: Option<String>,
     pub raw_text: String,
-    #[serde(default)]
+    #[serde(default, alias = "speaker_id")]
     pub speaker_person_id: Option<String>,
     #[serde(default)]
     pub is_new_speaker: Option<bool>,
@@ -63,7 +63,7 @@ pub struct UpdateStoryDraftRequest {
     pub title: Option<String>,
     #[serde(default)]
     pub raw_text: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "speaker_id")]
     pub speaker_person_id: Option<String>,
     #[serde(default)]
     pub is_new_speaker: Option<bool>,

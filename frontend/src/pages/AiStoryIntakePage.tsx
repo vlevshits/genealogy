@@ -232,6 +232,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
     try {
       const draft = await storyApi.parseStory({
         speaker_id: isNewSpeaker ? null : selectedSpeakerId,
+        speaker_person_id: isNewSpeaker ? null : selectedSpeakerId,
         is_new_speaker: isNewSpeaker,
         raw_text: narrativeText.trim(),
         language: language === 'auto' ? undefined : language,

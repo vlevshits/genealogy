@@ -178,7 +178,15 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
       ...options,
       headers,
     });
-  } catch {
+  } catch (err) {
+    if (
+      (typeof DOMException !== 'undefined' &&
+        err instanceof DOMException &&
+        err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    ) {
+      throw err;
+    }
     throw new ApiError(0, {
       code: 'network_error',
       message: 'Network request failed',

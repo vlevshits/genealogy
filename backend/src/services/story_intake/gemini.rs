@@ -71,9 +71,8 @@ pub async fn transcribe_audio_with_gemini(
         }
     });
 
-    let endpoint = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    );
+    let endpoint =
+        format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(90))
@@ -82,6 +81,7 @@ pub async fn transcribe_audio_with_gemini(
 
     let response = client
         .post(&endpoint)
+        .header("x-goog-api-key", api_key)
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
@@ -95,7 +95,8 @@ pub async fn transcribe_audio_with_gemini(
     let status = response.status();
     if !status.is_success() {
         let err_body = response.text().await.unwrap_or_default();
-        tracing::error!("Gemini audio transcription failed with HTTP {status}: {err_body}");
+        let truncated_err: String = err_body.chars().take(200).collect();
+        tracing::error!("Gemini audio transcription failed with HTTP {status}: {truncated_err}");
         return Err(AppError::ValidationFailed(
             format!("Gemini transcription failed ({status})"),
             Some(HashMap::from([(
@@ -277,9 +278,8 @@ Key extraction guidelines:
         }
     });
 
-    let endpoint = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    );
+    let endpoint =
+        format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(90))
@@ -288,6 +288,7 @@ Key extraction guidelines:
 
     let response = client
         .post(&endpoint)
+        .header("x-goog-api-key", api_key)
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
@@ -299,7 +300,8 @@ Key extraction guidelines:
     let status = response.status();
     if !status.is_success() {
         let err_body = response.text().await.unwrap_or_default();
-        tracing::error!("Gemini narrative extraction failed with HTTP {status}: {err_body}");
+        let truncated_err: String = err_body.chars().take(200).collect();
+        tracing::error!("Gemini narrative extraction failed with HTTP {status}: {truncated_err}");
         return Err(AppError::ValidationFailed(
             format!("Gemini extraction failed ({status})"),
             Some(HashMap::from([(
@@ -346,7 +348,7 @@ Key extraction guidelines:
         .trim();
 
     let mut extracted: DraftExtractedDataDto = serde_json::from_str(cleaned_json).map_err(|e| {
-        tracing::error!("Failed to parse Gemini extraction output as DraftExtractedDataDto: {e}. Output was:\n{cleaned_json}");
+        tracing::error!("Failed to parse Gemini extraction output as DraftExtractedDataDto: {e}");
         AppError::ValidationFailed(
             format!("Failed to parse structured JSON output returned by Gemini: {e}"),
             Some(HashMap::from([(

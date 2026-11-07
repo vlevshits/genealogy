@@ -57,6 +57,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
   const [liveTranscript, setLiveTranscript] = useState<string>('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const speechTranscriptRef = useRef<string>('');
   const chunksRef = useRef<BlobPart[]>([]);
@@ -66,6 +67,28 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
 
   useEffect(() => {
     return () => {
+      try {
+        if (
+          mediaRecorderRef.current &&
+          mediaRecorderRef.current.state !== 'inactive'
+        ) {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        // Ignore
+      }
+      try {
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      } catch {
+        // Ignore
+      }
+      try {
+        recognitionRef.current?.abort();
+        recognitionRef.current = null;
+      } catch {
+        // Ignore
+      }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
         audioPlayerRef.current = null;
@@ -172,6 +195,7 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
+        mediaStreamRef.current = stream;
 
         const supportedMime =
           MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -197,6 +221,9 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
           const blob = new Blob(chunksRef.current, { type: finalMime });
           setRecordedBlob(blob);
           stream.getTracks().forEach((tr) => tr.stop());
+          if (mediaStreamRef.current === stream) {
+            mediaStreamRef.current = null;
+          }
         };
 
         mediaRecorderRef.current = recorder;
@@ -255,6 +282,12 @@ export const AudioRecorderWidget: React.FC<AudioRecorderWidgetProps> = ({
           })
         );
       }
+    }
+    try {
+      mediaStreamRef.current?.getTracks().forEach((tr) => tr.stop());
+      mediaStreamRef.current = null;
+    } catch {
+      // Ignore
     }
     if (elapsedSeconds === 0) {
       setElapsedSeconds(12);

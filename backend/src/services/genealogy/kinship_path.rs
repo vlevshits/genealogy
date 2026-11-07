@@ -237,8 +237,11 @@ pub(crate) fn is_valid_kinship_path(
 
     // Rule 5: If there is a direct biological parent-child or spouse edge between endpoints,
     // any longer path containing a spouse/affinal edge is an invalid detour.
-    let from_id = path.first().unwrap().as_str();
-    let to_id = path.last().unwrap().as_str();
+    let (Some(from_id), Some(to_id)) = (path.first(), path.last()) else {
+        return false;
+    };
+    let from_id = from_id.as_str();
+    let to_id = to_id.as_str();
     let is_direct_parent_child = parents_of
         .get(from_id)
         .is_some_and(|ps| ps.contains(&to_id))

@@ -333,7 +333,7 @@ async fn test_russian_story_reconciliation_atomic_commit_and_one_click_undo() {
     .await;
     assert_eq!(fam_status, StatusCode::CREATED);
 
-    // 2. Parse a rich Russian narrative anchored to Ivan (`speaker_person_id = ivan_id`)
+    // 2. Parse a rich Russian narrative anchored to Ivan (`speaker_id` alias for `speaker_person_id`)
     let ru_story = "Я Иван Сергеевич Петров, родился 29 июня 1995 в Москве. Моя девушка — Анна Смирнова, родилась в 1997 году. Моя мама — Елена Ивановна Петрова (в девичестве Соколова), родилась 12 мая 1970 в Твери. Мой папа — Сергей Петров, родился в 1968 году. У нас есть дочка София, родилась в 2022 году.";
     let (parse_status, draft) = post_json(
         &app,
@@ -341,18 +341,28 @@ async fn test_russian_story_reconciliation_atomic_commit_and_one_click_undo() {
         &editor_auth,
         json!({
             "raw_text": ru_story,
-            "speaker_person_id": ivan_id
+            "speaker_id": ivan_id
         }),
     )
     .await;
     assert_eq!(parse_status, StatusCode::CREATED, "draft: {draft}");
+    assert_eq!(draft["speaker_person_id"], ivan_id);
     let draft_id = draft["id"].as_str().unwrap().to_string();
 
-    // 3. Verify relationship-centric reconciliation matches speaker (100%) and mother (>= 90%) while keeping net-new relatives as create_new
-    let (rec_status, reconciled) = get_json(
+    // 3. Verify GET on /reconcile is disallowed (POST-only mutation route) and POST relationship-centric reconciliation matches speaker (100%) and mother (>= 90%)
+    let (get_rec_status, _) = get_json(
         &app,
         &format!("/api/v1/ai/drafts/{draft_id}/reconcile"),
         &editor_auth,
+    )
+    .await;
+    assert_eq!(get_rec_status, StatusCode::METHOD_NOT_ALLOWED);
+
+    let (rec_status, reconciled) = post_json(
+        &app,
+        &format!("/api/v1/ai/drafts/{draft_id}/reconcile"),
+        &editor_auth,
+        json!({}),
     )
     .await;
     assert_eq!(rec_status, StatusCode::OK);
@@ -506,7 +516,31 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
         }),
     )
     .await;
-    let _deceased_id = deceased_res["id"].as_str().unwrap().to_string();
+    let deceased_id = deceased_res["id"].as_str().unwrap().to_string();
+    post_json(
+        &app,
+        "/api/v1/events",
+        &admin_auth,
+        json!({
+            "individual_id": deceased_id,
+            "event_type": "birth",
+            "date_text": "10 JAN 1910",
+            "place_path": "London"
+        }),
+    )
+    .await;
+    post_json(
+        &app,
+        "/api/v1/events",
+        &admin_auth,
+        json!({
+            "individual_id": deceased_id,
+            "event_type": "death",
+            "date_text": "20 NOV 1985",
+            "place_path": "London"
+        }),
+    )
+    .await;
 
     // 1. Unauthenticated request to /api/v1/mcp is rejected with 401
     let unauth_res = app
@@ -612,6 +646,81 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
     assert_eq!(v_person["birth"]["date"], "1995");
     assert!(v_person["birth"]["place"].is_null());
 
+    // 5b. Viewer PAT calls list_events_timeline -> living person's events are redacted/excluded while deceased events are returned
+    let (v_ev_status, v_ev_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "tools/call",
+            "params": {
+                "name": "list_events_timeline",
+                "arguments": {}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(v_ev_status, StatusCode::OK);
+    let v_events = v_ev_res["result"]["structuredContent"]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        v_events.len(),
+        2,
+        "Viewer MCP list_events_timeline must exclude living person events and return only deceased events"
+    );
+    assert!(v_events
+        .iter()
+        .all(|e| e["individual_id"].as_str() == Some(deceased_id.as_str())));
+
+    // Viewer PAT calling list_events_timeline specifically for living_id returns 0 events
+    let (_, v_living_ev_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 32,
+            "method": "tools/call",
+            "params": {
+                "name": "list_events_timeline",
+                "arguments": { "person_id": living_id }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(
+        v_living_ev_res["result"]["structuredContent"]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    // 5c. Viewer PAT calls get_ancestors_descendants -> living individuals in persons list are redacted
+    let (_, v_sub_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {viewer_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 33,
+            "method": "tools/call",
+            "params": {
+                "name": "get_ancestors_descendants",
+                "arguments": { "id": living_id }
+            }
+        }),
+    )
+    .await;
+    let sub_persons = v_sub_res["result"]["structuredContent"]["persons"]
+        .as_array()
+        .unwrap();
+    let sub_living = sub_persons.iter().find(|p| p["id"] == living_id).unwrap();
+    assert_eq!(sub_living["primary_name"]["given_name"], "J.");
+
     // 6. Viewer PAT attempting Tier B (create_individual) or Tier C (merge_duplicate_individuals) is rejected with 403 / -32600
     let (v_mut_status, v_mut_res) = post_json(
         &app,
@@ -666,6 +775,28 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
         a_get_res["result"]["structuredContent"]["primary_name"]["given_name"],
         "John"
     );
+
+    // Admin PAT sees living person's events in list_events_timeline
+    let (_, a_ev_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 51,
+            "method": "tools/call",
+            "params": {
+                "name": "list_events_timeline",
+                "arguments": { "person_id": living_id }
+            }
+        }),
+    )
+    .await;
+    let a_living_events = a_ev_res["result"]["structuredContent"]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(a_living_events.len(), 1);
+    assert_eq!(a_living_events[0]["place_full_name"], "Boston");
 
     // Admin PAT creates an individual via MCP tool create_individual
     let (a_create_status, a_create_res) = post_json(

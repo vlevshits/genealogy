@@ -295,108 +295,136 @@ pub async fn start_with_self(
         .await;
 
     if let Some(pool) = &state.db {
-        if let Ok(mut tx) = pool.begin().await {
-            for place in &newly_created_places {
-                let place_uuid = Uuid::parse_str(&place.id).unwrap_or_else(|_| Uuid::new_v4());
-                let parent_uuid = place
-                    .parent_id
-                    .as_deref()
-                    .and_then(|pid| Uuid::parse_str(pid).ok());
-                let _ = sqlx::query(
-                    "INSERT INTO places (id, gid, name, place_type, parent_id, latitude, longitude, full_name, version, created_by, updated_by)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-                     ON CONFLICT (id) DO NOTHING",
-                )
-                .bind(place_uuid)
-                .bind(&place.gid)
-                .bind(&place.name)
-                .bind(&place.place_type)
-                .bind(parent_uuid)
-                .bind(place.latitude)
-                .bind(place.longitude)
-                .bind(&place.full_name)
-                .bind(place.version)
-                .bind(editor.user.id)
-                .execute(&mut *tx)
+        match pool.begin().await {
+            Ok(mut tx) => {
+                let db_res: Result<(), sqlx::Error> = async {
+                    for place in &newly_created_places {
+                        let place_uuid =
+                            Uuid::parse_str(&place.id).unwrap_or_else(|_| Uuid::new_v4());
+                        let parent_uuid = place
+                            .parent_id
+                            .as_deref()
+                            .and_then(|pid| Uuid::parse_str(pid).ok());
+                        sqlx::query(
+                            "INSERT INTO places (id, gid, name, place_type, parent_id, latitude, longitude, full_name, version, created_by, updated_by)
+                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+                             ON CONFLICT (id) DO NOTHING",
+                        )
+                        .bind(place_uuid)
+                        .bind(&place.gid)
+                        .bind(&place.name)
+                        .bind(&place.place_type)
+                        .bind(parent_uuid)
+                        .bind(place.latitude)
+                        .bind(place.longitude)
+                        .bind(&place.full_name)
+                        .bind(place.version)
+                        .bind(editor.user.id)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+
+                    let db_sex = match created_person.sex.as_str() {
+                        "X" => "other",
+                        s => s,
+                    };
+                    let search_tokens = normalize_search_tokens(&format!(
+                        "{} {} {}",
+                        created_person.primary_name.given_name,
+                        created_person
+                            .primary_name
+                            .patronymic
+                            .as_deref()
+                            .unwrap_or(""),
+                        created_person.primary_name.surname
+                    ));
+                    sqlx::query(
+                        "INSERT INTO individuals (id, gid, given_name, patronymic, surname, sex, living_override, is_private, birth_sort, has_death_event, search_text, version, created_by, updated_by)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, 1, $11, $11)
+                         ON CONFLICT (id) DO NOTHING",
+                    )
+                    .bind(person_uuid)
+                    .bind(&created_person.gid)
+                    .bind(&created_person.primary_name.given_name)
+                    .bind(&created_person.primary_name.patronymic)
+                    .bind(&created_person.primary_name.surname)
+                    .bind(db_sex)
+                    .bind(created_person.living_override)
+                    .bind(created_person.is_private)
+                    .bind(created_person.birth_sort)
+                    .bind(search_tokens)
+                    .bind(editor.user.id)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    if let Some(ref ev) = created_birth_event {
+                        let ev_uuid = Uuid::parse_str(&ev.id).unwrap_or_else(|_| Uuid::new_v4());
+                        let ev_place_uuid = ev
+                            .place_id
+                            .as_deref()
+                            .and_then(|pid| Uuid::parse_str(pid).ok());
+                        let ev_date_json =
+                            ev.date.as_ref().and_then(|d| serde_json::to_value(d).ok());
+                        sqlx::query(
+                            "INSERT INTO life_events (id, gid, individual_id, event_type, date, date_sort, place_id, is_private, version, created_by, updated_by)
+                             VALUES ($1, $2, $3, 'birth', $4, $5, $6, FALSE, 1, $7, $7)
+                             ON CONFLICT (id) DO NOTHING",
+                        )
+                        .bind(ev_uuid)
+                        .bind(&ev.gid)
+                        .bind(person_uuid)
+                        .bind(ev_date_json)
+                        .bind(ev.date_sort)
+                        .bind(ev_place_uuid)
+                        .bind(editor.user.id)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+
+                    sqlx::query(
+                        "UPDATE users SET person_id = $2, home_person_id = $2, updated_at = NOW() WHERE id = $1",
+                    )
+                    .bind(editor.user.id)
+                    .bind(person_uuid)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    let log_uuid =
+                        Uuid::parse_str(&change_entry.id).unwrap_or_else(|_| Uuid::new_v4());
+                    sqlx::query(
+                        "INSERT INTO change_log (id, actor_id, op, entity_type, entity_id, summary, after_json)
+                         VALUES ($1, $2, 'create', 'individual', $3, $4, $5)
+                         ON CONFLICT (id) DO NOTHING",
+                    )
+                    .bind(log_uuid)
+                    .bind(editor.user.id)
+                    .bind(person_uuid)
+                    .bind(&change_entry.summary)
+                    .bind(&change_entry.after_json)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    Ok(())
+                }
                 .await;
+
+                match db_res {
+                    Ok(()) => {
+                        if let Err(e) = tx.commit().await {
+                            tracing::warn!("Failed to commit start_with_self transaction: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to persist start_with_self in transaction, rolling back: {e}"
+                        );
+                        let _ = tx.rollback().await;
+                    }
+                }
             }
-
-            let db_sex = match created_person.sex.as_str() {
-                "X" => "other",
-                s => s,
-            };
-            let search_tokens = normalize_search_tokens(&format!(
-                "{} {} {}",
-                created_person.primary_name.given_name,
-                created_person
-                    .primary_name
-                    .patronymic
-                    .as_deref()
-                    .unwrap_or(""),
-                created_person.primary_name.surname
-            ));
-            let _ = sqlx::query(
-                "INSERT INTO individuals (id, gid, given_name, patronymic, surname, sex, living_override, is_private, birth_sort, has_death_event, search_text, version, created_by, updated_by)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, 1, $11, $11)",
-            )
-            .bind(person_uuid)
-            .bind(&created_person.gid)
-            .bind(&created_person.primary_name.given_name)
-            .bind(&created_person.primary_name.patronymic)
-            .bind(&created_person.primary_name.surname)
-            .bind(db_sex)
-            .bind(created_person.living_override)
-            .bind(created_person.is_private)
-            .bind(created_person.birth_sort)
-            .bind(search_tokens)
-            .bind(editor.user.id)
-            .execute(&mut *tx)
-            .await;
-
-            if let Some(ref ev) = created_birth_event {
-                let ev_uuid = Uuid::parse_str(&ev.id).unwrap_or_else(|_| Uuid::new_v4());
-                let ev_place_uuid = ev
-                    .place_id
-                    .as_deref()
-                    .and_then(|pid| Uuid::parse_str(pid).ok());
-                let ev_date_json = ev.date.as_ref().and_then(|d| serde_json::to_value(d).ok());
-                let _ = sqlx::query(
-                    "INSERT INTO life_events (id, gid, individual_id, event_type, date, date_sort, place_id, is_private, version, created_by, updated_by)
-                     VALUES ($1, $2, $3, 'birth', $4, $5, $6, FALSE, 1, $7, $7)",
-                )
-                .bind(ev_uuid)
-                .bind(&ev.gid)
-                .bind(person_uuid)
-                .bind(ev_date_json)
-                .bind(ev.date_sort)
-                .bind(ev_place_uuid)
-                .bind(editor.user.id)
-                .execute(&mut *tx)
-                .await;
+            Err(e) => {
+                tracing::warn!("Failed to begin start_with_self database transaction: {e}");
             }
-
-            let _ = sqlx::query(
-                "UPDATE users SET person_id = $2, home_person_id = $2, updated_at = NOW() WHERE id = $1",
-            )
-            .bind(editor.user.id)
-            .bind(person_uuid)
-            .execute(&mut *tx)
-            .await;
-
-            let log_uuid = Uuid::parse_str(&change_entry.id).unwrap_or_else(|_| Uuid::new_v4());
-            let _ = sqlx::query(
-                "INSERT INTO change_log (id, actor_id, op, entity_type, entity_id, summary, after_json)
-                 VALUES ($1, $2, 'create', 'individual', $3, $4, $5)",
-            )
-            .bind(log_uuid)
-            .bind(editor.user.id)
-            .bind(person_uuid)
-            .bind(&change_entry.summary)
-            .bind(&change_entry.after_json)
-            .execute(&mut *tx)
-            .await;
-
-            let _ = tx.commit().await;
         }
     }
 

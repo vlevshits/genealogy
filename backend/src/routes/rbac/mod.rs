@@ -119,4 +119,7 @@ pub use history_quality::*;
 pub mod dashboard_kinship;
 pub use dashboard_kinship::*;
 pub mod ai_mcp;
-pub use ai_mcp::*;
+pub mod ai_stories;
+pub use ai_stories::*;
+pub mod mcp;
+pub use mcp::*;

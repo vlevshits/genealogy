@@ -185,11 +185,13 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
   }, [isAdmin, initialQualityIssuesCount]);
 
   const loadPlaces = (q?: string, missingCoords?: boolean) => {
+    let cancelled = false;
     fetchPlaces({
       q: q?.trim() || undefined,
       missing_coords: missingCoords || undefined,
     })
       .then((res) => {
+        if (cancelled) return;
         setPlaces(res.items);
         if (res.map_tile_url !== undefined) {
           setMapTileUrl(res.map_tile_url);
@@ -205,11 +207,14 @@ export const PlacesPage: React.FC<PlacesPageProps> = ({
         });
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   };
 
   useEffect(() => {
     if (initialPlaces) return;
-    loadPlaces(searchQuery, missingCoordsOnly);
+    return loadPlaces(searchQuery, missingCoordsOnly);
   }, [initialPlaces, searchQuery, missingCoordsOnly]);
 
   useEffect(() => {

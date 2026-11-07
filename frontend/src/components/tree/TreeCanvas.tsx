@@ -184,7 +184,8 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
       nextGen?: number,
       nextCollateral?: boolean
     ) => {
-      if (initialTreeView) return;
+      if (initialTreeView) return () => {};
+      let cancelled = false;
       const effectiveMode = nextMode ?? mode;
       const effectiveCollateral = nextCollateral ?? collateral;
       fetchTreeView({
@@ -194,12 +195,16 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
         collateral: effectiveMode === 'hourglass' ? effectiveCollateral : undefined,
       })
         .then((res) => {
+          if (cancelled) return;
           setTreeView(res);
           if (res.focal_id && !focalId) {
             setFocalId(res.focal_id);
           }
         })
         .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
     },
     [initialTreeView, focalId, mode, generations, collateral]
   );
@@ -215,7 +220,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
       setTreeView(initialTreeView);
       return;
     }
-    loadTreeView(focalId, mode, generations, collateral);
+    return loadTreeView(focalId, mode, generations, collateral);
   }, [initialTreeView, loadTreeView, focalId, mode, generations, collateral]);
 
   const effectiveViewData = useMemo<TreeViewResponse>(

@@ -278,7 +278,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route(
             "/ai/drafts/{id}/reconcile",
-            get(reconcile_ai_story_draft_handler).post(reconcile_ai_story_draft_handler),
+            post(reconcile_ai_story_draft_handler),
         )
         .route(
             "/ai/drafts/{id}/commit",

@@ -201,6 +201,79 @@ pub(crate) fn redact_person_for_mcp(
     Some(redacted)
 }
 
+pub(crate) fn redact_family_for_mcp(
+    fam: &FamilyDto,
+    persons: &[TreePersonNodeDto],
+    privacy_access: &CallerAccess,
+) -> Option<FamilyDto> {
+    if fam.is_private && !privacy_access.can_view_private() {
+        return None;
+    }
+
+    let is_person_visible = |pid: &str| -> bool {
+        persons
+            .iter()
+            .find(|p| p.id == pid)
+            .and_then(|p| redact_person_for_mcp(p, privacy_access))
+            .is_some()
+    };
+
+    let partner1_id = fam
+        .partner1_id
+        .as_ref()
+        .filter(|id| is_person_visible(id))
+        .cloned();
+    let partner2_id = fam
+        .partner2_id
+        .as_ref()
+        .filter(|id| is_person_visible(id))
+        .cloned();
+    let children: Vec<FamilyChildDto> = fam
+        .children
+        .iter()
+        .filter(|c| is_person_visible(&c.child_id))
+        .cloned()
+        .collect();
+
+    if partner1_id.is_none() && partner2_id.is_none() && children.is_empty() {
+        return None;
+    }
+
+    let is_masked_union = *privacy_access == CallerAccess::AnonymousPublic && {
+        let p1_living = partner1_id
+            .as_ref()
+            .and_then(|pid| persons.iter().find(|p| &p.id == pid))
+            .is_some_and(|p| p.is_living);
+        let p2_living = partner2_id
+            .as_ref()
+            .and_then(|pid| persons.iter().find(|p| &p.id == pid))
+            .is_some_and(|p| p.is_living);
+        p1_living || p2_living
+    };
+
+    Some(FamilyDto {
+        id: fam.id.clone(),
+        gid: fam.gid.clone(),
+        partner1_id,
+        partner2_id,
+        relationship_type: fam.relationship_type.clone(),
+        is_private: fam.is_private,
+        children,
+        external_ids: fam.external_ids.clone(),
+        version: fam.version,
+        marriage_date: if is_masked_union {
+            None
+        } else {
+            fam.marriage_date.clone()
+        },
+        marriage_place: if is_masked_union {
+            None
+        } else {
+            fam.marriage_place.clone()
+        },
+    })
+}
+
 pub(crate) fn execute_mcp_tool(
     store: &mut GenealogyPrivacyStore,
     caller: &McpCallerContext,
@@ -282,6 +355,13 @@ pub(crate) fn execute_mcp_tool(
             let resolved = store
                 .resolve_person_id(id_or_gid)
                 .ok_or(AppError::NotFound)?;
+            let person = store
+                .persons
+                .iter()
+                .find(|p| p.id == resolved)
+                .ok_or(AppError::NotFound)?;
+            redact_person_for_mcp(person, &privacy_access).ok_or(AppError::NotFound)?;
+
             let fams: Vec<FamilyDto> = store
                 .families
                 .iter()
@@ -290,7 +370,7 @@ pub(crate) fn execute_mcp_tool(
                         || f.partner2_id.as_deref() == Some(resolved.as_str())
                         || f.children.iter().any(|c| c.child_id == resolved)
                 })
-                .cloned()
+                .filter_map(|f| redact_family_for_mcp(f, &store.persons, &privacy_access))
                 .collect();
             Ok(json!({ "person_id": resolved, "families": fams }))
         }
@@ -303,15 +383,27 @@ pub(crate) fn execute_mcp_tool(
             let resolved = store
                 .resolve_person_id(id_or_gid)
                 .ok_or(AppError::NotFound)?;
+            let person = store
+                .persons
+                .iter()
+                .find(|p| p.id == resolved)
+                .ok_or(AppError::NotFound)?;
+            redact_person_for_mcp(person, &privacy_access).ok_or(AppError::NotFound)?;
+
             let persons: Vec<TreePersonNodeDto> = store
                 .persons
                 .iter()
                 .filter_map(|p| redact_person_for_mcp(p, &privacy_access))
                 .collect();
+            let families: Vec<FamilyDto> = store
+                .families
+                .iter()
+                .filter_map(|f| redact_family_for_mcp(f, &store.persons, &privacy_access))
+                .collect();
             Ok(json!({
                 "root_person_id": resolved,
                 "persons": persons,
-                "families": store.families
+                "families": families
             }))
         }
         "calculate_kinship" => {
@@ -383,10 +475,24 @@ pub(crate) fn execute_mcp_tool(
             Ok(json!({ "place": place, "children": children }))
         }
         "list_events_timeline" => {
-            let person_filter = args
+            let raw_person_id = args
                 .get("person_id")
+                .or_else(|| args.get("id"))
                 .and_then(|v| v.as_str())
-                .and_then(|id| store.resolve_person_id(id));
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            let person_filter = match raw_person_id {
+                Some(id) => Some(store.resolve_person_id(id).ok_or(AppError::NotFound)?),
+                None => None,
+            };
+            if let Some(ref pid) = person_filter {
+                let person = store
+                    .persons
+                    .iter()
+                    .find(|p| &p.id == pid)
+                    .ok_or(AppError::NotFound)?;
+                redact_person_for_mcp(person, &privacy_access).ok_or(AppError::NotFound)?;
+            }
             let items: Vec<LifeEventDto> = store
                 .events
                 .iter()
@@ -395,7 +501,9 @@ pub(crate) fn execute_mcp_tool(
                         .as_ref()
                         .is_none_or(|pid| e.individual_id.as_ref() == Some(pid))
                 })
-                .cloned()
+                .filter_map(|e| {
+                    redact_event_for_tree_view(e, &store.persons, &store.families, &privacy_access)
+                })
                 .collect();
             Ok(json!({ "items": items, "total": items.len() }))
         }
@@ -416,6 +524,7 @@ pub(crate) fn execute_mcp_tool(
                 .map(ToString::to_string);
             let speaker_person_id = args
                 .get("speaker_person_id")
+                .or_else(|| args.get("speaker_id"))
                 .and_then(|v| v.as_str())
                 .map(ToString::to_string);
             let extracted_data: Option<DraftExtractedDataDto> = args
