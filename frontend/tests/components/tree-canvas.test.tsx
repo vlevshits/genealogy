@@ -2822,6 +2822,70 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       expect(pedPlacedIds.has('p-f6')).toBe(true);
       expect(pedPlacedIds.has('p-m6')).toBe(true);
     });
+
+    it('places 4th-generation descendant (gen = 4) under gen = 3 parent in Descendants mode with generations = 4 and never places floating cards at y < 0', () => {
+      const makeDescNode = (id: string, given: string) => ({
+        id,
+        gid: id.toUpperCase(),
+        sex: 'M' as const,
+        is_living: false,
+        privacy_tier: 'public' as const,
+        primary_name: {
+          given_name: given,
+          surname: 'Левшиц',
+          patronymic: null,
+          maiden_name: null,
+        },
+        birth_date: '1850',
+        birth_place: null,
+        death_date: '1920',
+        death_place: null,
+        avatar_url: null,
+      });
+
+      const descData = {
+        mode: 'descendant' as const,
+        focal_id: 'i-petr',
+        generations: 4,
+        access_tier: 'admin' as const,
+        nodes: [
+          makeDescNode('i-petr', 'Петр'),
+          makeDescNode('i-ioakim', 'Иоаким'),
+          makeDescNode('i-luka', 'Лука'),
+          makeDescNode('i-kosma', 'Косьма'),
+          makeDescNode('i-filimon', 'Филимон'),
+          makeDescNode('i-disconnected', 'Disconnected'),
+        ],
+        families: [],
+        edges: [
+          { id: 'e-1', source: 'i-petr', target: 'i-ioakim', kind: 'parent_child' as const, family_id: 'f-1' },
+          { id: 'e-2', source: 'i-ioakim', target: 'i-luka', kind: 'parent_child' as const, family_id: 'f-2' },
+          { id: 'e-3', source: 'i-luka', target: 'i-kosma', kind: 'parent_child' as const, family_id: 'f-3' },
+          { id: 'e-4', source: 'i-kosma', target: 'i-filimon', kind: 'parent_child' as const, family_id: 'f-4' },
+        ],
+      };
+
+      const descLayout = computeDescendantsLayout(descData, 4);
+      assertNoOverlappingNodes(descLayout.nodes);
+
+      // No node may ever be placed at y < 0 above the root ancestor
+      expect(descLayout.nodes.every((n) => n.y >= 0)).toBe(true);
+      expect(descLayout.nodes.find((n) => n.id === 'i-disconnected')).toBeUndefined();
+
+      const kosmaNode = descLayout.nodes.find((n) => n.id === 'i-kosma')!;
+      const filimonNode = descLayout.nodes.find((n) => n.id === 'i-filimon')!;
+      expect(kosmaNode).toBeDefined();
+      expect(filimonNode).toBeDefined();
+      expect(kosmaNode.generation).toBe(3);
+      expect(filimonNode.generation).toBe(4);
+      expect(filimonNode.y).toBe(4 * 180); // 4 * ROW_STEP
+      expect(filimonNode.y).toBeGreaterThan(kosmaNode.y);
+
+      const edgeKosmaFilimon = descLayout.edges.find(
+        (e) => e.kind === 'parent_child' && e.sourceId === 'i-kosma' && e.targetId === 'i-filimon'
+      );
+      expect(edgeKosmaFilimon).toBeDefined();
+    });
   });
 });
 

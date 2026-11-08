@@ -97,7 +97,7 @@ export function computeDescendantsLayout(
     const unionPlans: DescendantUnionPlan[] = [];
     const singleParentPlans: SubtreePlan[] = [];
 
-    if (gen < maxGen - 1) {
+    if (gen < maxGen) {
       // 1. Build children for each placed spouse union
       for (const spId of placedSpouses) {
         const u = rel?.unions.find(
@@ -504,25 +504,6 @@ export function computeDescendantsLayout(
   };
 
   placeSubtree(rootPlan, -rootPlan.subtreeWidth / 2, 0);
-
-  // Place any unvisited disconnected nodes in a tidy bottom row so no visible person is lost
-  let extraIndex = 0;
-  for (const n of data.nodes) {
-    if (!visited.has(n.id)) {
-      visited.add(n.id);
-      nodes.push({
-        id: n.id,
-        node: n,
-        x: extraIndex * (CARD_WIDTH + H_GAP),
-        y: -ROW_STEP,
-        width: CARD_WIDTH,
-        height: CARD_HEIGHT,
-        generation: -1,
-        isFocal: false,
-      });
-      extraIndex++;
-    }
-  }
 
   return {
     mode: 'descendant',

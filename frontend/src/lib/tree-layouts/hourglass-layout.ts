@@ -178,23 +178,23 @@ export function computeHourglassLayout(
   // ---------------------------------------------------------------------------
   // 3. Build Focal and Sibling DownBranches (Gen 0 downwards)
   // ---------------------------------------------------------------------------
-  const focalBranch = buildDownBranch(focalId, 0, true, maxGen - 1)!;
+  const focalBranch = buildDownBranch(focalId, 0, true, maxGen)!;
 
   const patHalfBranches: DownBranch[] = [];
   for (const sid of patHalfSiblingIds) {
-    const sb = buildDownBranch(sid, 0, false, maxGen - 1);
+    const sb = buildDownBranch(sid, 0, false, maxGen);
     if (sb) patHalfBranches.push(sb);
   }
 
   const fullSibBranches: DownBranch[] = [];
   for (const sid of fullSiblingIds) {
-    const sb = buildDownBranch(sid, 0, false, maxGen - 1);
+    const sb = buildDownBranch(sid, 0, false, maxGen);
     if (sb) fullSibBranches.push(sb);
   }
 
   const matHalfBranches: DownBranch[] = [];
   for (const sid of matHalfSiblingIds) {
-    const sb = buildDownBranch(sid, 0, false, maxGen - 1);
+    const sb = buildDownBranch(sid, 0, false, maxGen);
     if (sb) matHalfBranches.push(sb);
   }
 

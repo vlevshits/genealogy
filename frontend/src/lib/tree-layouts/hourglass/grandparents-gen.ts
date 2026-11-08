@@ -52,7 +52,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
   const { nodeMap, relativesMap, maxGen, collateral, placedIds, nodes, edges } = ctx;
   const parentY = -ROW_STEP;
 
-  const ancestorGenLimit = Math.max(1, maxGen - 1);
+  const ancestorGenLimit = Math.max(1, maxGen);
 
   let patGfId: string | null = null;
   let patGmId: string | null = null;
@@ -104,7 +104,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
       const probeBranches: DownBranch[] = [];
       for (const aid of patAuntIds) {
         // compute width probe
-        const b = buildDownBranch(aid, -1, false, maxGen - 2);
+        const b = buildDownBranch(aid, -1, false, maxGen - 1);
         if (b) probeBranches.push(b);
       }
       patAuntsW =
@@ -413,7 +413,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
     if (matAuntIds.length > 0) {
       const probeBranches: DownBranch[] = [];
       for (const aid of matAuntIds) {
-        const b = buildDownBranch(aid, -1, false, maxGen - 2);
+        const b = buildDownBranch(aid, -1, false, maxGen - 1);
         if (b) probeBranches.push(b);
       }
       matAuntsW =
@@ -680,14 +680,14 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
   }
 
   // 5C. Upper Ancestors (Gen -3, -4, -5, -6, ... up to -maxGen)
-  if (maxGen >= 3) {
+  if (ancestorGenLimit >= 3) {
     placeHourglassUpperAncestorsGen(
       ctx,
       patGfId,
       patGmId,
       matGfId,
       matGmId,
-      maxGen
+      ancestorGenLimit
     );
   }
 }
