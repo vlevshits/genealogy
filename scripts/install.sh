@@ -13,7 +13,7 @@
 set -euo pipefail
 
 REPO="${REPO:-vlevshits/genealogy}"
-VERSION="${VERSION:-latest}"
+APP_VERSION="${APP_VERSION:-${VERSION:-latest}}"
 INSTALL_DIR="/opt/genealogy"
 WEB_DIR="/var/www/genealogy"
 DATA_DIR="/var/lib/genealogy"
@@ -120,11 +120,11 @@ if [ "$IS_UPDATE" -eq 1 ]; then
     fi
     CURRENT_PORT="${CURRENT_PORT:-80}"
 
-    if [ "$VERSION" = "latest" ]; then
+    if [ "$APP_VERSION" = "latest" ]; then
         log_info "Checking latest release version..."
         TARGET_TAG="$(fetch_latest_release_tag)"
     else
-        TARGET_TAG="$VERSION"
+        TARGET_TAG="$APP_VERSION"
     fi
 
     log_info "Target release: ${TARGET_TAG}"
@@ -264,11 +264,11 @@ chmod 750 "${DATA_DIR}"
 chown -R genealogy:genealogy "${INSTALL_DIR}" "${CONFIG_DIR}" "${WEB_DIR}"
 
 # 5.4 Download Release Bundle
-if [ "$VERSION" = "latest" ]; then
+if [ "$APP_VERSION" = "latest" ]; then
     log_info "Checking latest release version..."
     TARGET_TAG="$(fetch_latest_release_tag)"
 else
-    TARGET_TAG="$VERSION"
+    TARGET_TAG="$APP_VERSION"
 fi
 
 ARCHIVE_NAME="genealogy-${TARGET_TAG}-linux-${ARCH}.tar.gz"
