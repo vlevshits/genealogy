@@ -70,6 +70,8 @@ pub struct QualityCategoryCountsDto {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct QualitySeverityCountsDto {
+    #[serde(default)]
+    pub critical: usize,
     pub warning: usize,
     pub info: usize,
 }
@@ -80,6 +82,8 @@ pub struct QualitySummaryResponse {
     pub operation: String,
     pub message: String,
     pub total_open_warnings: usize,
+    #[serde(default)]
+    pub critical_count: usize,
     pub warning_count: usize,
     pub info_count: usize,
     pub duplicate_candidates_count: usize,

@@ -201,6 +201,7 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
     let mut family_age = 0;
     let mut completeness = 0;
     let mut duplicates_cat = 0;
+    let mut critical_count = 0;
     let mut warning_count = 0;
     let mut info_count = 0;
     let mut by_rule: HashMap<String, usize> = HashMap::new();
@@ -214,7 +215,9 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
             "duplicates" => duplicates_cat += 1,
             _ => {}
         }
-        if w.severity == "info" {
+        if w.severity == "critical" {
+            critical_count += 1;
+        } else if w.severity == "info" {
             info_count += 1;
         } else {
             warning_count += 1;
@@ -230,6 +233,7 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
         operation: "data_quality".to_string(),
         message: "Data quality warnings authorized for administrator".to_string(),
         total_open_warnings: warnings.len(),
+        critical_count,
         warning_count,
         info_count,
         duplicate_candidates_count: duplicates.len(),
@@ -244,6 +248,7 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
             places: place_analysis.counts.total_issues,
         },
         by_severity: QualitySeverityCountsDto {
+            critical: critical_count,
             warning: warning_count,
             info: info_count,
         },

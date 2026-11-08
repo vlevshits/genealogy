@@ -52,7 +52,7 @@ pub fn compute_quality_warnings(
                         code: RULE_DEATH_BEFORE_BIRTH.to_string(),
                         rule_code: RULE_DEATH_BEFORE_BIRTH.to_string(),
                         category: "chronology".to_string(),
-                        severity: "warning".to_string(),
+                        severity: "critical".to_string(),
                         entity_type: "individual".to_string(),
                         entity_id: person.id.clone(),
                         person: to_warning_person_ref(person),
@@ -426,7 +426,7 @@ pub fn compute_quality_warnings(
                                 code: RULE_BORN_AFTER_PARENT_DEATH.to_string(),
                                 rule_code: RULE_BORN_AFTER_PARENT_DEATH.to_string(),
                                 category: "chronology".to_string(),
-                                severity: "warning".to_string(),
+                                severity: "critical".to_string(),
                                 entity_type: "individual".to_string(),
                                 entity_id: child.id.clone(),
                                 person: to_warning_person_ref(child),
@@ -488,6 +488,12 @@ pub fn compute_quality_warnings(
             });
         }
     }
+
+    warnings.sort_by_key(|w| match w.severity.as_str() {
+        "critical" => 0,
+        "warning" => 1,
+        _ => 2,
+    });
 
     warnings
 }

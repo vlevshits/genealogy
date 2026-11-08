@@ -291,7 +291,7 @@ pub async fn list_quality_warnings(
         .as_deref()
         .and_then(|c| c.parse::<usize>().ok())
         .unwrap_or(0);
-    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let limit = query.limit.unwrap_or(2000).clamp(1, 5000);
     let page: Vec<_> = warnings.into_iter().skip(offset).take(limit).collect();
     let next_cursor = if offset + page.len() < total {
         Some((offset + page.len()).to_string())
@@ -380,7 +380,7 @@ pub async fn list_duplicate_candidates(
         .as_deref()
         .and_then(|c| c.parse::<usize>().ok())
         .unwrap_or(0);
-    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let limit = query.limit.unwrap_or(500).clamp(1, 2000);
     let items: Vec<_> = all.into_iter().skip(offset).take(limit).collect();
     let next_cursor = if offset + items.len() < total {
         Some((offset + items.len()).to_string())
