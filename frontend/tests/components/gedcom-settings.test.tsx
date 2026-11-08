@@ -56,46 +56,84 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     expect(htmlEditor).toContain('Administrator Access Required');
   });
 
-  it('renders GedcomAnalysisModal with Gramps Web 6.0.1 dialect highlights, counts, and warnings in EN and RU', () => {
-    const htmlEn = renderWithProviders(
+  it('renders GedcomAnalysisModal with Gramps Web 6.0.1 dialect highlights, import mode selector (merge vs clean_slate), counts, and warnings in EN and RU', () => {
+    const htmlMergeEn = renderWithProviders(
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
+        importMode="merge"
         onProceed={() => {}}
         onCancel={() => {}}
       />,
       'en'
     );
 
-    expect(htmlEn).toContain('Pre-Import Summary &amp; Dry Run');
-    expect(htmlEn).toContain('Gramps Web 6.0.1');
-    expect(htmlEn).toContain('GEDCOM 5.5.1');
-    expect(htmlEn).toContain('284');
-    expect(htmlEn).toContain('84');
-    expect(htmlEn).toContain('129');
-    expect(htmlEn).toContain('Geographic coordinates normalized (N/S/E/W)');
-    expect(htmlEn).toContain('57');
-    expect(htmlEn).toContain('339');
-    expect(htmlEn).toContain('338');
-    expect(htmlEn).toContain('Proceed to Clean Slate Import');
+    expect(htmlMergeEn).toContain('Pre-Import Summary &amp; Dry Run');
+    expect(htmlMergeEn).toContain('Gramps Web 6.0.1');
+    expect(htmlMergeEn).toContain('GEDCOM 5.5.1');
+    expect(htmlMergeEn).toContain('284');
+    expect(htmlMergeEn).toContain('84');
+    expect(htmlMergeEn).toContain('129');
+    expect(htmlMergeEn).toContain('Geographic coordinates normalized (N/S/E/W)');
+    expect(htmlMergeEn).toContain('57');
+    expect(htmlMergeEn).toContain('339');
+    expect(htmlMergeEn).toContain('338');
+    expect(htmlMergeEn).toContain('role="radiogroup"');
+    expect(htmlMergeEn).toContain('Merge &amp; Enrich Existing Tree');
+    expect(htmlMergeEn).toContain('Recommended');
+    expect(htmlMergeEn).toContain('Non-destructive');
+    expect(htmlMergeEn).toContain('Full Replace (Clean Slate)');
+    expect(htmlMergeEn).toContain('Destructive');
+    expect(htmlMergeEn).toContain('Safe Non-Destructive Merge');
+    expect(htmlMergeEn).toContain('Merge into Tree');
 
-    const htmlRu = renderWithProviders(
+    const htmlCleanSlateEn = renderWithProviders(
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
+        importMode="clean_slate"
+        onProceed={() => {}}
+        onCancel={() => {}}
+      />,
+      'en'
+    );
+    expect(htmlCleanSlateEn).toContain('Full Replace Requires Confirmation');
+    expect(htmlCleanSlateEn).toContain('Proceed to Full Replace...');
+
+    const htmlMergeRu = renderWithProviders(
+      <GedcomAnalysisModal
+        report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
+        importMode="merge"
         onProceed={() => {}}
         onCancel={() => {}}
       />,
       'ru'
     );
-    expect(htmlRu).toContain('Предварительный отчёт перед импортом');
-    expect(htmlRu).toContain('Нормализовано географических координат (N/S/E/W)');
-    expect(htmlRu).toContain('Перейти к полной замене древа');
+    expect(htmlMergeRu).toContain('Предварительный отчёт перед импортом');
+    expect(htmlMergeRu).toContain('Нормализовано географических координат (N/S/E/W)');
+    expect(htmlMergeRu).toContain('Объединить и дополнить древо');
+    expect(htmlMergeRu).toContain('Рекомендуется');
+    expect(htmlMergeRu).toContain('Без удаления данных');
+    expect(htmlMergeRu).toContain('Объединить с древом');
+
+    const htmlCleanSlateRu = renderWithProviders(
+      <GedcomAnalysisModal
+        report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
+        importMode="clean_slate"
+        onProceed={() => {}}
+        onCancel={() => {}}
+      />,
+      'ru'
+    );
+    expect(htmlCleanSlateRu).toContain('Полная замена требует подтверждения');
+    expect(htmlCleanSlateRu).toContain('Перейти к полной замене...');
   });
 
-  it('validates Clean Slate confirmation phrases (CLEAN_SLATE / REPLACE) and renders rollback snapshot guarantee', () => {
+  it('validates Clean Slate confirmation phrases (CLEAN_SLATE / REPLACE / ЗАМЕНИТЬ) and renders rollback snapshot guarantee', () => {
     expect(isCleanSlateConfirmed('CLEAN_SLATE')).toBe(true);
     expect(isCleanSlateConfirmed('clean_slate')).toBe(true);
     expect(isCleanSlateConfirmed('REPLACE')).toBe(true);
     expect(isCleanSlateConfirmed(' replace ')).toBe(true);
+    expect(isCleanSlateConfirmed('ЗАМЕНИТЬ')).toBe(true);
+    expect(isCleanSlateConfirmed(' заменить ')).toBe(true);
     expect(isCleanSlateConfirmed('DELETE')).toBe(false);
     expect(isCleanSlateConfirmed('')).toBe(false);
 
@@ -113,7 +151,7 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     expect(htmlConfirm).toContain('Type CLEAN_SLATE or REPLACE to confirm');
   });
 
-  it('renders GedcomPostImportReport with snapshot ID, missing media reconciliation CTA, Select Home Person, and Open Family Tree', () => {
+  it('renders GedcomPostImportReport for both Clean Slate and Merge & Enrich modes with merged people/family counts', () => {
     const htmlReport = renderWithProviders(
       <GedcomPostImportReport
         result={DEFAULT_GEDCOM_IMPORT_RESULT}
@@ -126,6 +164,7 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     );
 
     expect(htmlReport).toContain('GEDCOM Import Completed');
+    expect(htmlReport).toContain('Full Replace');
     expect(htmlReport).toContain('snap-pre-gedcom-20261027');
     expect(htmlReport).toContain(
       '129 referenced media files are missing image binaries'
@@ -133,6 +172,31 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     expect(htmlReport).toContain('Upload Media Folder');
     expect(htmlReport).toContain('Select Home Person');
     expect(htmlReport).toContain('Open Family Tree');
+
+    const mergeResult = {
+      ...DEFAULT_GEDCOM_IMPORT_RESULT,
+      mode: 'merge' as const,
+      merged_individuals: 42,
+      merged_families: 15,
+    };
+
+    const htmlMergeReportEn = renderWithProviders(
+      <GedcomPostImportReport result={mergeResult} />,
+      'en'
+    );
+    expect(htmlMergeReportEn).toContain('Merge &amp; Enrich');
+    expect(htmlMergeReportEn).toContain('Merged / Enriched People');
+    expect(htmlMergeReportEn).toContain('42');
+    expect(htmlMergeReportEn).toContain('Merged Families');
+    expect(htmlMergeReportEn).toContain('15');
+
+    const htmlMergeReportRu = renderWithProviders(
+      <GedcomPostImportReport result={mergeResult} />,
+      'ru'
+    );
+    expect(htmlMergeReportRu).toContain('Объединение и дополнение');
+    expect(htmlMergeReportRu).toContain('Объединено / дополнено персон');
+    expect(htmlMergeReportRu).toContain('Объединено семей');
   });
 
   it('renders GedcomExportCard with 5.5.1/7.0 format options, privacy switches, and builds export URLs', () => {

@@ -463,16 +463,21 @@ export interface ImportGedcomInput {
 }
 
 export interface GedcomImportResult {
+  mode?: 'clean_slate' | 'merge' | string;
   imported_individuals: number;
   imported_families: number;
   imported_events: number;
   imported_places: number;
   imported_media: number;
+  merged_individuals?: number;
+  merged_families?: number;
   missing_media_count: number;
   snapshot_id: string;
   prompt_home_person: boolean;
   warnings: string[];
 }
+
+export type GedcomImportReportDto = GedcomImportResult;
 
 export type GedcomVersionOption = '5.5.1' | '7.0';
 

@@ -26,7 +26,11 @@ export interface GedcomCleanSlateConfirmProps {
 
 export function isCleanSlateConfirmed(value: string): boolean {
   const normalized = value.trim().toUpperCase();
-  return normalized === 'CLEAN_SLATE' || normalized === 'REPLACE';
+  return (
+    normalized === 'CLEAN_SLATE' ||
+    normalized === 'REPLACE' ||
+    normalized === 'ЗАМЕНИТЬ'
+  );
 }
 
 export const GedcomCleanSlateConfirm: React.FC<

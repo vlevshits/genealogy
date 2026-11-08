@@ -266,3 +266,4 @@ npm run test:e2e     # Playwright end-to-end browser test suite
 | [`docs/design-system/`](docs/design-system/) | Theme tokens (`theme-and-tokens.md`) and component catalog (`components.md`). |
 | [`docs/roadmap.md`](docs/roadmap.md) | Delivery phases and milestone definitions of done. |
 | [`docs/memory-bank/`](docs/memory-bank/README.md) | Architectural decisions (ADRs), domain glossary (EN/RU), codebase map, and feature implementation memory. |
+

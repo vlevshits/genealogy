@@ -12,7 +12,8 @@ pub fn import_gedcom_into_store(
 ) -> Result<GedcomImportResult, AppError> {
     let mode = match mode_raw.trim().to_ascii_lowercase().as_str() {
         "" | "new" => "new".to_string(),
-        "replace" | "clean_slate" => "replace".to_string(),
+        "replace" => "replace".to_string(),
+        "clean_slate" => "clean_slate".to_string(),
         "merge" => "merge".to_string(),
         _ => {
             let mut fields = HashMap::new();
@@ -23,8 +24,9 @@ pub fn import_gedcom_into_store(
             ));
         }
     };
+    let is_replace_mode = mode == "replace" || mode == "clean_slate";
 
-    if mode == "replace" && !store.persons.is_empty() && !store.is_demo_seed {
+    if is_replace_mode && !store.persons.is_empty() && !store.is_demo_seed {
         let confirmed = confirm_text.map(str::trim).is_some_and(|c| {
             c.eq_ignore_ascii_case("ЗАМЕНИТЬ")
                 || c.eq_ignore_ascii_case("REPLACE")
@@ -62,12 +64,10 @@ pub fn import_gedcom_into_store(
     )?;
     let snapshot_id = Some(created_snap.id);
 
-    if mode == "new" || mode == "replace" {
-        let preserved_snapshots = store.snapshots.clone();
+    if mode == "new" || is_replace_mode || store.is_demo_seed {
+        let preserved_snapshots = std::mem::take(&mut store.snapshots);
         *store = GenealogyPrivacyStore::empty();
         store.snapshots = preserved_snapshots;
-    } else if store.is_demo_seed {
-        store.is_demo_seed = false;
     }
 
     let initial_places_count = store.places.len();
@@ -132,10 +132,9 @@ pub fn import_gedcom_into_store(
             }
             "OBJE" => {
                 let raw_xref = node.xref.as_deref();
-                let existing_gids: HashSet<String> =
-                    store.media.iter().map(|m| m.gid.clone()).collect();
-                let gid =
-                    allocate_gid('M', &mut store.next_media_gid_seq, raw_xref, &existing_gids);
+                let raw_xref_clean = raw_xref
+                    .map(|x| x.trim_matches('@').to_uppercase())
+                    .unwrap_or_default();
 
                 let file_node = node.find_child("FILE");
                 let raw_path = file_node
@@ -149,23 +148,43 @@ pub fn import_gedcom_into_store(
                 let form_val = file_node
                     .and_then(|f| f.child_value("FORM"))
                     .or_else(|| node.child_value("FORM"));
-                let title_val = file_node
+                let explicit_title = file_node
                     .and_then(|f| f.child_value("TITL"))
-                    .or_else(|| node.child_value("TITL"))
-                    .unwrap_or_else(|| {
-                        if !clean_file_name.is_empty() {
-                            clean_file_name.clone()
-                        } else {
-                            gid.clone()
+                    .or_else(|| node.child_value("TITL"));
+
+                if mode == "merge" {
+                    if let Some(existing_media_id) = find_or_enrich_existing_media(
+                        store,
+                        &raw_xref_clean,
+                        &raw_path,
+                        &clean_file_name,
+                        explicit_title.as_deref(),
+                    ) {
+                        if !raw_xref_clean.is_empty() {
+                            obje_xref_to_media_id.insert(raw_xref_clean, existing_media_id);
                         }
-                    });
+                        continue;
+                    }
+                }
+
+                let existing_gids: HashSet<String> =
+                    store.media.iter().map(|m| m.gid.clone()).collect();
+                let gid =
+                    allocate_gid('M', &mut store.next_media_gid_seq, raw_xref, &existing_gids);
+
+                let title_val = explicit_title.unwrap_or_else(|| {
+                    if !clean_file_name.is_empty() {
+                        clean_file_name.clone()
+                    } else {
+                        gid.clone()
+                    }
+                });
 
                 let mime_type = infer_mime_type_from_form_or_path(form_val.as_deref(), &raw_path);
                 let media_id = Uuid::new_v4().to_string();
 
-                if let Some(xref) = raw_xref {
-                    obje_xref_to_media_id
-                        .insert(xref.trim_matches('@').to_uppercase(), media_id.clone());
+                if !raw_xref_clean.is_empty() {
+                    obje_xref_to_media_id.insert(raw_xref_clean, media_id.clone());
                 }
                 obje_xref_to_media_id.insert(gid.to_uppercase(), media_id.clone());
 
@@ -216,6 +235,7 @@ pub fn import_gedcom_into_store(
     let mut indi_xref_to_person_id: HashMap<String, String> = HashMap::new();
     let mut person_famc_pedi: HashMap<(String, String), String> = HashMap::new();
     let mut pending_associations: Vec<PendingAssociation> = Vec::new();
+    let mut merged_individuals: usize = 0;
 
     for node in &roots {
         if node.tag != "INDI" {
@@ -380,25 +400,34 @@ pub fn import_gedcom_into_store(
             _ => "U".to_string(),
         };
 
-        // In merge mode, check if person already exists by external UID or GID
+        let (birth_year, death_year) = extract_node_vital_years(node);
+        let candidate = IncomingPersonCandidate {
+            xref_clean: &xref_clean,
+            given_name: &given_name,
+            patronymic: patronymic.as_deref(),
+            surname: &surname,
+            birth_surname: birth_surname.as_deref(),
+            nickname: nickname.as_deref(),
+            name_prefix: name_prefix.as_deref(),
+            name_suffix: name_suffix.as_deref(),
+            sex: &sex,
+            birth_year,
+            death_year,
+            alt_names: &alt_names,
+            external_ids: &external_ids,
+        };
+
+        // In merge mode, check if person already exists by UID, RIN, GID+name, or smart name+vitals
         let existing_person_idx = if mode == "merge" {
-            let uid_opt = external_ids.get("uid");
-            store.persons.iter().position(|p| {
-                (uid_opt.is_some() && p.external_ids.get("uid") == uid_opt)
-                    || (!xref_clean.is_empty() && p.gid.eq_ignore_ascii_case(&xref_clean))
-            })
+            find_matching_person_index(store, &candidate)
         } else {
             None
         };
 
         let person_id = if let Some(idx) = existing_person_idx {
             let pid = store.persons[idx].id.clone();
-            for (k, v) in &external_ids {
-                store.persons[idx].external_ids.insert(k.clone(), v.clone());
-            }
-            if store.persons[idx].birth_surname.is_none() && birth_surname.is_some() {
-                store.persons[idx].birth_surname = birth_surname;
-            }
+            enrich_existing_person(&mut store.persons[idx], &candidate);
+            merged_individuals += 1;
             pid
         } else {
             let existing_gids: HashSet<String> =
@@ -576,9 +605,10 @@ pub fn import_gedcom_into_store(
         }
     }
 
-    import_gedcom_families_and_associations(
+    let merged_families = import_gedcom_families_and_associations(
         store,
         &roots,
+        &mode,
         &indi_xref_to_person_id,
         &person_famc_pedi,
         pending_associations,
@@ -660,6 +690,8 @@ pub fn import_gedcom_into_store(
         snapshot_id,
         imported_individuals: individuals_imported,
         imported_families: families_imported,
+        merged_individuals,
+        merged_families,
         imported_events: events_imported,
         imported_places: places_imported,
         imported_media: media_imported,

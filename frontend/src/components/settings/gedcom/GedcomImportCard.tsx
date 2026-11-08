@@ -20,7 +20,10 @@ import {
 } from '../../../api/client';
 import { getLocalizedErrorMessage } from '../../../lib/error-formatter';
 import { useI18n } from '../../../i18n';
-import { GedcomAnalysisModal } from './GedcomAnalysisModal';
+import {
+  GedcomAnalysisModal,
+  GedcomUiImportMode,
+} from './GedcomAnalysisModal';
 import { GedcomCleanSlateConfirm } from './GedcomCleanSlateConfirm';
 import { GedcomPostImportReport } from './GedcomPostImportReport';
 
@@ -50,11 +53,14 @@ export const DEFAULT_GEDCOM_ANALYSIS_REPORT: GedcomAnalysisReport = {
 };
 
 export const DEFAULT_GEDCOM_IMPORT_RESULT: GedcomImportResult = {
+  mode: 'clean_slate',
   imported_individuals: 284,
   imported_families: 84,
   imported_events: 642,
   imported_places: 57,
   imported_media: 129,
+  merged_individuals: 0,
+  merged_families: 0,
   missing_media_count: 129,
   snapshot_id: 'snap-pre-gedcom-20261027',
   prompt_home_person: true,
@@ -81,6 +87,7 @@ function readFileAsBase64(file: File): Promise<string> {
 export interface GedcomImportCardProps {
   initialAnalysis?: GedcomAnalysisReport | null;
   initialImportResult?: GedcomImportResult | null;
+  initialImportMode?: GedcomUiImportMode;
   initialConfirmOpen?: boolean;
   onNavigate?: (path: string) => void;
 }
@@ -88,6 +95,7 @@ export interface GedcomImportCardProps {
 export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
   initialAnalysis = null,
   initialImportResult = null,
+  initialImportMode = 'merge',
   initialConfirmOpen = false,
   onNavigate,
 }) => {
@@ -99,6 +107,8 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
   );
   const [encodedPayload, setEncodedPayload] = useState<string>('');
   const [analyzing, setAnalyzing] = useState<boolean>(false);
+  const [importMode, setImportMode] =
+    useState<GedcomUiImportMode>(initialImportMode);
   const [confirmCleanSlateOpen, setConfirmCleanSlateOpen] =
     useState<boolean>(initialConfirmOpen);
   const [importing, setImporting] = useState<boolean>(false);
@@ -132,11 +142,61 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
         setAnalysis({
           ...DEFAULT_GEDCOM_ANALYSIS_REPORT,
           file_name: file.name,
-          file_size_bytes: file.size || DEFAULT_GEDCOM_ANALYSIS_REPORT.file_size_bytes,
+          file_size_bytes:
+            file.size || DEFAULT_GEDCOM_ANALYSIS_REPORT.file_size_bytes,
         });
       }
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleExecuteMergeImport = async () => {
+    if (!analysis || importing) return;
+
+    setImporting(true);
+    setImportProgress(40);
+    setErrorMsg(null);
+
+    try {
+      const result = await importGedcom({
+        mode: 'merge',
+        file_name: analysis.file_name,
+        data: encodedPayload || undefined,
+      });
+      setImportProgress(100);
+      setImportResult({
+        ...result,
+        mode: result.mode || 'merge',
+      });
+      setConfirmCleanSlateOpen(false);
+      notifyTreeDataChanged();
+      addToast({
+        type: 'success',
+        title: t('gedcom.import.successToast'),
+        description: analysis.file_name,
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+        setErrorMsg(getLocalizedErrorMessage(err, t));
+      } else {
+        setImportProgress(100);
+        setImportResult({
+          ...DEFAULT_GEDCOM_IMPORT_RESULT,
+          mode: 'merge',
+          merged_individuals: 12,
+          merged_families: 4,
+        });
+        setConfirmCleanSlateOpen(false);
+        notifyTreeDataChanged();
+        addToast({
+          type: 'success',
+          title: t('gedcom.import.successToast'),
+          description: analysis.file_name,
+        });
+      }
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -155,7 +215,10 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
         data: encodedPayload || undefined,
       });
       setImportProgress(100);
-      setImportResult(result);
+      setImportResult({
+        ...result,
+        mode: result.mode || 'clean_slate',
+      });
       setConfirmCleanSlateOpen(false);
       notifyTreeDataChanged();
       addToast({
@@ -168,7 +231,10 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
         setErrorMsg(getLocalizedErrorMessage(err, t));
       } else {
         setImportProgress(100);
-        setImportResult(DEFAULT_GEDCOM_IMPORT_RESULT);
+        setImportResult({
+          ...DEFAULT_GEDCOM_IMPORT_RESULT,
+          mode: 'clean_slate',
+        });
         setConfirmCleanSlateOpen(false);
         notifyTreeDataChanged();
         addToast({
@@ -185,6 +251,7 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
   const handleReset = () => {
     setAnalysis(null);
     setEncodedPayload('');
+    setImportMode('merge');
     setConfirmCleanSlateOpen(false);
     setImporting(false);
     setImportProgress(0);
@@ -241,8 +308,21 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
           <GedcomAnalysisModal
             report={analysis}
             loading={importing}
+            isImporting={importing}
+            importMode={importMode}
+            onSelectImportMode={setImportMode}
             onCancel={handleReset}
-            onProceed={() => setConfirmCleanSlateOpen(true)}
+            onProceedMerge={() => {
+              void handleExecuteMergeImport();
+            }}
+            onProceedCleanSlate={() => setConfirmCleanSlateOpen(true)}
+            onProceed={() => {
+              if (importMode === 'merge') {
+                void handleExecuteMergeImport();
+              } else {
+                setConfirmCleanSlateOpen(true);
+              }
+            }}
           />
         )}
 

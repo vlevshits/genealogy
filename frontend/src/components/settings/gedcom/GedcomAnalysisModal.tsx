@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
   Cpu,
   FileArchive,
   FolderGit2,
+  GitMerge,
   Image as ImageIcon,
   MapPin,
+  ShieldAlert,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -19,19 +21,27 @@ import {
   CardFooter,
   CardHeader,
   Dialog,
+  RadioCardGroup,
 } from '../../ui';
 import { GedcomAnalysisReport } from '../../../api/client';
 import { useI18n } from '../../../i18n';
 import { formatGedcomWarning } from '../../../lib/error-formatter';
 import { formatBytes } from '../SystemDiagnosticsCard';
 
+export type GedcomUiImportMode = 'merge' | 'clean_slate';
+
 export interface GedcomAnalysisModalProps {
   report: GedcomAnalysisReport;
   open?: boolean;
   asDialog?: boolean;
   loading?: boolean;
+  isImporting?: boolean;
+  importMode?: GedcomUiImportMode;
+  onSelectImportMode?: (mode: GedcomUiImportMode) => void;
+  onProceedMerge?: () => void;
+  onProceedCleanSlate?: () => void;
+  onProceed?: () => void;
   onOpenChange?: (open: boolean) => void;
-  onProceed: () => void;
   onCancel: () => void;
 }
 
@@ -40,15 +50,52 @@ export const GedcomAnalysisModal: React.FC<GedcomAnalysisModalProps> = ({
   open = true,
   asDialog = false,
   loading = false,
-  onOpenChange,
+  isImporting = false,
+  importMode,
+  onSelectImportMode,
+  onProceedMerge,
+  onProceedCleanSlate,
   onProceed,
+  onOpenChange,
   onCancel,
 }) => {
   const { t, locale } = useI18n();
+  const [internalMode, setInternalMode] = useState<GedcomUiImportMode>(
+    importMode ?? 'merge'
+  );
+  const effectiveMode: GedcomUiImportMode = importMode ?? internalMode;
+  const isBusy = Boolean(loading || isImporting);
+
   const formatNum = (n: number) =>
     n.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
 
   const d = report.dialect_summary;
+
+  const handleSelectMode = (nextMode: GedcomUiImportMode) => {
+    setInternalMode(nextMode);
+    onSelectImportMode?.(nextMode);
+  };
+
+  const handlePrimaryAction = () => {
+    if (effectiveMode === 'merge') {
+      if (onProceedMerge) {
+        onProceedMerge();
+      } else {
+        onProceed?.();
+      }
+    } else {
+      if (onProceedCleanSlate) {
+        onProceedCleanSlate();
+      } else {
+        onProceed?.();
+      }
+    }
+  };
+
+  const primaryBtnText =
+    effectiveMode === 'merge'
+      ? t('gedcom.analysis.proceedMergeBtn')
+      : t('gedcom.analysis.proceedCleanSlateBtn');
 
   const content = (
     <div className="space-y-5" data-testid="gedcom-analysis-report">
@@ -201,6 +248,67 @@ export const GedcomAnalysisModal: React.FC<GedcomAnalysisModalProps> = ({
           </ul>
         </Alert>
       )}
+
+      {/* Import Mode Selector (Merge & Enrich vs Full Replace) */}
+      <div className="space-y-2.5" data-testid="gedcom-import-mode-section">
+        <div className="text-xs font-semibold uppercase tracking-wider text-secondary">
+          {t('gedcom.analysis.modeSectionTitle')}
+        </div>
+
+        <RadioCardGroup<GedcomUiImportMode>
+          ariaLabel={t('gedcom.analysis.modeSectionTitle')}
+          value={effectiveMode}
+          onChange={handleSelectMode}
+          disabled={isBusy}
+          options={[
+            {
+              value: 'merge',
+              dataTestId: 'gedcom-mode-merge',
+              icon: <GitMerge className="h-4 w-4" />,
+              label: (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span>{t('gedcom.analysis.modeMergeTitle')}</span>
+                  <Badge variant="success" size="sm">
+                    {t('gedcom.analysis.modeMergeBadgeRecommended')}
+                  </Badge>
+                  <Badge variant="brand" size="sm">
+                    {t('gedcom.analysis.modeMergeBadgeSafe')}
+                  </Badge>
+                </span>
+              ),
+              description: t('gedcom.analysis.modeMergeDesc'),
+            },
+            {
+              value: 'clean_slate',
+              dataTestId: 'gedcom-mode-clean-slate',
+              icon: <ShieldAlert className="h-4 w-4" />,
+              label: (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span>{t('gedcom.analysis.modeCleanSlateTitle')}</span>
+                  <Badge variant="danger" size="sm">
+                    {t('gedcom.analysis.modeCleanSlateBadge')}
+                  </Badge>
+                </span>
+              ),
+              description: t('gedcom.analysis.modeCleanSlateDesc'),
+            },
+          ]}
+        />
+      </div>
+
+      {/* Dynamic Safety Notice Box */}
+      <Alert
+        variant={effectiveMode === 'merge' ? 'info' : 'warning'}
+        title={
+          effectiveMode === 'merge'
+            ? t('gedcom.analysis.safetyMergeTitle')
+            : t('gedcom.analysis.safetyCleanSlateTitle')
+        }
+      >
+        {effectiveMode === 'merge'
+          ? t('gedcom.analysis.safetyMergeBody')
+          : t('gedcom.analysis.safetyCleanSlateBody')}
+      </Alert>
     </div>
   );
 
@@ -217,16 +325,16 @@ export const GedcomAnalysisModal: React.FC<GedcomAnalysisModalProps> = ({
         description={t('gedcom.analysis.subtitle')}
         footer={
           <>
-            <Button variant="secondary" onClick={onCancel} disabled={loading}>
+            <Button variant="secondary" onClick={onCancel} disabled={isBusy}>
               {t('common.cancel')}
             </Button>
             <Button
               variant="primary"
-              onClick={onProceed}
-              loading={loading}
+              onClick={handlePrimaryAction}
+              loading={isBusy}
               data-testid="gedcom-proceed-import-btn"
             >
-              {t('gedcom.analysis.proceedBtn')}
+              {primaryBtnText}
             </Button>
           </>
         }
@@ -257,17 +365,17 @@ export const GedcomAnalysisModal: React.FC<GedcomAnalysisModalProps> = ({
       </CardHeader>
       <CardBody>{content}</CardBody>
       <CardFooter className="flex items-center justify-end gap-2">
-        <Button variant="secondary" size="sm" onClick={onCancel} disabled={loading}>
+        <Button variant="secondary" size="sm" onClick={onCancel} disabled={isBusy}>
           {t('common.cancel')}
         </Button>
         <Button
           variant="primary"
           size="sm"
-          onClick={onProceed}
-          loading={loading}
+          onClick={handlePrimaryAction}
+          loading={isBusy}
           data-testid="gedcom-proceed-import-btn"
         >
-          {t('gedcom.analysis.proceedBtn')}
+          {primaryBtnText}
         </Button>
       </CardFooter>
     </Card>

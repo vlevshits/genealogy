@@ -7,6 +7,7 @@ export interface RadioOption<T extends string = string> {
   description?: React.ReactNode;
   icon?: React.ReactNode;
   disabled?: boolean;
+  dataTestId?: string;
 }
 
 export interface RadioGroupProps<T extends string = string> {
@@ -59,6 +60,7 @@ export function RadioGroup<T extends string = string>({
             aria-checked={checked}
             disabled={disabled || opt.disabled}
             onClick={() => select(opt.value)}
+            data-testid={opt.dataTestId}
             className={cn(
               'flex w-full items-start gap-2.5 text-left cursor-pointer rounded-lg p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               opt.disabled && 'opacity-50 pointer-events-none'
@@ -127,6 +129,7 @@ export function RadioCardGroup<T extends string = string>({
             aria-checked={checked}
             disabled={disabled || opt.disabled}
             onClick={() => select(opt.value)}
+            data-testid={opt.dataTestId}
             className={cn(
               'flex items-start gap-3 rounded-xl border p-4 text-left transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               checked

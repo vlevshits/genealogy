@@ -131,6 +131,10 @@ pub struct GedcomImportResult {
     #[serde(default)]
     pub imported_families: usize,
     #[serde(default)]
+    pub merged_individuals: usize,
+    #[serde(default)]
+    pub merged_families: usize,
+    #[serde(default)]
     pub imported_events: usize,
     #[serde(default)]
     pub imported_places: usize,
@@ -159,6 +163,8 @@ pub struct GedcomImportResult {
     #[serde(default)]
     pub warnings: Vec<String>,
 }
+
+pub type GedcomImportReportDto = GedcomImportResult;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct GedcomExportRequest {

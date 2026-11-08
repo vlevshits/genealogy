@@ -5,6 +5,7 @@ use super::*;
 pub(crate) fn import_gedcom_families_and_associations(
     store: &mut GenealogyPrivacyStore,
     roots: &[GedcomNode],
+    mode: &str,
     indi_xref_to_person_id: &HashMap<String, String>,
     person_famc_pedi: &HashMap<(String, String), String>,
     pending_associations: Vec<PendingAssociation>,
@@ -14,7 +15,9 @@ pub(crate) fn import_gedcom_families_and_associations(
     obje_xref_to_media_id: &HashMap<String, String>,
     dialect: &mut GedcomDialectSummary,
     warnings: &mut Vec<String>,
-) {
+) -> usize {
+    let mut merged_families: usize = 0;
+
     // Pass 3: Parse all `0 @Fxxxx@ FAM` records
     for node in roots {
         if node.tag != "FAM" {
@@ -94,28 +97,48 @@ pub(crate) fn import_gedcom_families_and_associations(
             "unknown".to_string()
         };
 
-        let existing_gids: HashSet<String> = store.families.iter().map(|f| f.gid.clone()).collect();
-        let fam_gid = allocate_gid(
-            'F',
-            &mut store.next_family_gid_seq,
-            raw_xref,
-            &existing_gids,
-        );
-        let fam_id = Uuid::new_v4().to_string();
+        let existing_fam_id = if mode == "merge" {
+            find_and_enrich_existing_family(
+                store,
+                &partner1_id,
+                &partner2_id,
+                &relationship_type,
+                &children,
+                &external_ids,
+            )
+        } else {
+            None
+        };
 
-        store.families.push(FamilyDto {
-            id: fam_id.clone(),
-            gid: fam_gid,
-            partner1_id,
-            partner2_id,
-            relationship_type,
-            is_private: false,
-            children,
-            external_ids,
-            version: 1,
-            marriage_date: None,
-            marriage_place: None,
-        });
+        let fam_id = if let Some(existing_id) = existing_fam_id {
+            merged_families += 1;
+            existing_id
+        } else {
+            let existing_gids: HashSet<String> =
+                store.families.iter().map(|f| f.gid.clone()).collect();
+            let fam_gid = allocate_gid(
+                'F',
+                &mut store.next_family_gid_seq,
+                raw_xref,
+                &existing_gids,
+            );
+            let new_fam_id = Uuid::new_v4().to_string();
+
+            store.families.push(FamilyDto {
+                id: new_fam_id.clone(),
+                gid: fam_gid,
+                partner1_id,
+                partner2_id,
+                relationship_type,
+                is_private: false,
+                children,
+                external_ids,
+                version: 1,
+                marriage_date: None,
+                marriage_place: None,
+            });
+            new_fam_id
+        };
 
         for child in &node.children {
             match child.tag.as_str() {
@@ -286,18 +309,28 @@ pub(crate) fn import_gedcom_families_and_associations(
                 })
                 .unwrap_or_else(|| format!("@{}@", assoc.target_xref));
 
-            store.notes.push(NoteDto {
-                id: Uuid::new_v4().to_string(),
-                entity_type: "individual".to_string(),
-                entity_id: assoc.person_id,
-                body: format!("Связь ({}): {}", assoc.rela.trim(), target_info),
-                is_private: false,
-                sort_order: store.notes.len() as i32,
-                version: 1,
+            let note_body = format!("Связь ({}): {}", assoc.rela.trim(), target_info);
+            let already_has_note = store.notes.iter().any(|n| {
+                n.entity_type == "individual"
+                    && n.entity_id == assoc.person_id
+                    && n.body.trim() == note_body.trim()
             });
-            dialect.social_associations_notes_count += 1;
+            if !already_has_note {
+                store.notes.push(NoteDto {
+                    id: Uuid::new_v4().to_string(),
+                    entity_type: "individual".to_string(),
+                    entity_id: assoc.person_id,
+                    body: note_body,
+                    is_private: false,
+                    sort_order: store.notes.len() as i32,
+                    version: 1,
+                });
+                dialect.social_associations_notes_count += 1;
+            }
         }
     }
+
+    merged_families
 }
 
 pub(crate) fn link_media_to_person(
@@ -360,6 +393,12 @@ pub(crate) fn attach_gedcom_note(
     };
 
     if body.is_empty() {
+        return;
+    }
+
+    if store.notes.iter().any(|n| {
+        n.entity_type == entity_type && n.entity_id == entity_id && n.body.trim() == body.trim()
+    }) {
         return;
     }
 
@@ -518,12 +557,9 @@ pub(crate) fn parse_and_insert_event(
         }
     }
 
-    let existing_gids: HashSet<String> = store.events.iter().map(|e| e.gid.clone()).collect();
-    let ev_gid = allocate_gid('E', &mut store.next_event_gid_seq, None, &existing_gids);
-
-    store.events.push(LifeEventDto {
+    let mut candidate_ev = LifeEventDto {
         id: Uuid::new_v4().to_string(),
-        gid: ev_gid,
+        gid: String::new(),
         individual_id: individual_id.map(str::to_string),
         family_id: family_id.map(str::to_string),
         event_type: event_type.to_string(),
@@ -538,5 +574,13 @@ pub(crate) fn parse_and_insert_event(
         media_ids,
         is_private: false,
         version: 1,
-    });
+    };
+
+    if find_and_enrich_existing_event(store, &candidate_ev) {
+        return;
+    }
+
+    let existing_gids: HashSet<String> = store.events.iter().map(|e| e.gid.clone()).collect();
+    candidate_ev.gid = allocate_gid('E', &mut store.next_event_gid_seq, None, &existing_gids);
+    store.events.push(candidate_ev);
 }

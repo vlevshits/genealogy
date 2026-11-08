@@ -29,5 +29,7 @@ pub mod importer;
 pub use importer::*;
 pub mod importer_families;
 pub use importer_families::*;
+pub mod importer_merge;
+pub use importer_merge::*;
 pub mod exporter;
 pub use exporter::*;

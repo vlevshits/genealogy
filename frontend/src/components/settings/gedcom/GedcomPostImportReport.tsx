@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CheckCircle2,
   FolderGit2,
+  GitMerge,
   History,
   Image as ImageIcon,
   MapPin,
@@ -44,6 +45,11 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
   const formatNum = (n: number) =>
     n.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
 
+  const mergedIndividuals = result.merged_individuals ?? 0;
+  const mergedFamilies = result.merged_families ?? 0;
+  const isMergeMode =
+    result.mode === 'merge' || mergedIndividuals > 0 || mergedFamilies > 0;
+
   return (
     <Card className="border-success/40" data-testid="gedcom-post-import-report">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -54,14 +60,27 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
               {t('gedcom.report.title')}
             </h3>
             <p className="text-xs text-secondary">
-              {t('gedcom.report.subtitle')}
+              {isMergeMode
+                ? t('gedcom.report.subtitleMerge')
+                : t('gedcom.report.subtitle')}
             </p>
           </div>
         </div>
 
-        <Badge variant="success" size="sm">
-          {t('gedcom.report.completedBadge')}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant={isMergeMode ? 'brand' : 'neutral'}
+            size="sm"
+            icon={isMergeMode ? <GitMerge className="h-3 w-3" /> : undefined}
+          >
+            {isMergeMode
+              ? t('gedcom.report.modeMergeBadge')
+              : t('gedcom.report.modeCleanSlateBadge')}
+          </Badge>
+          <Badge variant="success" size="sm">
+            {t('gedcom.report.completedBadge')}
+          </Badge>
+        </div>
       </CardHeader>
 
       <CardBody className="space-y-4">
@@ -90,7 +109,7 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
           <div className="rounded-xl border border-border bg-surface-muted/40 p-3 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-secondary">
               <Sparkles className="h-3.5 w-3.5 text-brand" />
-              <span>{t('gedcom.analysis.statEvents')}</span>
+            <span>{t('gedcom.analysis.statEvents')}</span>
             </div>
             <div className="font-mono text-lg font-semibold text-primary">
               {formatNum(result.imported_events)}
@@ -117,6 +136,40 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Merged / Enriched Summary when executed in Merge mode */}
+        {isMergeMode && (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            data-testid="gedcom-merge-stats-grid"
+          >
+            <div
+              className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
+              data-testid="gedcom-merged-individuals"
+            >
+              <div className="flex items-center gap-1.5 text-xs text-secondary">
+                <GitMerge className="h-3.5 w-3.5 text-brand" />
+                <span>{t('gedcom.report.statMergedIndividuals')}</span>
+              </div>
+              <div className="font-mono text-lg font-semibold text-primary">
+                {formatNum(mergedIndividuals)}
+              </div>
+            </div>
+
+            <div
+              className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
+              data-testid="gedcom-merged-families"
+            >
+              <div className="flex items-center gap-1.5 text-xs text-secondary">
+                <FolderGit2 className="h-3.5 w-3.5 text-brand" />
+                <span>{t('gedcom.report.statMergedFamilies')}</span>
+              </div>
+              <div className="font-mono text-lg font-semibold text-primary">
+                {formatNum(mergedFamilies)}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Automatic Rollback Checkpoint Snapshot ID */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-canvas p-3">
