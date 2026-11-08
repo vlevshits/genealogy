@@ -5,8 +5,10 @@ import {
   GitMerge,
   History,
   Image as ImageIcon,
+  KeyRound,
   MapPin,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   Upload,
   UserCheck,
@@ -47,8 +49,22 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
 
   const mergedIndividuals = result.merged_individuals ?? 0;
   const mergedFamilies = result.merged_families ?? 0;
+  const matchedByUid = result.matched_by_uid ?? 0;
+  const matchedByNameDates = result.matched_by_name_dates ?? 0;
+  const matchedByKinship = result.matched_by_kinship ?? 0;
+  const chronologyConflictsPrevented =
+    result.chronology_conflicts_prevented ?? 0;
+  const matchedKeysPreview = result.matched_keys_preview ?? [];
+
   const isMergeMode =
-    result.mode === 'merge' || mergedIndividuals > 0 || mergedFamilies > 0;
+    result.mode === 'merge' ||
+    mergedIndividuals > 0 ||
+    mergedFamilies > 0 ||
+    matchedByUid > 0 ||
+    matchedByNameDates > 0 ||
+    matchedByKinship > 0 ||
+    chronologyConflictsPrevented > 0 ||
+    matchedKeysPreview.length > 0;
 
   return (
     <Card className="border-success/40" data-testid="gedcom-post-import-report">
@@ -109,7 +125,7 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
           <div className="rounded-xl border border-border bg-surface-muted/40 p-3 space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-secondary">
               <Sparkles className="h-3.5 w-3.5 text-brand" />
-            <span>{t('gedcom.analysis.statEvents')}</span>
+              <span>{t('gedcom.analysis.statEvents')}</span>
             </div>
             <div className="font-mono text-lg font-semibold text-primary">
               {formatNum(result.imported_events)}
@@ -137,36 +153,114 @@ export const GedcomPostImportReport: React.FC<GedcomPostImportReportProps> = ({
           </div>
         </div>
 
-        {/* Merged / Enriched Summary when executed in Merge mode */}
+        {/* Merged / Enriched Summary & Merge Keys when executed in Merge mode */}
         {isMergeMode && (
-          <div
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            data-testid="gedcom-merge-stats-grid"
-          >
+          <div className="space-y-3">
             <div
-              className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
-              data-testid="gedcom-merged-individuals"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+              data-testid="gedcom-merge-stats-grid"
             >
-              <div className="flex items-center gap-1.5 text-xs text-secondary">
-                <GitMerge className="h-3.5 w-3.5 text-brand" />
-                <span>{t('gedcom.report.statMergedIndividuals')}</span>
+              <div
+                className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
+                data-testid="gedcom-merged-individuals"
+              >
+                <div className="flex items-center gap-1.5 text-xs text-secondary">
+                  <GitMerge className="h-3.5 w-3.5 text-brand" />
+                  <span>{t('gedcom.report.statMergedIndividuals')}</span>
+                </div>
+                <div className="font-mono text-lg font-semibold text-primary">
+                  {formatNum(mergedIndividuals)}
+                </div>
               </div>
-              <div className="font-mono text-lg font-semibold text-primary">
-                {formatNum(mergedIndividuals)}
+
+              <div
+                className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
+                data-testid="gedcom-merged-families"
+              >
+                <div className="flex items-center gap-1.5 text-xs text-secondary">
+                  <FolderGit2 className="h-3.5 w-3.5 text-brand" />
+                  <span>{t('gedcom.report.statMergedFamilies')}</span>
+                </div>
+                <div className="font-mono text-lg font-semibold text-primary">
+                  {formatNum(mergedFamilies)}
+                </div>
               </div>
             </div>
 
+            {/* Merge Keys & Consistency Checks Section */}
             <div
-              className="rounded-xl border border-brand/30 bg-brand/5 p-3 space-y-1"
-              data-testid="gedcom-merged-families"
+              className="rounded-xl border border-border bg-surface p-4 space-y-3"
+              data-testid="gedcom-merge-keys-section"
             >
-              <div className="flex items-center gap-1.5 text-xs text-secondary">
-                <FolderGit2 className="h-3.5 w-3.5 text-brand" />
-                <span>{t('gedcom.report.statMergedFamilies')}</span>
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-secondary">
+                <ShieldCheck className="h-3.5 w-3.5 text-success" />
+                <span>{t('gedcom.report.mergeKeysTitle')}</span>
               </div>
-              <div className="font-mono text-lg font-semibold text-primary">
-                {formatNum(mergedFamilies)}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-secondary">
+                <div
+                  className="flex items-center justify-between rounded-lg bg-surface-muted/50 px-3 py-1.5"
+                  data-testid="gedcom-matched-by-uid"
+                >
+                  <span>{t('gedcom.report.matchedByUid')}</span>
+                  <span className="font-mono font-semibold text-primary">
+                    {formatNum(matchedByUid)}
+                  </span>
+                </div>
+
+                <div
+                  className="flex items-center justify-between rounded-lg bg-surface-muted/50 px-3 py-1.5"
+                  data-testid="gedcom-matched-by-name-dates"
+                >
+                  <span>{t('gedcom.report.matchedByNameDates')}</span>
+                  <span className="font-mono font-semibold text-primary">
+                    {formatNum(matchedByNameDates)}
+                  </span>
+                </div>
+
+                <div
+                  className="flex items-center justify-between rounded-lg bg-surface-muted/50 px-3 py-1.5"
+                  data-testid="gedcom-matched-by-kinship"
+                >
+                  <span>{t('gedcom.report.matchedByKinship')}</span>
+                  <span className="font-mono font-semibold text-primary">
+                    {formatNum(matchedByKinship)}
+                  </span>
+                </div>
+
+                <div
+                  className="flex items-center justify-between rounded-lg bg-surface-muted/50 px-3 py-1.5"
+                  data-testid="gedcom-chronology-conflicts-prevented"
+                >
+                  <span>{t('gedcom.report.chronologyConflictsPrevented')}</span>
+                  <span className="font-mono font-semibold text-primary">
+                    {formatNum(chronologyConflictsPrevented)}
+                  </span>
+                </div>
               </div>
+
+              {matchedKeysPreview.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-secondary">
+                    <KeyRound className="h-3.5 w-3.5 text-brand" />
+                    <span>
+                      {t('gedcom.report.matchedKeysPreviewTitle', {
+                        count: formatNum(matchedKeysPreview.length),
+                      })}
+                    </span>
+                  </div>
+                  <ul
+                    className="max-h-48 overflow-y-auto rounded-lg border border-border bg-canvas divide-y divide-border text-xs font-mono text-primary"
+                    data-testid="gedcom-matched-keys-preview"
+                  >
+                    {matchedKeysPreview.map((item, idx) => (
+                      <li key={idx} className="px-3 py-1.5 truncate">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -6,6 +6,9 @@ pub(crate) fn check_merge_cycle(
     keep_id: &str,
     merge_id: &str,
 ) -> Result<(), AppError> {
+    ensure_no_ancestor_cycle(&store.families, keep_id, merge_id)?;
+    ensure_no_ancestor_cycle(&store.families, merge_id, keep_id)?;
+
     let mut simulated_families = store.families.clone();
     for fam in &mut simulated_families {
         if fam.partner1_id.as_deref() == Some(merge_id) {
@@ -22,6 +25,11 @@ pub(crate) fn check_merge_cycle(
     }
 
     for fam in &simulated_families {
+        let involves_keep = fam.partner1_id.as_deref() == Some(keep_id)
+            || fam.partner2_id.as_deref() == Some(keep_id);
+        if !involves_keep {
+            continue;
+        }
         for parent_opt in [&fam.partner1_id, &fam.partner2_id] {
             if let Some(p_id) = parent_opt.as_deref() {
                 for ch in &fam.children {
@@ -553,7 +561,7 @@ pub fn execute_person_merge(
             .retain(|c: &FamilyChildDto| seen_children.insert(c.child_id.clone()));
     }
 
-    // Merge duplicate families that now share identical partner pairs
+    // Merge duplicate families that now share identical partner pairs or single+two-parent overlap
     let mut merged_families: Vec<crate::services::privacy::FamilyDto> = Vec::new();
     for fam in store.families.drain(..) {
         let existing_pos = merged_families.iter().position(|ef| {
@@ -561,11 +569,58 @@ pub fn execute_person_merge(
                 ef.partner1_id == fam.partner1_id && ef.partner2_id == fam.partner2_id;
             let same_swapped =
                 ef.partner1_id == fam.partner2_id && ef.partner2_id == fam.partner1_id;
-            (same_direct || same_swapped)
+            if (same_direct || same_swapped)
                 && (fam.partner1_id.is_some() || fam.partner2_id.is_some())
+            {
+                return true;
+            }
+            let ef_partners: Vec<&str> = [ef.partner1_id.as_deref(), ef.partner2_id.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+            let fam_partners: Vec<&str> = [fam.partner1_id.as_deref(), fam.partner2_id.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+            let one_is_single = (ef_partners.len() == 1 && !fam_partners.is_empty())
+                || (fam_partners.len() == 1 && !ef_partners.is_empty());
+            let shares_partner = ef_partners.iter().any(|p| fam_partners.contains(p));
+            let shares_child = ef
+                .children
+                .iter()
+                .any(|ec| fam.children.iter().any(|fc| fc.child_id == ec.child_id));
+            one_is_single && shares_partner && shares_child
         });
         if let Some(idx) = existing_pos {
             let target_fam_id = merged_families[idx].id.clone();
+            if merged_families[idx].partner1_id.is_none() {
+                if let Some(p) = fam
+                    .partner1_id
+                    .as_ref()
+                    .filter(|p| merged_families[idx].partner2_id.as_ref() != Some(*p))
+                    .or_else(|| {
+                        fam.partner2_id
+                            .as_ref()
+                            .filter(|p| merged_families[idx].partner2_id.as_ref() != Some(*p))
+                    })
+                {
+                    merged_families[idx].partner1_id = Some(p.clone());
+                }
+            }
+            if merged_families[idx].partner2_id.is_none() {
+                if let Some(p) = fam
+                    .partner2_id
+                    .as_ref()
+                    .filter(|p| merged_families[idx].partner1_id.as_ref() != Some(*p))
+                    .or_else(|| {
+                        fam.partner1_id
+                            .as_ref()
+                            .filter(|p| merged_families[idx].partner1_id.as_ref() != Some(*p))
+                    })
+                {
+                    merged_families[idx].partner2_id = Some(p.clone());
+                }
+            }
             for ch in fam.children {
                 if !merged_families[idx]
                     .children

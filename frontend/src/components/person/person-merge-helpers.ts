@@ -1,4 +1,172 @@
-import { PersonMergePreviewDto } from "../../api/client";
+import { PersonMergePreviewDto, TreePersonNodeDto } from "../../api/client";
+
+function extractYearFromNode(node: TreePersonNodeDto | undefined): number | null {
+  if (!node) return null;
+  if (typeof node.birth_sort === 'number' && node.birth_sort > 10000000) {
+    return Math.floor(node.birth_sort / 10000);
+  }
+  const dateStr = node.birth?.date || '';
+  const match = dateStr.match(/\b(1\d{3}|20\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function surnamesOverlap(aRaw?: string | null, bRaw?: string | null): boolean {
+  const a = (aRaw || '').trim().toLowerCase();
+  const b = (bRaw || '').trim().toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4) {
+    const prefixLen = Math.min(a.length, b.length) - 1;
+    if (prefixLen >= 4 && a.slice(0, prefixLen) === b.slice(0, prefixLen)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function formatTreePersonLabel(node: TreePersonNodeDto): string {
+  const full = [
+    node.primary_name?.given_name,
+    node.primary_name?.patronymic,
+    node.primary_name?.surname,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const namePart = full || node.gid || node.id;
+  const birthYear = extractYearFromNode(node);
+  return birthYear
+    ? `${namePart} (${node.gid}) · *${birthYear}`
+    : `${namePart} (${node.gid})`;
+}
+
+export function rankMergeCandidatesForTarget(
+  targetNode: TreePersonNodeDto | undefined,
+  allNodes: TreePersonNodeDto[]
+): Array<{ person: TreePersonNodeDto; score: number }> {
+  const others = allNodes.filter(
+    (n) =>
+      !targetNode ||
+      (n.id !== targetNode.id && n.gid !== targetNode.gid)
+  );
+  if (!targetNode) {
+    return others.map((person) => ({ person, score: 0 }));
+  }
+
+  const tgtGiven = (targetNode.primary_name?.given_name || '')
+    .trim()
+    .toLowerCase();
+  const tgtSurname = targetNode.primary_name?.surname;
+  const tgtBirthSurname = targetNode.birth_surname;
+  const tgtYear = extractYearFromNode(targetNode);
+
+  const scored = others.map((person) => {
+    let score = 0;
+    const candGiven = (person.primary_name?.given_name || '')
+      .trim()
+      .toLowerCase();
+    if (tgtGiven && candGiven && tgtGiven === candGiven) {
+      score += 20;
+    }
+
+    const candSurname = person.primary_name?.surname;
+    const candBirthSurname = person.birth_surname;
+    if (
+      surnamesOverlap(tgtSurname, candSurname) ||
+      surnamesOverlap(tgtSurname, candBirthSurname) ||
+      surnamesOverlap(tgtBirthSurname, candSurname) ||
+      surnamesOverlap(tgtBirthSurname, candBirthSurname)
+    ) {
+      score += 15;
+    }
+
+    if (
+      targetNode.sex &&
+      targetNode.sex !== 'U' &&
+      person.sex === targetNode.sex
+    ) {
+      score += 5;
+    }
+
+    const candYear = extractYearFromNode(person);
+    if (
+      tgtYear !== null &&
+      candYear !== null &&
+      Math.abs(tgtYear - candYear) <= 5
+    ) {
+      score += 10;
+    }
+
+    return { person, score };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return formatTreePersonLabel(a.person).localeCompare(
+      formatTreePersonLabel(b.person)
+    );
+  });
+
+  return scored;
+}
+
+export function buildMergePreviewFromTreeNodes(
+  targetNode: TreePersonNodeDto | undefined,
+  sourceNode: TreePersonNodeDto | undefined,
+  targetId: string = 'node-deceased-1',
+  sourceId: string = 'node-dup-2'
+): PersonMergePreviewDto {
+  const fallback = buildDefaultMergePreview(targetId, sourceId);
+  return {
+    target: targetNode
+      ? {
+        id: targetNode.id,
+        gid: targetNode.gid,
+        sex: targetNode.sex,
+        is_living: targetNode.is_living,
+        is_private: targetNode.is_private,
+        primary_name: {
+          given_name: targetNode.primary_name.given_name,
+          patronymic: targetNode.primary_name.patronymic,
+          surname: targetNode.primary_name.surname,
+        },
+        birth: targetNode.birth
+          ? { date: targetNode.birth.date, place: targetNode.birth.place }
+          : null,
+        death: targetNode.death
+          ? { date: targetNode.death.date, place: targetNode.death.place }
+          : null,
+        biography: targetNode.biography ?? null,
+        avatar_url: targetNode.avatar_url ?? null,
+        notes: targetNode.notes ?? null,
+      }
+      : fallback.target,
+    source: sourceNode
+      ? {
+        id: sourceNode.id,
+        gid: sourceNode.gid,
+        sex: sourceNode.sex,
+        is_living: sourceNode.is_living,
+        is_private: sourceNode.is_private,
+        primary_name: {
+          given_name: sourceNode.primary_name.given_name,
+          patronymic: sourceNode.primary_name.patronymic,
+          surname: sourceNode.primary_name.surname,
+        },
+        birth: sourceNode.birth
+          ? { date: sourceNode.birth.date, place: sourceNode.birth.place }
+          : null,
+        death: sourceNode.death
+          ? { date: sourceNode.death.date, place: sourceNode.death.place }
+          : null,
+        biography: sourceNode.biography ?? null,
+        avatar_url: sourceNode.avatar_url ?? null,
+        notes: sourceNode.notes ?? null,
+      }
+      : fallback.source,
+    combined_counts: fallback.combined_counts,
+  };
+}
 
 export function buildDefaultMergePreview(
   targetId: string = 'node-deceased-1',
@@ -86,10 +254,10 @@ function normalizeMergeSide(
     rawPrimary?.patronymic !== undefined
       ? rawPrimary.patronymic
       : typeof raw.patronymic === 'string'
-      ? raw.patronymic
-      : displayParts.length > 2
-      ? displayParts.slice(1, -1).join(' ')
-      : null;
+        ? raw.patronymic
+        : displayParts.length > 2
+          ? displayParts.slice(1, -1).join(' ')
+          : null;
 
   const rawBirth = raw.birth as
     | { date: string | null; place: string | null }
@@ -116,22 +284,22 @@ function normalizeMergeSide(
     },
     birth: rawBirth
       ? {
-          date: rawBirth.date ?? null,
-          place: rawBirth.place ?? null,
-        }
+        date: rawBirth.date ?? null,
+        place: rawBirth.place ?? null,
+      }
       : {
-          date: typeof raw.birth_date === 'string' ? raw.birth_date : null,
-          place: typeof raw.birth_place === 'string' ? raw.birth_place : null,
-        },
+        date: typeof raw.birth_date === 'string' ? raw.birth_date : null,
+        place: typeof raw.birth_place === 'string' ? raw.birth_place : null,
+      },
     death: rawDeath
       ? {
-          date: rawDeath.date ?? null,
-          place: rawDeath.place ?? null,
-        }
+        date: rawDeath.date ?? null,
+        place: rawDeath.place ?? null,
+      }
       : {
-          date: typeof raw.death_date === 'string' ? raw.death_date : null,
-          place: typeof raw.death_place === 'string' ? raw.death_place : null,
-        },
+        date: typeof raw.death_date === 'string' ? raw.death_date : null,
+        place: typeof raw.death_place === 'string' ? raw.death_place : null,
+      },
     biography: (raw.biography as string | null | undefined) ?? null,
     notes: (raw.notes as string | null | undefined) ?? null,
   };
@@ -319,8 +487,8 @@ export function normalizeMergePreviewResponse(
     events: countTransferField(
       res.events_to_transfer,
       (Array.isArray(target.events) ? target.events.length : 0) +
-        (Array.isArray(source.events) ? source.events.length : 0) ||
-        def.combined_counts.events
+      (Array.isArray(source.events) ? source.events.length : 0) ||
+      def.combined_counts.events
     ),
     media: countTransferField(
       res.media_to_transfer,
@@ -329,8 +497,8 @@ export function normalizeMergePreviewResponse(
     families: countTransferField(
       res.families_to_transfer,
       (Array.isArray(target.families) ? target.families.length : 0) +
-        (Array.isArray(source.families) ? source.families.length : 0) ||
-        def.combined_counts.families
+      (Array.isArray(source.families) ? source.families.length : 0) ||
+      def.combined_counts.families
     ),
     notes: countTransferField(
       res.notes_to_transfer,

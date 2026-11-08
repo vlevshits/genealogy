@@ -600,6 +600,17 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
           }
           onNavigate?.(`/persons/${p.id}`);
         }}
+        onMergePerson={(p) => {
+          const url = `/people/merge?target=${encodeURIComponent(
+            p.id
+          )}&returnTo=${encodeURIComponent("/tree?focus=" + p.id)}`;
+          if (onNavigate) {
+            onNavigate(url);
+          } else if (typeof window !== "undefined") {
+            window.history.pushState({}, "", url);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }
+        }}
         onKinshipOpenChange={(open) => {
           setKinshipDialogOpen(open);
           if (!open) {

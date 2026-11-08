@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Crosshair,
   ExternalLink,
+  GitMerge,
   Home,
   Lock,
   PenTool,
@@ -33,6 +34,7 @@ export interface PersonBottomSheetProps {
   onSelectRelative?: (person: TreePersonNodeDto) => void;
   onQuickAdd?: (person: TreePersonNodeDto, relation: QuickAddRelation) => void;
   onEditPerson?: (person: TreePersonNodeDto) => void;
+  onMergePerson?: (person: TreePersonNodeDto) => void;
   onOpenProfile?: (person: TreePersonNodeDto) => void;
 }
 
@@ -49,6 +51,7 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
   onSelectRelative,
   onQuickAdd,
   onEditPerson,
+  onMergePerson,
   onOpenProfile,
 }) => {
   const { t, locale } = useI18n();
@@ -229,6 +232,29 @@ export const PersonBottomSheet: React.FC<PersonBottomSheetProps> = ({
                   >
                     {t('person.actions.editProfile')}
                   </Button>
+                  {(accessTier === 'admin' || canEdit) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      leftIcon={<GitMerge className="h-3.5 w-3.5" />}
+                      data-testid="bottom-sheet-merge-person-btn"
+                      onClick={() => {
+                        if (onMergePerson) {
+                          onMergePerson(person);
+                        } else if (typeof window !== 'undefined') {
+                          const url = `/people/merge?target=${encodeURIComponent(
+                            person.id
+                          )}&returnTo=${encodeURIComponent(
+                            '/tree?focus=' + person.id
+                          )}`;
+                          window.history.pushState({}, '', url);
+                          window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
+                      }}
+                    >
+                      {t('profile.actions.mergeWith')}
+                    </Button>
+                  )}
                 </>
               )}
             </div>

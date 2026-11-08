@@ -2,8 +2,171 @@
 use super::*;
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn find_and_enrich_existing_family(
+    store: &mut GenealogyPrivacyStore,
+    initial_families_count: usize,
+    partner1_id: &Option<String>,
+    partner2_id: &Option<String>,
+    relationship_type: &str,
+    children: &[FamilyChildDto],
+    external_ids: &HashMap<String, String>,
+    reserved_uid_family_indices: &HashMap<String, usize>,
+    reserved_family_indices: &HashSet<usize>,
+    already_matched_family_indices: &mut HashSet<usize>,
+) -> Option<String> {
+    let bound = initial_families_count.min(store.families.len());
+    if bound == 0 {
+        return None;
+    }
+
+    let uid_opt = external_ids.get("uid").filter(|u| !u.is_empty());
+    let inc_child_ids: HashSet<&str> = children.iter().map(|c| c.child_id.as_str()).collect();
+
+    let reserved_idx = uid_opt
+        .and_then(|uid| reserved_uid_family_indices.get(uid).copied())
+        .filter(|&idx| idx < bound && !already_matched_family_indices.contains(&idx));
+
+    let match_idx = reserved_idx.or_else(|| {
+        (0..bound).find(|&idx| {
+            if already_matched_family_indices.contains(&idx) {
+                return false;
+            }
+            let f = &store.families[idx];
+
+            // (a) Match by external UID
+            if let Some(uid) = uid_opt {
+                if f.external_ids
+                    .get("uid")
+                    .is_some_and(|fu| fu.eq_ignore_ascii_case(uid))
+                {
+                    return true;
+                }
+            }
+
+            if reserved_family_indices.contains(&idx) {
+                return false;
+            }
+
+            let f_uid = f.external_ids.get("uid").filter(|u| !u.is_empty());
+            let both_have_different_uids =
+                matches!((f_uid, uid_opt), (Some(fu), Some(iu)) if !fu.eq_ignore_ascii_case(iu));
+
+            // (b) Both partner1_id and partner2_id are Some and match in either order
+            if let (Some(ip1), Some(ip2), Some(fp1), Some(fp2)) = (
+                partner1_id.as_deref(),
+                partner2_id.as_deref(),
+                f.partner1_id.as_deref(),
+                f.partner2_id.as_deref(),
+            ) {
+                if (ip1 == fp1 && ip2 == fp2) || (ip1 == fp2 && ip2 == fp1) {
+                    return true;
+                }
+                return false;
+            }
+
+            if both_have_different_uids {
+                return false;
+            }
+
+            let shared_children_count = f
+                .children
+                .iter()
+                .filter(|c| inc_child_ids.contains(c.child_id.as_str()))
+                .count();
+
+            // (c) At least one partner matches (or single-parent families complement each other) AND they share >= 1 child
+            let f_partners: Vec<&str> = [f.partner1_id.as_deref(), f.partner2_id.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+            let inc_partners: Vec<&str> = [partner1_id.as_deref(), partner2_id.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+
+            let shares_partner = f_partners.iter().any(|fp| inc_partners.contains(fp));
+            let complementary_single_parents = f_partners.len() == 1
+                && inc_partners.len() == 1
+                && ((f.partner1_id.is_some() && partner2_id.is_some())
+                    || (f.partner2_id.is_some() && partner1_id.is_some()));
+
+            if (shares_partner || complementary_single_parents) && shared_children_count >= 1 {
+                return true;
+            }
+
+            // (d) Both partners are None on one side and they share >= 2 children (or exact same single child)
+            if (f_partners.is_empty() || inc_partners.is_empty())
+                && (shared_children_count >= 2
+                    || (shared_children_count == 1
+                        && f.children.len() == 1
+                        && inc_child_ids.len() == 1))
+            {
+                return true;
+            }
+
+            false
+        })
+    })?;
+
+    already_matched_family_indices.insert(match_idx);
+    let existing = &mut store.families[match_idx];
+
+    if existing.partner1_id.is_none() {
+        if let Some(p1) = partner1_id.as_ref() {
+            if existing.partner2_id.as_ref() != Some(p1) {
+                existing.partner1_id = Some(p1.clone());
+            }
+        } else if let Some(p2) = partner2_id.as_ref() {
+            if existing.partner2_id.as_ref() != Some(p2) {
+                existing.partner1_id = Some(p2.clone());
+            }
+        }
+    }
+    if existing.partner2_id.is_none() {
+        if let Some(p2) = partner2_id.as_ref() {
+            if existing.partner1_id.as_ref() != Some(p2) {
+                existing.partner2_id = Some(p2.clone());
+            }
+        } else if let Some(p1) = partner1_id.as_ref() {
+            if existing.partner1_id.as_ref() != Some(p1) {
+                existing.partner2_id = Some(p1.clone());
+            }
+        }
+    }
+
+    if existing.relationship_type == "unknown" && relationship_type != "unknown" {
+        existing.relationship_type = relationship_type.to_string();
+    }
+
+    for inc_child in children {
+        let is_self_parent = existing.partner1_id.as_deref() == Some(inc_child.child_id.as_str())
+            || existing.partner2_id.as_deref() == Some(inc_child.child_id.as_str());
+        if !is_self_parent
+            && !existing
+                .children
+                .iter()
+                .any(|c| c.child_id == inc_child.child_id)
+        {
+            let mut new_child = inc_child.clone();
+            new_child.sort_order = existing.children.len() as i32;
+            existing.children.push(new_child);
+        }
+    }
+
+    for (k, v) in external_ids {
+        existing
+            .external_ids
+            .entry(k.clone())
+            .or_insert_with(|| v.clone());
+    }
+
+    Some(existing.id.clone())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn import_gedcom_families_and_associations(
     store: &mut GenealogyPrivacyStore,
+    initial_families_count: usize,
     roots: &[GedcomNode],
     mode: &str,
     indi_xref_to_person_id: &HashMap<String, String>,
@@ -17,6 +180,12 @@ pub(crate) fn import_gedcom_families_and_associations(
     warnings: &mut Vec<String>,
 ) -> usize {
     let mut merged_families: usize = 0;
+    let (reserved_uid_family_indices, reserved_family_indices) = if mode == "merge" {
+        reserve_existing_family_uids(store, initial_families_count, roots)
+    } else {
+        (HashMap::new(), HashSet::new())
+    };
+    let mut already_matched_family_indices: HashSet<usize> = HashSet::new();
 
     // Pass 3: Parse all `0 @Fxxxx@ FAM` records
     for node in roots {
@@ -74,6 +243,12 @@ pub(crate) fn import_gedcom_families_and_associations(
         for (idx, ch_node) in node.children.iter().filter(|c| c.tag == "CHIL").enumerate() {
             let ch_xref = ch_node.value.trim().trim_matches('@').to_uppercase();
             if let Some(child_id) = indi_xref_to_person_id.get(&ch_xref).cloned() {
+                if partner1_id.as_deref() == Some(child_id.as_str())
+                    || partner2_id.as_deref() == Some(child_id.as_str())
+                    || children.iter().any(|c| c.child_id == child_id)
+                {
+                    continue;
+                }
                 let pedi = person_famc_pedi
                     .get(&(child_id.clone(), fam_xref_clean.clone()))
                     .cloned()
@@ -100,11 +275,15 @@ pub(crate) fn import_gedcom_families_and_associations(
         let existing_fam_id = if mode == "merge" {
             find_and_enrich_existing_family(
                 store,
+                initial_families_count,
                 &partner1_id,
                 &partner2_id,
                 &relationship_type,
                 &children,
                 &external_ids,
+                &reserved_uid_family_indices,
+                &reserved_family_indices,
+                &mut already_matched_family_indices,
             )
         } else {
             None
@@ -426,7 +605,9 @@ pub(crate) fn parse_and_insert_event(
     top_level_sources: &HashMap<String, String>,
     obje_xref_to_media_id: &HashMap<String, String>,
 ) {
-    let raw_date = ev_node.child_value("DATE");
+    let raw_date = ev_node
+        .child_value("DATE")
+        .filter(|d| !d.trim().is_empty() && !d.trim().eq_ignore_ascii_case("Y"));
     let parsed_date = raw_date.as_deref().map(GenDate::parse);
     let date_sort = parsed_date.as_ref().and_then(|d| d.sort_key());
     let gedcom_date = raw_date

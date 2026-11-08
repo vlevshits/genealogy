@@ -42,6 +42,7 @@ export interface TreeCanvasOverlaysAndDialogsProps {
   onPersonDeleted: (deletedId: string) => void;
   onReloadTree: () => void;
   onOpenProfile: (person: TreePersonNodeDto) => void;
+  onMergePerson?: (person: TreePersonNodeDto) => void;
   onKinshipOpenChange: (open: boolean) => void;
   onHighlightPath: (ids: string[], traces?: HighlightedTrace[]) => void;
 }
@@ -74,6 +75,7 @@ export const TreeCanvasOverlaysAndDialogs: React.FC<TreeCanvasOverlaysAndDialogs
   onPersonDeleted,
   onReloadTree,
   onOpenProfile,
+  onMergePerson,
   onKinshipOpenChange,
   onHighlightPath,
 }) => {
@@ -83,6 +85,20 @@ export const TreeCanvasOverlaysAndDialogs: React.FC<TreeCanvasOverlaysAndDialogs
       (selectedPerson.id === resolvedHomePersonId ||
         selectedPerson.gid === resolvedHomePersonId)
   );
+
+  const handleMergePerson = (p: TreePersonNodeDto) => {
+    if (onMergePerson) {
+      onMergePerson(p);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      const url = `/people/merge?target=${encodeURIComponent(
+        p.id
+      )}&returnTo=${encodeURIComponent("/tree?focus=" + p.id)}`;
+      window.history.pushState({}, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+  };
 
   return (
     <>
@@ -104,6 +120,7 @@ export const TreeCanvasOverlaysAndDialogs: React.FC<TreeCanvasOverlaysAndDialogs
           onEditPerson={(p) => onEditTargetChange(p)}
           onAddEvent={(p) => onEventTargetChange(p)}
           onDeletePerson={(p) => onDeleteTargetChange(p)}
+          onMergePerson={handleMergePerson}
           onOpenProfile={onOpenProfile}
         />
       ) : (
@@ -122,6 +139,7 @@ export const TreeCanvasOverlaysAndDialogs: React.FC<TreeCanvasOverlaysAndDialogs
           onSelectRelative={onSelectRelative}
           onQuickAdd={onQuickAdd}
           onEditPerson={(p) => onEditTargetChange(p)}
+          onMergePerson={handleMergePerson}
           onOpenProfile={onOpenProfile}
         />
       )}

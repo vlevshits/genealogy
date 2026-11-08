@@ -445,3 +445,258 @@ async fn test_gedcom_smart_merge_enrichment_and_non_destructive_fields() {
     assert_eq!(p_i0001.primary_name.given_name, "Павел");
     assert_eq!(p_i0001.primary_name.surname, "Кузнецов");
 }
+
+fn count_connected_components(
+    persons: &[TreePersonNodeDto],
+    families: &[genealogy_backend::services::privacy::FamilyDto],
+) -> usize {
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    for p in persons {
+        adj.entry(p.id.as_str()).or_default();
+    }
+    for f in families {
+        let mut members: Vec<&str> = Vec::new();
+        if let Some(p1) = f.partner1_id.as_deref() {
+            members.push(p1);
+        }
+        if let Some(p2) = f.partner2_id.as_deref() {
+            members.push(p2);
+        }
+        for c in &f.children {
+            members.push(c.child_id.as_str());
+        }
+        for i in 0..members.len() {
+            for j in (i + 1)..members.len() {
+                adj.entry(members[i]).or_default().push(members[j]);
+                adj.entry(members[j]).or_default().push(members[i]);
+            }
+        }
+    }
+
+    let mut visited: HashSet<&str> = HashSet::new();
+    let mut components = 0usize;
+    for p in persons {
+        let start = p.id.as_str();
+        if !visited.insert(start) {
+            continue;
+        }
+        components += 1;
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        while let Some(curr) = queue.pop_front() {
+            if let Some(neighbors) = adj.get(curr) {
+                for &nxt in neighbors {
+                    if visited.insert(nxt) {
+                        queue.push_back(nxt);
+                    }
+                }
+            }
+        }
+    }
+    components
+}
+
+#[tokio::test]
+async fn test_merge_gramps_and_myheritage_real_files_both_directions() {
+    use genealogy_backend::services::{
+        gedcom::import_gedcom_into_store, privacy::GenealogyPrivacyStore,
+    };
+
+    let gramps_bytes =
+        std::fs::read("../test-data/gramps-export/gramps-web-export-20261026130902.ged")
+            .expect("gramps GEDCOM fixture should exist");
+    let mh_bytes = std::fs::read("../test-data/6na71k_97365268f67d1031ya027a_A.ged")
+        .expect("MyHeritage GEDCOM fixture should exist");
+
+    // Direction 1: Gramps -> MyHeritage
+    let mut store_gm = GenealogyPrivacyStore::empty();
+    let r1 = import_gedcom_into_store(&mut store_gm, &gramps_bytes, "merge", None, 2026, 110)
+        .expect("Gramps import should succeed");
+    assert_eq!(r1.imported_individuals, 284);
+    assert_eq!(r1.imported_families, 84);
+
+    let r2 = import_gedcom_into_store(&mut store_gm, &mh_bytes, "merge", None, 2026, 110)
+        .expect("MyHeritage merge should succeed");
+    assert_eq!(r2.merged_individuals, 261);
+    assert_eq!(r2.imported_individuals, 110);
+    assert_eq!(r2.merged_families, 80);
+    assert_eq!(r2.imported_families, 39);
+    assert_eq!(store_gm.persons.len(), 394);
+    assert_eq!(store_gm.families.len(), 123);
+    assert_eq!(
+        count_connected_components(&store_gm.persons, &store_gm.families),
+        1
+    );
+
+    // Direction 2: MyHeritage -> Gramps
+    let mut store_mg = GenealogyPrivacyStore::empty();
+    let r3 = import_gedcom_into_store(&mut store_mg, &mh_bytes, "merge", None, 2026, 110)
+        .expect("MyHeritage import should succeed");
+    assert_eq!(r3.imported_individuals, 371);
+    assert_eq!(r3.imported_families, 119);
+
+    let r4 = import_gedcom_into_store(&mut store_mg, &gramps_bytes, "merge", None, 2026, 110)
+        .expect("Gramps merge should succeed");
+    assert_eq!(r4.merged_individuals, 261);
+    assert_eq!(r4.imported_individuals, 23);
+    assert_eq!(r4.merged_families, 80);
+    assert_eq!(r4.imported_families, 4);
+    assert_eq!(store_mg.persons.len(), 394);
+    assert_eq!(store_mg.families.len(), 123);
+    assert_eq!(
+        count_connected_components(&store_mg.persons, &store_mg.families),
+        1
+    );
+
+    for store in [&store_gm, &store_mg] {
+        for p in &store.persons {
+            assert!(
+                !p.primary_name.given_name.contains("Р’") && !p.primary_name.surname.contains("Р’"),
+                "Person name must not contain Windows-1251 mojibake: {:?}",
+                p.primary_name
+            );
+        }
+        for f in &store.families {
+            for c in &f.children {
+                assert_ne!(f.partner1_id.as_deref(), Some(c.child_id.as_str()));
+                assert_ne!(f.partner2_id.as_deref(), Some(c.child_id.as_str()));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_merge_all_three_real_files_any_order() {
+    use genealogy_backend::services::{
+        gedcom::import_gedcom_into_store, privacy::GenealogyPrivacyStore,
+    };
+
+    let gramps_bytes =
+        std::fs::read("../test-data/gramps-export/gramps-web-export-20261026130902.ged")
+            .expect("gramps GEDCOM fixture should exist");
+    let mh_bytes = std::fs::read("../test-data/6na71k_97365268f67d1031ya027a_A.ged")
+        .expect("MyHeritage GEDCOM fixture should exist");
+    let filimon_bytes = std::fs::read("../test-data/filimon-levshits.ged")
+        .expect("filimon-levshits GEDCOM fixture should exist");
+
+    let orders: [(&str, [&[u8]; 3]); 3] = [
+        (
+            "Gramps -> MyHeritage -> Filimon",
+            [&gramps_bytes, &mh_bytes, &filimon_bytes],
+        ),
+        (
+            "MyHeritage -> Gramps -> Filimon",
+            [&mh_bytes, &gramps_bytes, &filimon_bytes],
+        ),
+        (
+            "Filimon -> Gramps -> MyHeritage",
+            [&filimon_bytes, &gramps_bytes, &mh_bytes],
+        ),
+    ];
+
+    for (label, files) in orders {
+        let mut store = GenealogyPrivacyStore::empty();
+        for (step, raw) in files.iter().enumerate() {
+            let res = import_gedcom_into_store(&mut store, raw, "merge", None, 2026, 110)
+                .unwrap_or_else(|e| panic!("{label} step {step} failed: {e:?}"));
+            if step > 0 {
+                assert!(
+                    !res.matched_keys_preview.is_empty(),
+                    "{label} step {step} should populate matched_keys_preview"
+                );
+            }
+        }
+
+        assert_eq!(
+            store.persons.len(),
+            407,
+            "{label}: expected 407 total individuals"
+        );
+        assert_eq!(
+            store.families.len(),
+            129,
+            "{label}: expected 129 total families"
+        );
+        assert_eq!(
+            count_connected_components(&store.persons, &store.families),
+            1,
+            "{label}: expected 1 connected component"
+        );
+
+        let filimon = store
+            .persons
+            .iter()
+            .find(|p| p.primary_name.given_name == "Филимон" && p.primary_name.surname == "Левшиц")
+            .expect("Филимон Левшиц should exist");
+        assert_eq!(
+            filimon.primary_name.patronymic.as_deref(),
+            Some("Кузьмич"),
+            "{label}: Филимон patronymic"
+        );
+        assert_eq!(
+            filimon.birth_sort.map(|bs| bs / 10_000),
+            Some(1908),
+            "{label}: Филимон birth year"
+        );
+        assert_eq!(
+            filimon.death_sort.map(|ds| ds / 10_000),
+            Some(1945),
+            "{label}: Филимон death year"
+        );
+
+        let filimon_parent_fams: Vec<_> = store
+            .families
+            .iter()
+            .filter(|f| f.children.iter().any(|c| c.child_id == filimon.id))
+            .collect();
+        assert_eq!(
+            filimon_parent_fams.len(),
+            1,
+            "{label}: Филимон should have 1 parent family (F2)"
+        );
+
+        let filimon_spouse_fams: Vec<_> = store
+            .families
+            .iter()
+            .filter(|f| {
+                f.partner1_id.as_deref() == Some(filimon.id.as_str())
+                    || f.partner2_id.as_deref() == Some(filimon.id.as_str())
+            })
+            .collect();
+        assert_eq!(
+            filimon_spouse_fams.len(),
+            1,
+            "{label}: Филимон should have 1 spouse family"
+        );
+        assert_eq!(
+            filimon_spouse_fams[0].children.len(),
+            5,
+            "{label}: Филимон + Анна family should have 5 children"
+        );
+
+        let antonina_matches: Vec<_> = store
+            .persons
+            .iter()
+            .filter(|p| {
+                p.primary_name.given_name == "Антонина"
+                    && p.birth_sort.map(|bs| bs / 10_000) == Some(1935)
+            })
+            .collect();
+        assert_eq!(
+            antonina_matches.len(),
+            1,
+            "{label}: Антонина (b. 1935) must not be duplicated"
+        );
+        assert_eq!(
+            antonina_matches[0].birth_surname.as_deref(),
+            Some("Швед"),
+            "{label}: Антонина birth_surname should be Швед"
+        );
+        assert_eq!(
+            antonina_matches[0].primary_name.surname, "Левшиц",
+            "{label}: Антонина married surname should be Левшиц"
+        );
+    }
+}

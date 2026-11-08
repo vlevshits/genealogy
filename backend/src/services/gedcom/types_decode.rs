@@ -135,6 +135,16 @@ pub struct GedcomImportResult {
     #[serde(default)]
     pub merged_families: usize,
     #[serde(default)]
+    pub matched_by_uid: usize,
+    #[serde(default)]
+    pub matched_by_name_dates: usize,
+    #[serde(default)]
+    pub matched_by_kinship: usize,
+    #[serde(default)]
+    pub chronology_conflicts_prevented: usize,
+    #[serde(default)]
+    pub matched_keys_preview: Vec<String>,
+    #[serde(default)]
     pub imported_events: usize,
     #[serde(default)]
     pub imported_places: usize,
@@ -204,6 +214,54 @@ impl GedcomNode {
     }
 }
 
+/// Rejoins multi-byte UTF-8 characters that MyHeritage or other exporters split across a
+/// line break and a `N CONC ` continuation tag (`...Белару\xD1\r\n4 CONC \x81ь...`).
+pub(crate) fn rejoin_utf8_conc_splits(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        out.push(b);
+        i += 1;
+
+        if b >= 0x80 && i < bytes.len() && (bytes[i] == b'\r' || bytes[i] == b'\n') {
+            let mut j = i;
+            if j < bytes.len() && bytes[j] == b'\r' {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'\n' {
+                j += 1;
+                while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    j += 1;
+                }
+                let digits_start = j;
+                while j < bytes.len() && bytes[j].is_ascii_digit() {
+                    j += 1;
+                }
+                if j > digits_start {
+                    let spaces_start = j;
+                    while j < bytes.len() && bytes[j] == b' ' {
+                        j += 1;
+                    }
+                    if j > spaces_start
+                        && j + 4 <= bytes.len()
+                        && bytes[j..j + 4].eq_ignore_ascii_case(b"CONC")
+                    {
+                        j += 4;
+                        if j < bytes.len() && bytes[j] == b' ' {
+                            j += 1;
+                        }
+                        if j < bytes.len() && (0x80..=0xBF).contains(&bytes[j]) {
+                            i = j;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Detects character encoding and decodes raw GEDCOM bytes (`03 §2.1 #2, §6 DoD #2`).
 /// Supports UTF-8 (with or without BOM), UTF-16LE/BE, Windows-1251, Windows-1252, and ANSEL.
 pub fn decode_gedcom_bytes(bytes: &[u8]) -> (String, String) {
@@ -213,7 +271,8 @@ pub fn decode_gedcom_bytes(bytes: &[u8]) -> (String, String) {
 
     // 1. UTF-8 BOM
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        let text = String::from_utf8_lossy(&bytes[3..]).into_owned();
+        let rejoined = rejoin_utf8_conc_splits(&bytes[3..]);
+        let text = String::from_utf8_lossy(&rejoined).into_owned();
         return (text, "UTF-8".to_string());
     }
 
@@ -241,22 +300,28 @@ pub fn decode_gedcom_bytes(bytes: &[u8]) -> (String, String) {
         .take(1024)
         .map(|&b| if b.is_ascii() { b as char } else { ' ' })
         .collect();
-    let declared_char = ascii_head
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            trimmed
-                .strip_prefix("1 CHAR ")
-                .map(|v| v.trim().to_ascii_uppercase())
-        })
-        .unwrap_or_else(|| "UTF-8".to_string());
+    let explicit_char = ascii_head.lines().find_map(|line| {
+        let trimmed = line.trim();
+        trimmed
+            .strip_prefix("1 CHAR ")
+            .map(|v| v.trim().to_ascii_uppercase())
+    });
+    let declared_char = explicit_char.clone().unwrap_or_else(|| "UTF-8".to_string());
 
     if declared_char == "ANSEL" {
         return (decode_ansel(bytes), "ANSEL".to_string());
     }
 
-    if let Ok(utf8_str) = std::str::from_utf8(bytes) {
+    let rejoined = rejoin_utf8_conc_splits(bytes);
+    if let Ok(utf8_str) = std::str::from_utf8(&rejoined) {
         return (utf8_str.to_string(), declared_char);
+    }
+
+    if explicit_char.as_deref().is_some_and(|c| c.contains("UTF")) {
+        return (
+            String::from_utf8_lossy(&rejoined).into_owned(),
+            declared_char,
+        );
     }
 
     // Non-UTF-8 8-bit legacy encoding: Windows-1251 vs Windows-1252

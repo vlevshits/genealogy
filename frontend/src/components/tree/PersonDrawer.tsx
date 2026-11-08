@@ -3,6 +3,7 @@ import {
   Calendar,
   Crosshair,
   ExternalLink,
+  GitMerge,
   Home,
   Lock,
   MapPin,
@@ -43,6 +44,7 @@ export interface PersonDrawerProps {
   onEditPerson?: (person: TreePersonNodeDto) => void;
   onAddEvent?: (person: TreePersonNodeDto) => void;
   onDeletePerson?: (person: TreePersonNodeDto) => void;
+  onMergePerson?: (person: TreePersonNodeDto) => void;
   onOpenProfile?: (person: TreePersonNodeDto) => void;
 }
 
@@ -61,6 +63,7 @@ export const PersonDrawer: React.FC<PersonDrawerProps> = ({
   onEditPerson,
   onAddEvent,
   onDeletePerson,
+  onMergePerson,
   onOpenProfile,
 }) => {
   const { t, locale } = useI18n();
@@ -355,6 +358,29 @@ export const PersonDrawer: React.FC<PersonDrawerProps> = ({
                   >
                     {t('person.actions.addEvent')}
                   </Button>
+                  {(accessTier === 'admin' || canEdit) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      leftIcon={<GitMerge className="h-3 w-3" />}
+                      data-testid="drawer-merge-person-btn"
+                      onClick={() => {
+                        if (onMergePerson) {
+                          onMergePerson(person);
+                        } else if (typeof window !== 'undefined') {
+                          const url = `/people/merge?target=${encodeURIComponent(
+                            person.id
+                          )}&returnTo=${encodeURIComponent(
+                            '/tree?focus=' + person.id
+                          )}`;
+                          window.history.pushState({}, '', url);
+                          window.dispatchEvent(new PopStateEvent('popstate'));
+                        }
+                      }}
+                    >
+                      {t('profile.actions.mergeWith')}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"

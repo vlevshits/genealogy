@@ -282,6 +282,8 @@ export async function fetchTreeView(
   return apiFetch<TreeViewResponse>(`/tree/view${qs ? `?${qs}` : ''}`);
 }
 
+export const getTree = fetchTreeView;
+
 // =============================================================================
 // Phase 1.7 — Person Profile Page & Notes Endpoints
 // =============================================================================

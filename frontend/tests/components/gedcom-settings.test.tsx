@@ -61,8 +61,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
         importMode="merge"
-        onProceed={() => {}}
-        onCancel={() => {}}
+        onProceed={() => { }}
+        onCancel={() => { }}
       />,
       'en'
     );
@@ -90,8 +90,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
         importMode="clean_slate"
-        onProceed={() => {}}
-        onCancel={() => {}}
+        onProceed={() => { }}
+        onCancel={() => { }}
       />,
       'en'
     );
@@ -102,8 +102,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
         importMode="merge"
-        onProceed={() => {}}
-        onCancel={() => {}}
+        onProceed={() => { }}
+        onCancel={() => { }}
       />,
       'ru'
     );
@@ -118,8 +118,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       <GedcomAnalysisModal
         report={DEFAULT_GEDCOM_ANALYSIS_REPORT}
         importMode="clean_slate"
-        onProceed={() => {}}
-        onCancel={() => {}}
+        onProceed={() => { }}
+        onCancel={() => { }}
       />,
       'ru'
     );
@@ -140,8 +140,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     const htmlConfirm = renderWithProviders(
       <GedcomCleanSlateConfirm
         fileName="gramps-web-export-20261026130902.ged"
-        onConfirm={() => {}}
-        onCancel={() => {}}
+        onConfirm={() => { }}
+        onCancel={() => { }}
       />,
       'en'
     );
@@ -155,10 +155,10 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     const htmlReport = renderWithProviders(
       <GedcomPostImportReport
         result={DEFAULT_GEDCOM_IMPORT_RESULT}
-        onOpenTree={() => {}}
-        onSelectHomePerson={() => {}}
-        onUploadMissingMedia={() => {}}
-        onReset={() => {}}
+        onOpenTree={() => { }}
+        onSelectHomePerson={() => { }}
+        onUploadMissingMedia={() => { }}
+        onReset={() => { }}
       />,
       'en'
     );
@@ -178,6 +178,14 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       mode: 'merge' as const,
       merged_individuals: 42,
       merged_families: 15,
+      matched_by_uid: 18,
+      matched_by_name_dates: 19,
+      matched_by_kinship: 5,
+      chronology_conflicts_prevented: 2,
+      matched_keys_preview: [
+        'I0016 · Antonina Ivanovna (1912) [UID]',
+        'I0024 · Pyotr Fyodorovich (1868) [Name+Birth]',
+      ],
     };
 
     const htmlMergeReportEn = renderWithProviders(
@@ -189,6 +197,12 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     expect(htmlMergeReportEn).toContain('42');
     expect(htmlMergeReportEn).toContain('Merged Families');
     expect(htmlMergeReportEn).toContain('15');
+    expect(htmlMergeReportEn).toContain('Merge Keys &amp; Consistency Checks');
+    expect(htmlMergeReportEn).toContain('Matched by _UID');
+    expect(htmlMergeReportEn).toContain('Matched by Name &amp; Dates');
+    expect(htmlMergeReportEn).toContain('Matched by Kinship Graph');
+    expect(htmlMergeReportEn).toContain('Chronological Conflicts Prevented');
+    expect(htmlMergeReportEn).toContain('I0016 · Antonina Ivanovna (1912) [UID]');
 
     const htmlMergeReportRu = renderWithProviders(
       <GedcomPostImportReport result={mergeResult} />,
@@ -197,6 +211,11 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
     expect(htmlMergeReportRu).toContain('Объединение и дополнение');
     expect(htmlMergeReportRu).toContain('Объединено / дополнено персон');
     expect(htmlMergeReportRu).toContain('Объединено семей');
+    expect(htmlMergeReportRu).toContain('Ключи сопоставления и проверка целостности');
+    expect(htmlMergeReportRu).toContain('Сопоставлено по _UID');
+    expect(htmlMergeReportRu).toContain('Сопоставлено по имени и датам');
+    expect(htmlMergeReportRu).toContain('Сопоставлено по графу родства');
+    expect(htmlMergeReportRu).toContain('Предотвращено хронологических конфликтов');
   });
 
   it('renders GedcomExportCard with 5.5.1/7.0 format options, privacy switches, and builds export URLs', () => {
@@ -386,8 +405,8 @@ describe('Phase 1.10 — GEDCOM 5.5.1 + 7.0 Import & Export Settings UI', () => 
       <GedcomAnalysisModal
         report={reportWithWarning}
         open={true}
-        onProceed={() => {}}
-        onCancel={() => {}}
+        onProceed={() => { }}
+        onCancel={() => { }}
       />,
       'ru'
     );

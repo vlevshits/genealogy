@@ -83,8 +83,8 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     (isAuthenticated && user?.role
       ? user.role
       : isAuthenticated
-      ? 'viewer'
-      : 'public_anonymous');
+        ? 'viewer'
+        : 'public_anonymous');
 
   const [profile, setProfile] = useState<PersonProfileResponseDto | null>(
     () => initialProfile ?? null
@@ -162,12 +162,12 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         setProfile((prev) =>
           prev
             ? {
-                ...prev,
-                person: {
-                  ...prev.person,
-                  avatar_url: detail.avatarUrl,
-                },
-              }
+              ...prev,
+              person: {
+                ...prev.person,
+                avatar_url: detail.avatarUrl,
+              },
+            }
             : prev
         );
       }
@@ -256,12 +256,12 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     setProfile((prev) =>
       prev
         ? {
-            ...prev,
-            person: {
-              ...prev.person,
-              ...updated,
-            },
-          }
+          ...prev,
+          person: {
+            ...prev.person,
+            ...updated,
+          },
+        }
         : prev
     );
     const txId = (updated as unknown as { tx_id?: string }).tx_id;
@@ -289,13 +289,13 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     setProfile((prev) =>
       prev
         ? {
-            ...prev,
-            person: {
-              ...prev.person,
-              ...updated,
-              biography: nextBio,
-            },
-          }
+          ...prev,
+          person: {
+            ...prev.person,
+            ...updated,
+            biography: nextBio,
+          },
+        }
         : prev
     );
     const txId = (updated as unknown as { tx_id?: string }).tx_id;
@@ -322,12 +322,12 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              capabilities: {
-                ...prev.capabilities,
-                is_home_person: true,
-              },
-            }
+            ...prev,
+            capabilities: {
+              ...prev.capabilities,
+              is_home_person: true,
+            },
+          }
           : prev
       );
       addToast({
@@ -354,13 +354,13 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              person: {
-                ...prev.person,
-                ...updated,
-                is_private: nextPrivate,
-              },
-            }
+            ...prev,
+            person: {
+              ...prev.person,
+              ...updated,
+              is_private: nextPrivate,
+            },
+          }
           : prev
       );
       const txId = (updated as unknown as { tx_id?: string }).tx_id;
@@ -392,9 +392,9 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              events: prev.events.filter((item) => item.id !== ev.id),
-            }
+            ...prev,
+            events: prev.events.filter((item) => item.id !== ev.id),
+          }
           : prev
       );
       if (res?.tx_id) {
@@ -426,9 +426,9 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              notes: prev.notes.filter((n) => n.id !== note.id),
-            }
+            ...prev,
+            notes: prev.notes.filter((n) => n.id !== note.id),
+          }
           : prev
       );
       const txId = (res as { tx_id?: string } | undefined)?.tx_id;
@@ -521,11 +521,11 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
             setProfile((prev) =>
               prev
                 ? {
-                    ...prev,
-                    media: prev.media.map((m) =>
-                      m.id === updatedAsset.id ? updatedAsset : m
-                    ),
-                  }
+                  ...prev,
+                  media: prev.media.map((m) =>
+                    m.id === updatedAsset.id ? updatedAsset : m
+                  ),
+                }
                 : prev
             );
           }}
@@ -533,9 +533,9 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
             setProfile((prev) =>
               prev
                 ? {
-                    ...prev,
-                    media: [...createdAssets, ...prev.media],
-                  }
+                  ...prev,
+                  media: [...createdAssets, ...prev.media],
+                }
                 : prev
             );
           }}
@@ -544,12 +544,12 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
               setProfile((prev) =>
                 prev
                   ? {
-                      ...prev,
-                      person: {
-                        ...prev.person,
-                        avatar_url: nextAvatarUrl,
-                      },
-                    }
+                    ...prev,
+                    person: {
+                      ...prev.person,
+                      avatar_url: nextAvatarUrl,
+                    },
+                  }
                   : prev
               );
             }
@@ -619,7 +619,11 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
         onOpenHistory={() => setHistoryDrawerOpen(true)}
         onMergePerson={() =>
           navigateTo(
-            `/people/merge?primary=${encodeURIComponent(profile.person.id)}`
+            `/people/merge?target=${encodeURIComponent(
+              profile.person.id
+            )}&primary=${encodeURIComponent(
+              profile.person.id
+            )}&returnTo=${encodeURIComponent('/persons/' + profile.person.id)}`
           )
         }
         onCopyLink={handleCopyLink}
@@ -642,12 +646,12 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
           setProfile((prev) =>
             prev
               ? {
-                  ...prev,
-                  person: {
-                    ...prev.person,
-                    ...updated,
-                  },
-                }
+                ...prev,
+                person: {
+                  ...prev.person,
+                  ...updated,
+                },
+              }
               : prev
           );
           loadProfile();

@@ -31,5 +31,7 @@ pub mod importer_families;
 pub use importer_families::*;
 pub mod importer_merge;
 pub use importer_merge::*;
+pub mod importer_kinship;
+pub use importer_kinship::*;
 pub mod exporter;
 pub use exporter::*;

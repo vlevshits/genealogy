@@ -251,12 +251,12 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
   return (
     <section
       aria-label={t('profile.hero.ariaLabel')}
-      className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 sm:p-8 shadow-xs"
+      className="relative z-20 rounded-3xl border border-border bg-surface p-6 sm:p-8 shadow-xs"
     >
       {/* Top lineage accent bar */}
       <span
         aria-hidden="true"
-        className={`absolute inset-x-0 top-0 h-1.5 ${stripeColorClass}`}
+        className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 rounded-t-3xl ${stripeColorClass}`}
       />
 
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">

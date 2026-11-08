@@ -1,13 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  Calendar,
-  Camera,
   Check,
   ExternalLink,
-  FileText,
   GitMerge,
-  Users,
   XCircle,
 } from 'lucide-react';
 import {
@@ -21,8 +17,11 @@ import {
   useToast,
 } from '../components/ui';
 import {
+  getTree,
+  notifyTreeDataChanged,
   peopleApi,
   PersonMergePreviewDto,
+  TreePersonNodeDto,
 } from '../api/client';
 import { useUndoToast } from '../hooks/useUndoToast';
 import { useAuth } from '../lib/auth-context';
@@ -32,28 +31,37 @@ import { cn } from '../lib/utils';
 
 import {
   buildDefaultMergePreview,
+  buildMergePreviewFromTreeNodes,
   computeDefaultFieldChoices,
   normalizeMergePreviewResponse,
+  rankMergeCandidatesForTarget,
   ScalarMergeRow,
-} from "../components/person/person-merge-helpers";
+} from '../components/person/person-merge-helpers';
+import {
+  PersonMergeCombinedUnionCard,
+  PersonMergeSelectorBar,
+} from '../components/person/PersonMergeSelectorBar';
 
 export {
   buildDefaultMergePreview,
+  buildMergePreviewFromTreeNodes,
   computeDefaultFieldChoices,
   normalizeMergePreviewResponse,
+  rankMergeCandidatesForTarget,
 };
 
 export interface PersonMergePageProps {
   initialPreview?: PersonMergePreviewDto;
+  initialPeople?: TreePersonNodeDto[];
   targetId?: string;
   sourceId?: string;
   userRole?: 'admin' | 'editor' | 'viewer';
   onNavigate?: (path: string) => void;
 }
 
-
 export const PersonMergePage: React.FC<PersonMergePageProps> = ({
   initialPreview,
+  initialPeople = [],
   targetId: propTargetId,
   sourceId: propSourceId,
   userRole,
@@ -71,28 +79,43 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
     typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search)
       : new URLSearchParams();
-  const resolvedTargetId =
+  const explicitTargetParam =
     propTargetId ||
     searchParams.get('target') ||
     searchParams.get('a') ||
     searchParams.get('primary') ||
-    'node-deceased-1';
-  const resolvedSourceId =
+    '';
+  const explicitSourceParam =
     propSourceId ||
     searchParams.get('source') ||
     searchParams.get('b') ||
-    'node-dup-2';
-  const returnTo = searchParams.get('returnTo') || '/quality?tab=duplicates';
+    '';
+  const explicitReturnTo = searchParams.get('returnTo');
+  const returnTo = explicitReturnTo || '/quality?tab=duplicates';
+
+  const resolvedInitialTargetId = explicitTargetParam || 'node-deceased-1';
+  const resolvedInitialSourceId = explicitSourceParam || 'node-dup-2';
+
+  const [people, setPeople] = useState<TreePersonNodeDto[]>(initialPeople);
+  const [activeTargetId, setActiveTargetId] = useState<string>(
+    resolvedInitialTargetId
+  );
+  const [activeSourceId, setActiveSourceId] = useState<string>(
+    resolvedInitialSourceId
+  );
 
   const [preview, setPreview] = useState<PersonMergePreviewDto>(() =>
     initialPreview
       ? normalizeMergePreviewResponse(
-          initialPreview as unknown as Partial<PersonMergePreviewDto> &
-            Record<string, unknown>,
-          resolvedTargetId,
-          resolvedSourceId
-        )
-      : buildDefaultMergePreview(resolvedTargetId, resolvedSourceId)
+        initialPreview as unknown as Partial<PersonMergePreviewDto> &
+        Record<string, unknown>,
+        resolvedInitialTargetId,
+        resolvedInitialSourceId
+      )
+      : buildDefaultMergePreview(
+        resolvedInitialTargetId,
+        resolvedInitialSourceId
+      )
   );
   const [fieldChoices, setFieldChoices] = useState<
     Record<string, 'target' | 'source'>
@@ -109,21 +132,118 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
     }
   };
 
+  const syncUrlParams = (nextTarget: string, nextSource: string) => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('target', nextTarget);
+    params.set('source', nextSource);
+    if (explicitReturnTo) {
+      params.set('returnTo', explicitReturnTo);
+    }
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', nextUrl);
+  };
+
+  // Load real tree profiles on mount so user can search/select any profile in the tree
   useEffect(() => {
-    if (initialPreview) {
+    if (!isAdmin) return;
+    if (initialPeople.length > 0) {
+      const nodes = initialPeople;
+      const tgtNode =
+        nodes.find(
+          (n) =>
+            n.id === explicitTargetParam || n.gid === explicitTargetParam
+        ) ?? nodes[0];
+      const resolvedTgtId = tgtNode ? tgtNode.id : resolvedInitialTargetId;
+      let resolvedSrcId = resolvedInitialSourceId;
+      if (!explicitSourceParam && nodes.length > 1) {
+        const ranked = rankMergeCandidatesForTarget(tgtNode, nodes);
+        if (ranked.length > 0) {
+          resolvedSrcId = ranked[0].person.id;
+        }
+      }
+      setActiveTargetId(resolvedTgtId);
+      setActiveSourceId(resolvedSrcId);
+      return;
+    }
+
+    getTree({ mode: 'all' })
+      .then((res) => {
+        const nodes = res?.nodes ?? [];
+        if (nodes.length === 0) return;
+        setPeople(nodes);
+
+        const tgtNode =
+          nodes.find(
+            (n) =>
+              n.id === explicitTargetParam || n.gid === explicitTargetParam
+          ) ?? nodes[0];
+        const resolvedTgtId = tgtNode ? tgtNode.id : resolvedInitialTargetId;
+
+        let resolvedSrcId = explicitSourceParam;
+        if (!resolvedSrcId || resolvedSrcId === 'node-dup-2') {
+          const ranked = rankMergeCandidatesForTarget(tgtNode, nodes);
+          if (ranked.length > 0) {
+            resolvedSrcId = ranked[0].person.id;
+          }
+        } else {
+          const matchedSrc = nodes.find(
+            (n) => n.id === resolvedSrcId || n.gid === resolvedSrcId
+          );
+          if (matchedSrc) {
+            resolvedSrcId = matchedSrc.id;
+          }
+        }
+
+        if (resolvedTgtId) setActiveTargetId(resolvedTgtId);
+        if (resolvedSrcId) setActiveSourceId(resolvedSrcId);
+        if (resolvedTgtId && resolvedSrcId) {
+          syncUrlParams(resolvedTgtId, resolvedSrcId);
+        }
+      })
+      .catch(() => { });
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (
+      initialPreview &&
+      activeTargetId === resolvedInitialTargetId &&
+      activeSourceId === resolvedInitialSourceId
+    ) {
       const normalized = normalizeMergePreviewResponse(
         initialPreview as unknown as Partial<PersonMergePreviewDto> &
-          Record<string, unknown>,
-        resolvedTargetId,
-        resolvedSourceId
+        Record<string, unknown>,
+        activeTargetId,
+        activeSourceId
       );
       setPreview(normalized);
       setFieldChoices(computeDefaultFieldChoices(normalized));
       return;
     }
-    if (!isAdmin) return;
+    if (!isAdmin || !activeTargetId || !activeSourceId) return;
+
+    const targetNode = people.find(
+      (n) => n.id === activeTargetId || n.gid === activeTargetId
+    );
+    const sourceNode = people.find(
+      (n) => n.id === activeSourceId || n.gid === activeSourceId
+    );
+
+    if (targetNode || sourceNode) {
+      const treeBased = buildMergePreviewFromTreeNodes(
+        targetNode,
+        sourceNode,
+        activeTargetId,
+        activeSourceId
+      );
+      setPreview(treeBased);
+      setFieldChoices(computeDefaultFieldChoices(treeBased));
+    }
+
+    if (activeTargetId === activeSourceId) return;
+
     peopleApi
-      .getMergePreview(resolvedTargetId, resolvedSourceId)
+      .getMergePreview(activeTargetId, activeSourceId)
       .then((res) => {
         if (
           res &&
@@ -131,16 +251,59 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         ) {
           const normalized = normalizeMergePreviewResponse(
             res as unknown as Partial<PersonMergePreviewDto> &
-              Record<string, unknown>,
-            resolvedTargetId,
-            resolvedSourceId
+            Record<string, unknown>,
+            activeTargetId,
+            activeSourceId
           );
           setPreview(normalized);
           setFieldChoices(computeDefaultFieldChoices(normalized));
         }
       })
-      .catch(() => {});
-  }, [isAdmin, initialPreview, resolvedTargetId, resolvedSourceId]);
+      .catch(() => { });
+  }, [
+    isAdmin,
+    initialPreview,
+    activeTargetId,
+    activeSourceId,
+    people,
+    resolvedInitialTargetId,
+    resolvedInitialSourceId,
+  ]);
+
+  const handleSelectTarget = (nextTargetId: string) => {
+    if (!nextTargetId) return;
+    if (nextTargetId === activeSourceId) {
+      // Swap automatically if user selects the current source as target
+      const prevTarget = activeTargetId;
+      setActiveTargetId(nextTargetId);
+      setActiveSourceId(prevTarget);
+      syncUrlParams(nextTargetId, prevTarget);
+      return;
+    }
+    setActiveTargetId(nextTargetId);
+    syncUrlParams(nextTargetId, activeSourceId);
+  };
+
+  const handleSelectSource = (nextSourceId: string) => {
+    if (!nextSourceId) return;
+    if (nextSourceId === activeTargetId) {
+      const prevSource = activeSourceId;
+      setActiveSourceId(nextSourceId);
+      setActiveTargetId(prevSource);
+      syncUrlParams(prevSource, nextSourceId);
+      return;
+    }
+    setActiveSourceId(nextSourceId);
+    syncUrlParams(activeTargetId, nextSourceId);
+  };
+
+  const handleSwapDirection = () => {
+    const nextTarget = activeSourceId;
+    const nextSource = activeTargetId;
+    setActiveTargetId(nextTarget);
+    setActiveSourceId(nextSource);
+    syncUrlParams(nextTarget, nextSource);
+  };
 
   const rows = useMemo<ScalarMergeRow[]>(() => {
     const tgt = preview.target;
@@ -277,7 +440,10 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
         });
       }
       setConfirmOpen(false);
-      navigateTo(returnTo);
+      notifyTreeDataChanged();
+      const destination =
+        explicitReturnTo || `/persons/${encodeURIComponent(preview.target.id)}`;
+      navigateTo(destination);
     } catch (err) {
       addToast({
         type: 'error',
@@ -326,6 +492,16 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
             {t('merge.survivingIdBadge', { gid: preview.target.gid })}
           </Badge>
         }
+      />
+
+      {/* Profile Selector & Swap Bar */}
+      <PersonMergeSelectorBar
+        people={people}
+        targetId={activeTargetId}
+        sourceId={activeSourceId}
+        onSelectTarget={handleSelectTarget}
+        onSelectSource={handleSelectSource}
+        onSwapDirection={handleSwapDirection}
       />
 
       {/* Responsive Profile Quick-Inspect Chips */}
@@ -539,69 +715,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
       </Card>
 
       {/* Combined Union Preview Card */}
-      <Card className="p-5 space-y-3">
-        <div className="text-xs font-semibold text-secondary uppercase tracking-wide">
-          {t('merge.combinedPreviewHeading')}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-xl border border-border bg-surface-muted/40 p-3 flex items-center gap-2.5">
-            <Calendar className="h-4 w-4 text-brand shrink-0" />
-            <div>
-              <div className="text-xs text-secondary">
-                {t('merge.combinedEvents', {
-                  count: preview.combined_counts.events,
-                })}
-              </div>
-              <div className="font-mono text-sm font-bold text-primary">
-                {preview.combined_counts.events}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface-muted/40 p-3 flex items-center gap-2.5">
-            <Camera className="h-4 w-4 text-brand shrink-0" />
-            <div>
-              <div className="text-xs text-secondary">
-                {t('merge.combinedMedia', {
-                  count: preview.combined_counts.media,
-                })}
-              </div>
-              <div className="font-mono text-sm font-bold text-primary">
-                {preview.combined_counts.media}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface-muted/40 p-3 flex items-center gap-2.5">
-            <Users className="h-4 w-4 text-brand shrink-0" />
-            <div>
-              <div className="text-xs text-secondary">
-                {t('merge.combinedFamilies', {
-                  count: preview.combined_counts.families,
-                })}
-              </div>
-              <div className="font-mono text-sm font-bold text-primary">
-                {preview.combined_counts.families}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-surface-muted/40 p-3 flex items-center gap-2.5">
-            <FileText className="h-4 w-4 text-brand shrink-0" />
-            <div>
-              <div className="text-xs text-secondary">
-                {t('merge.combinedNotes', {
-                  count: preview.combined_counts.notes,
-                })}
-              </div>
-              <div className="font-mono text-sm font-bold text-primary">
-                {preview.combined_counts.notes}
-              </div>
-            </div>
-          </div>
-        </div>
-        <p className="text-xs text-secondary">{t('merge.altNamePreservedHint')}</p>
-      </Card>
+      <PersonMergeCombinedUnionCard counts={preview.combined_counts} />
 
       {/* Action Footer */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -624,6 +738,7 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
           <Button
             variant="primary"
             data-testid="merge-open-confirm-btn"
+            disabled={preview.target.id === preview.source.id}
             leftIcon={<GitMerge className="h-4 w-4" />}
             onClick={() => setConfirmOpen(true)}
           >
@@ -677,4 +792,3 @@ export const PersonMergePage: React.FC<PersonMergePageProps> = ({
 };
 
 export default PersonMergePage;
-

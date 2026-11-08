@@ -226,6 +226,25 @@ pub(crate) fn parse_gedcom_name_node(node: &GedcomNode) -> ParsedGedcomName {
         }
     }
 
+    let mut married_surname = marnm_sub;
+    if type_sub.is_none() && married_surname.is_none() {
+        if let Some((outer, rest)) = surname.split_once('(') {
+            if let Some(inner) = rest.strip_suffix(')') {
+                let outer_clean = outer.trim();
+                let inner_clean = inner.trim();
+                let both_non_ascii = !outer_clean.is_empty()
+                    && !inner_clean.is_empty()
+                    && !outer_clean.is_ascii()
+                    && !inner_clean.is_ascii()
+                    && !surnames_match_normalized(outer_clean, inner_clean);
+                if both_non_ascii {
+                    married_surname = Some(outer_clean.to_string());
+                    surname = inner_clean.to_string();
+                }
+            }
+        }
+    }
+
     let (given_name, patronymic) = if let Some(explicit_patr) = patr_sub {
         let first_given = raw_given
             .split_whitespace()
@@ -237,6 +256,14 @@ pub(crate) fn parse_gedcom_name_node(node: &GedcomNode) -> ParsedGedcomName {
         let parts: Vec<&str> = raw_given.split_whitespace().collect();
         if parts.len() >= 2 && looks_like_slavic_patronymic(parts[1]) {
             (parts[0].to_string(), Some(parts[1..].join(" ")))
+        } else if parts.len() >= 3
+            && !parts.last().unwrap().starts_with('(')
+            && looks_like_slavic_patronymic(parts.last().unwrap())
+        {
+            (
+                parts[..parts.len() - 1].join(" "),
+                Some((*parts.last().unwrap()).to_string()),
+            )
         } else {
             (raw_given.trim().to_string(), None)
         }
@@ -247,7 +274,7 @@ pub(crate) fn parse_gedcom_name_node(node: &GedcomNode) -> ParsedGedcomName {
         given_name,
         patronymic,
         surname,
-        married_surname: marnm_sub,
+        married_surname,
         prefix: npfx_sub,
         suffix: nsfx_sub,
         nickname: nick_sub,

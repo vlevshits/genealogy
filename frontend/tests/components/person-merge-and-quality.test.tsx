@@ -10,9 +10,11 @@ import {
   buildDefaultMergePreview,
   computeDefaultFieldChoices,
   normalizeMergePreviewResponse,
+  rankMergeCandidatesForTarget,
 } from '../../src/pages/PersonMergePage';
 import { DataQualityPage } from '../../src/pages/DataQualityPage';
-import { PersonMergePreviewDto } from '../../src/api/client';
+import { PersonDrawer } from '../../src/components/tree/PersonDrawer';
+import { PersonMergePreviewDto, TreePersonNodeDto } from '../../src/api/client';
 
 function renderWithProviders(
   node: React.ReactElement,
@@ -21,17 +23,17 @@ function renderWithProviders(
 ): string {
   const initialUser = role
     ? {
-        id: 'u-test',
-        email: 'test@example.com',
-        first_name: 'Elena',
-        last_name: 'Volkova',
-        role,
-        person_id: 'p-elena',
-        home_person_id: 'p-elena',
-        preferred_locale: locale,
-        theme_preference: 'system' as const,
-        is_active: true,
-      }
+      id: 'u-test',
+      email: 'test@example.com',
+      first_name: 'Elena',
+      last_name: 'Volkova',
+      role,
+      person_id: 'p-elena',
+      home_person_id: 'p-elena',
+      preferred_locale: locale,
+      theme_preference: 'system' as const,
+      is_active: true,
+    }
     : null;
 
   return renderToStaticMarkup(
@@ -165,7 +167,7 @@ describe('PersonMergePage & DataQualityPage Fixes', () => {
 
       const normalized = normalizeMergePreviewResponse(
         rawApiPayload as unknown as Partial<PersonMergePreviewDto> &
-          Record<string, unknown>,
+        Record<string, unknown>,
         'p-real-1',
         'p-real-2'
       );
@@ -284,6 +286,107 @@ describe('PersonMergePage & DataQualityPage Fixes', () => {
 
       // Verify returnTo parameter is included in the merge URL
       expect(html).toContain('returnTo=%2Fquality%3Ftab%3Dduplicates');
+    });
+  });
+
+  describe('Manual 2-Person Merge Selector Bar & Tree Drawer Merge Action', () => {
+    const sampleNodes: TreePersonNodeDto[] = [
+      {
+        id: 'p-antonina-1',
+        gid: 'I0016',
+        sex: 'F',
+        is_living: false,
+        is_private: false,
+        primary_name: {
+          given_name: 'Antonina',
+          patronymic: 'Ivanovna',
+          surname: 'Petrova',
+        },
+        birth: { date: '1912-03-14', place: 'Tver' },
+        death: null,
+        avatar_url: null,
+        notes: null,
+      },
+      {
+        id: 'p-antonina-dup',
+        gid: 'I0099',
+        sex: 'F',
+        is_living: false,
+        is_private: false,
+        primary_name: {
+          given_name: 'Antonina',
+          patronymic: null,
+          surname: 'Petrova',
+        },
+        birth: { date: '1912', place: 'Tver Governorate' },
+        death: { date: '1988', place: 'Moscow' },
+        avatar_url: null,
+        notes: null,
+      },
+      {
+        id: 'p-other',
+        gid: 'I0050',
+        sex: 'M',
+        is_living: false,
+        is_private: false,
+        primary_name: {
+          given_name: 'Nikolai',
+          patronymic: 'Petrovich',
+          surname: 'Smirnov',
+        },
+        birth: { date: '1880', place: 'Kazan' },
+        death: null,
+        avatar_url: null,
+        notes: null,
+      },
+    ];
+
+    it('ranks similar duplicate candidates highest and renders PersonMergeSelectorBar in EN and RU', () => {
+      const ranked = rankMergeCandidatesForTarget(sampleNodes[0], sampleNodes);
+      expect(ranked).toHaveLength(2);
+      expect(ranked[0].person.id).toBe('p-antonina-dup');
+      expect(ranked[0].score).toBeGreaterThanOrEqual(40);
+
+      const htmlEn = renderWithProviders(
+        <PersonMergePage
+          targetId="p-antonina-1"
+          initialPeople={sampleNodes}
+        />,
+        'en',
+        'admin'
+      );
+      expect(htmlEn).toContain('data-testid="person-merge-selector-bar"');
+      expect(htmlEn).toContain('data-testid="merge-swap-direction-btn"');
+      expect(htmlEn).toContain('data-testid="merge-candidate-search-input"');
+      expect(htmlEn).toContain('Select Profiles to Compare &amp; Merge');
+      expect(htmlEn).toContain('Swap Primary &amp; Second');
+
+      const htmlRu = renderWithProviders(
+        <PersonMergePage
+          targetId="p-antonina-1"
+          initialPeople={sampleNodes}
+        />,
+        'ru',
+        'admin'
+      );
+      expect(htmlRu).toContain('Выбор профилей для сравнения и объединения');
+      expect(htmlRu).toContain('Поменять местами');
+    });
+
+    it('renders Merge with duplicate button in PersonDrawer Quick Actions', () => {
+      const htmlDrawer = renderWithProviders(
+        <PersonDrawer
+          open={true}
+          onOpenChange={() => { }}
+          person={sampleNodes[0]}
+          accessTier="admin"
+          canEdit={true}
+        />,
+        'en',
+        'admin'
+      );
+      expect(htmlDrawer).toContain('data-testid="drawer-merge-person-btn"');
+      expect(htmlDrawer).toContain('Merge with duplicate...');
     });
   });
 });

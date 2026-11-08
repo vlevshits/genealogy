@@ -155,6 +155,7 @@ pub fn import_gedcom_into_store(
                 if mode == "merge" {
                     if let Some(existing_media_id) = find_or_enrich_existing_media(
                         store,
+                        initial_media_count,
                         &raw_xref_clean,
                         &raw_path,
                         &clean_file_name,
@@ -236,6 +237,16 @@ pub fn import_gedcom_into_store(
     let mut person_famc_pedi: HashMap<(String, String), String> = HashMap::new();
     let mut pending_associations: Vec<PendingAssociation> = Vec::new();
     let mut merged_individuals: usize = 0;
+    let mut matched_by_uid: usize = 0;
+    let mut matched_by_name_dates: usize = 0;
+    let mut matched_by_kinship: usize = 0;
+    let mut matched_keys_preview: Vec<String> = Vec::new();
+    let precomputed_plan = if mode == "merge" {
+        precompute_person_matches(store, initial_persons_count, initial_families_count, &roots)
+    } else {
+        PrecomputedMergePlan::default()
+    };
+    let chronology_conflicts_prevented = precomputed_plan.chronology_conflicts_prevented;
 
     for node in &roots {
         if node.tag != "INDI" {
@@ -247,7 +258,7 @@ pub fn import_gedcom_into_store(
             .map(|x| x.trim_matches('@').to_uppercase())
             .unwrap_or_default();
 
-        // Extract external IDs (`_UID` / `UID` and `FACT ...` + `2 TYPE RIN` / `RIN`)
+        // Extract external IDs (`_UID` / `UID`, `RIN`, `_FSFTID`, `REFN`)
         let mut external_ids: HashMap<String, String> = HashMap::new();
         for child in &node.children {
             match child.tag.as_str() {
@@ -274,6 +285,18 @@ pub fn import_gedcom_into_store(
                     if !rin_val.is_empty() {
                         external_ids.insert("mh_rin".to_string(), rin_val);
                         dialect.preserved_rins_count += 1;
+                    }
+                }
+                "_FSFTID" => {
+                    let fs_val = child.value.trim().to_string();
+                    if !fs_val.is_empty() {
+                        external_ids.insert("fsftid".to_string(), fs_val);
+                    }
+                }
+                "REFN" => {
+                    let refn_val = child.value.trim().to_string();
+                    if !refn_val.is_empty() {
+                        external_ids.insert("refn".to_string(), refn_val);
                     }
                 }
                 _ => {}
@@ -413,18 +436,29 @@ pub fn import_gedcom_into_store(
             sex: &sex,
             birth_year,
             death_year,
+            min_child_birth_year: None,
+            max_parent_birth_year: None,
             alt_names: &alt_names,
             external_ids: &external_ids,
         };
 
-        // In merge mode, check if person already exists by UID, RIN, GID+name, or smart name+vitals
-        let existing_person_idx = if mode == "merge" {
-            find_matching_person_index(store, &candidate)
+        // In merge mode, check if person already exists in `0..initial_persons_count`
+        let prematched = if mode == "merge" {
+            precomputed_plan.matches_by_xref.get(&xref_clean)
         } else {
             None
         };
 
-        let person_id = if let Some(idx) = existing_person_idx {
+        let person_id = if let Some(m) = prematched {
+            let idx = m.existing_idx;
+            match m.kind {
+                PersonMatchKind::Uid => matched_by_uid += 1,
+                PersonMatchKind::NameDates => matched_by_name_dates += 1,
+                PersonMatchKind::Kinship => matched_by_kinship += 1,
+            }
+            if matched_keys_preview.len() < 20 {
+                matched_keys_preview.push(m.preview_entry.clone());
+            }
             let pid = store.persons[idx].id.clone();
             enrich_existing_person(&mut store.persons[idx], &candidate);
             merged_individuals += 1;
@@ -580,8 +614,9 @@ pub fn import_gedcom_into_store(
                             p.has_death_event = true;
                             p.living_override = Some(false);
                         }
-                        let has_date_or_place = child.find_child("DATE").is_some()
-                            || child.find_child("PLAC").is_some();
+                        let has_date_or_place = child.child_value("DATE").is_some_and(|d| {
+                            !d.trim().is_empty() && !d.trim().eq_ignore_ascii_case("Y")
+                        }) || child.find_child("PLAC").is_some();
                         if !has_date_or_place {
                             dialect.deceased_flag_only_count += 1;
                         }
@@ -607,6 +642,7 @@ pub fn import_gedcom_into_store(
 
     let merged_families = import_gedcom_families_and_associations(
         store,
+        initial_families_count,
         &roots,
         &mode,
         &indi_xref_to_person_id,
@@ -692,6 +728,11 @@ pub fn import_gedcom_into_store(
         imported_families: families_imported,
         merged_individuals,
         merged_families,
+        matched_by_uid,
+        matched_by_name_dates,
+        matched_by_kinship,
+        chronology_conflicts_prevented,
+        matched_keys_preview,
         imported_events: events_imported,
         imported_places: places_imported,
         imported_media: media_imported,

@@ -471,6 +471,11 @@ export interface GedcomImportResult {
   imported_media: number;
   merged_individuals?: number;
   merged_families?: number;
+  matched_by_uid?: number;
+  matched_by_name_dates?: number;
+  matched_by_kinship?: number;
+  chronology_conflicts_prevented?: number;
+  matched_keys_preview?: string[];
   missing_media_count: number;
   snapshot_id: string;
   prompt_home_person: boolean;
