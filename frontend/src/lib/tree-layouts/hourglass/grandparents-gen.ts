@@ -12,6 +12,7 @@ import {
   createPositionedEdge,
 } from "../types";
 import { DownBranch, HourglassContext } from "./down-branch";
+import { placeHourglassUpperAncestorsGen } from "./upper-ancestors-gen";
 
 export interface GrandparentsPlacementInput {
   ctx: HourglassContext;
@@ -51,16 +52,25 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
   const { nodeMap, relativesMap, maxGen, collateral, placedIds, nodes, edges } = ctx;
   const parentY = -ROW_STEP;
 
-  const ancestorGenLimit = Math.min(3, Math.max(1, maxGen - 1));
+  const ancestorGenLimit = Math.max(1, maxGen - 1);
+
+  let patGfId: string | null = null;
+  let patGmId: string | null = null;
+  let matGfId: string | null = null;
+  let matGmId: string | null = null;
 
   // 5A. Paternal Side (Grandparents + Aunts/Uncles at Gen -2 / Gen -1)
   if (ancestorGenLimit >= 2 && fatherId && fatherPlacedX !== null) {
     const fRel = relativesMap.get(fatherId);
-    let patGfId = fRel?.fatherId ?? null;
-    let patGmId = fRel?.motherId ?? null;
+    patGfId = fRel?.fatherId ?? null;
+    patGmId = fRel?.motherId ?? null;
     if (patGfId && patGmId && patGfId === patGmId) {
       if (nodeMap.get(patGfId)?.sex === 'F') patGfId = null;
       else patGmId = null;
+    }
+    if (!patGfId && !patGmId && fRel?.parentIds.length) {
+      patGfId = fRel.parentIds[0] ?? null;
+      patGmId = fRel.parentIds[1] ?? null;
     }
 
     const patGfDto = patGfId ? nodeMap.get(patGfId) : undefined;
@@ -362,11 +372,15 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
   // 5B. Maternal Side (Grandparents + Aunts/Uncles at Gen -2 / Gen -1)
   if (ancestorGenLimit >= 2 && motherId && motherPlacedX !== null) {
     const mRel = relativesMap.get(motherId);
-    let matGfId = mRel?.fatherId ?? null;
-    let matGmId = mRel?.motherId ?? null;
+    matGfId = mRel?.fatherId ?? null;
+    matGmId = mRel?.motherId ?? null;
     if (matGfId && matGmId && matGfId === matGmId) {
       if (nodeMap.get(matGfId)?.sex === 'F') matGfId = null;
       else matGmId = null;
+    }
+    if (!matGfId && !matGmId && mRel?.parentIds.length) {
+      matGfId = mRel.parentIds[0] ?? null;
+      matGmId = mRel.parentIds[1] ?? null;
     }
 
     const matGfDto = matGfId ? nodeMap.get(matGfId) : undefined;
@@ -663,5 +677,17 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
         }
       }
     }
+  }
+
+  // 5C. Upper Ancestors (Gen -3, -4, -5, -6, ... up to -maxGen)
+  if (maxGen >= 3) {
+    placeHourglassUpperAncestorsGen(
+      ctx,
+      patGfId,
+      patGmId,
+      matGfId,
+      matGmId,
+      maxGen
+    );
   }
 }

@@ -39,9 +39,9 @@ export function computePedigreeLayout(
   }
 
   const requestedGen = maxGenerationsOverride ?? data.generations ?? 4;
-  // Determine actual ancestor depth (at least 1 so parent placeholders show, capped at 4 for clean binary spacing)
+  // Determine actual ancestor depth (at least 1 so parent placeholders show, scaling up to detectedDepth when requestedGen > 4)
   const findMaxDepth = (id: string, depth: number, visited: Set<string>): number => {
-    if (depth >= requestedGen - 1 || visited.has(id)) return depth;
+    if (depth >= requestedGen || visited.has(id)) return depth;
     visited.add(id);
     const rel = relativesMap.get(id);
     if (!rel) return depth;
@@ -56,7 +56,10 @@ export function computePedigreeLayout(
   };
 
   const detectedDepth = findMaxDepth(focalId, 0, new Set());
-  const effectiveMaxGen = Math.min(4, Math.max(1, detectedDepth + 1, Math.min(2, requestedGen - 1)));
+  const effectiveMaxGen =
+    detectedDepth >= 4 && requestedGen > 4
+      ? Math.min(requestedGen, detectedDepth)
+      : Math.min(4, Math.max(1, detectedDepth + 1, Math.min(2, requestedGen - 1)));
 
   const slotY = (gen: number, slotIndex: number): number => {
     // At effectiveMaxGen, leaves are spaced by CARD_HEIGHT + V_GAP

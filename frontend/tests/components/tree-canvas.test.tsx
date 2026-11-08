@@ -2695,6 +2695,133 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
       expect(ruHtml).toContain('data-connection-endpoint="true"');
       expect(ruHtml).toContain('title="Конечная точка связи"');
     });
+
+    it('places 6+ ancestor generations (Gen -1 to Gen -6) with collateral siblings and extra spouses in Hourglass and Pedigree when All Generations (10) is selected', () => {
+      const makePerson = (
+        id: string,
+        given: string,
+        sex: 'M' | 'F'
+      ) => ({
+        id,
+        gid: id.toUpperCase(),
+        sex,
+        is_living: false,
+        privacy_tier: 'public' as const,
+        primary_name: {
+          given_name: given,
+          surname: 'Romanov',
+          patronymic: null,
+          maiden_name: null,
+        },
+        birth_date: '1850',
+        birth_place: null,
+        death_date: '1920',
+        death_place: null,
+        avatar_url: null,
+      });
+
+      const nodes = [
+        makePerson('p-focal', 'Focal', 'M'),
+        // Gen -1
+        makePerson('p-f1', 'Father1', 'M'),
+        makePerson('p-m1', 'Mother1', 'F'),
+        // Gen -2
+        makePerson('p-f2', 'Grandfather2', 'M'),
+        makePerson('p-m2', 'Grandmother2', 'F'),
+        // Gen -3
+        makePerson('p-f3', 'GreatGf3', 'M'),
+        makePerson('p-m3', 'GreatGm3', 'F'),
+        // Gen -4 (plus collateral sibling of p-f4)
+        makePerson('p-f4', 'AncGf4', 'M'),
+        makePerson('p-m4', 'AncGm4', 'F'),
+        makePerson('p-f4-sib', 'GreatUncle4', 'M'),
+        // Gen -5 (plus extra spouse of p-f5 and half-sibling at Gen -4)
+        makePerson('p-f5', 'AncGf5', 'M'),
+        makePerson('p-m5', 'AncGm5', 'F'),
+        makePerson('p-f5-spouse2', 'SecondWife5', 'F'),
+        makePerson('p-f4-halfsib', 'HalfUncle4', 'F'),
+        // Gen -6
+        makePerson('p-f6', 'AncGf6', 'M'),
+        makePerson('p-m6', 'AncGm6', 'F'),
+      ];
+
+      const edges = [
+        // Gen -1 -> Gen 0
+        { id: 'e-sp-1', source: 'p-f1', target: 'p-m1', kind: 'spouse' as const, family_id: 'fam-1' },
+        { id: 'e-pc-1a', source: 'p-f1', target: 'p-focal', kind: 'parent_child' as const, family_id: 'fam-1' },
+        { id: 'e-pc-1b', source: 'p-m1', target: 'p-focal', kind: 'parent_child' as const, family_id: 'fam-1' },
+        // Gen -2 -> Gen -1
+        { id: 'e-sp-2', source: 'p-f2', target: 'p-m2', kind: 'spouse' as const, family_id: 'fam-2' },
+        { id: 'e-pc-2a', source: 'p-f2', target: 'p-f1', kind: 'parent_child' as const, family_id: 'fam-2' },
+        { id: 'e-pc-2b', source: 'p-m2', target: 'p-f1', kind: 'parent_child' as const, family_id: 'fam-2' },
+        // Gen -3 -> Gen -2
+        { id: 'e-sp-3', source: 'p-f3', target: 'p-m3', kind: 'spouse' as const, family_id: 'fam-3' },
+        { id: 'e-pc-3a', source: 'p-f3', target: 'p-f2', kind: 'parent_child' as const, family_id: 'fam-3' },
+        { id: 'e-pc-3b', source: 'p-m3', target: 'p-f2', kind: 'parent_child' as const, family_id: 'fam-3' },
+        // Gen -4 -> Gen -3
+        { id: 'e-sp-4', source: 'p-f4', target: 'p-m4', kind: 'spouse' as const, family_id: 'fam-4' },
+        { id: 'e-pc-4a', source: 'p-f4', target: 'p-f3', kind: 'parent_child' as const, family_id: 'fam-4' },
+        { id: 'e-pc-4b', source: 'p-m4', target: 'p-f3', kind: 'parent_child' as const, family_id: 'fam-4' },
+        // Gen -5 -> Gen -4 (including full sibling p-f4-sib and extra union with p-f5-spouse2 -> p-f4-halfsib)
+        { id: 'e-sp-5', source: 'p-f5', target: 'p-m5', kind: 'spouse' as const, family_id: 'fam-5' },
+        { id: 'e-pc-5a', source: 'p-f5', target: 'p-f4', kind: 'parent_child' as const, family_id: 'fam-5' },
+        { id: 'e-pc-5b', source: 'p-m5', target: 'p-f4', kind: 'parent_child' as const, family_id: 'fam-5' },
+        { id: 'e-pc-5c', source: 'p-f5', target: 'p-f4-sib', kind: 'parent_child' as const, family_id: 'fam-5' },
+        { id: 'e-pc-5d', source: 'p-m5', target: 'p-f4-sib', kind: 'parent_child' as const, family_id: 'fam-5' },
+        { id: 'e-sp-5-extra', source: 'p-f5', target: 'p-f5-spouse2', kind: 'spouse' as const, family_id: 'fam-5-extra' },
+        { id: 'e-pc-5-extra1', source: 'p-f5', target: 'p-f4-halfsib', kind: 'parent_child' as const, family_id: 'fam-5-extra' },
+        { id: 'e-pc-5-extra2', source: 'p-f5-spouse2', target: 'p-f4-halfsib', kind: 'parent_child' as const, family_id: 'fam-5-extra' },
+        // Gen -6 -> Gen -5
+        { id: 'e-sp-6', source: 'p-f6', target: 'p-m6', kind: 'spouse' as const, family_id: 'fam-6' },
+        { id: 'e-pc-6a', source: 'p-f6', target: 'p-f5', kind: 'parent_child' as const, family_id: 'fam-6' },
+        { id: 'e-pc-6b', source: 'p-m6', target: 'p-f5', kind: 'parent_child' as const, family_id: 'fam-6' },
+      ];
+
+      const deepData = {
+        mode: 'hourglass' as const,
+        focal_id: 'p-focal',
+        generations: 10,
+        access_tier: 'admin' as const,
+        nodes,
+        families: [],
+        edges,
+      };
+
+      const hgLayout = computeHourglassLayout(deepData, 10, true);
+      assertNoOverlappingNodes(hgLayout.nodes);
+
+      // Every single person in the 6-generation ancestor graph (including collateral sibling & extra spouse) must be placed
+      const placedIds = new Set(hgLayout.nodes.map((n) => n.id));
+      for (const person of nodes) {
+        expect(placedIds.has(person.id), `Expected ${person.id} to be placed in Hourglass layout`).toBe(true);
+      }
+
+      // Verify generations -3, -4, -5, -6 have accurate negative Y coordinates
+      const nodeGen3 = hgLayout.nodes.find((n) => n.id === 'p-f3')!;
+      const nodeGen4 = hgLayout.nodes.find((n) => n.id === 'p-f4')!;
+      const nodeGen5 = hgLayout.nodes.find((n) => n.id === 'p-f5')!;
+      const nodeGen6 = hgLayout.nodes.find((n) => n.id === 'p-f6')!;
+      expect(nodeGen3.generation).toBe(-3);
+      expect(nodeGen4.generation).toBe(-4);
+      expect(nodeGen5.generation).toBe(-5);
+      expect(nodeGen6.generation).toBe(-6);
+      expect(nodeGen6.y).toBeLessThan(nodeGen5.y);
+      expect(nodeGen5.y).toBeLessThan(nodeGen4.y);
+      expect(nodeGen4.y).toBeLessThan(nodeGen3.y);
+
+      // Also verify Pedigree layout with maxGenerationsOverride = 10 places up to Gen 6
+      const pedLayout = computePedigreeLayout(
+        { ...deepData, mode: 'pedigree' },
+        10
+      );
+      assertNoOverlappingNodes(pedLayout.nodes);
+      const pedPlacedIds = new Set(pedLayout.nodes.map((n) => n.id));
+      expect(pedPlacedIds.has('p-f3')).toBe(true);
+      expect(pedPlacedIds.has('p-f4')).toBe(true);
+      expect(pedPlacedIds.has('p-f5')).toBe(true);
+      expect(pedPlacedIds.has('p-f6')).toBe(true);
+      expect(pedPlacedIds.has('p-m6')).toBe(true);
+    });
   });
 });
 
