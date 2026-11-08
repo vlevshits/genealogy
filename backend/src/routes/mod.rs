@@ -15,6 +15,7 @@ use axum::{
 };
 use tower_http::{
     cors::{Any, CorsLayer},
+    services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 use utoipa::OpenApi;
@@ -329,11 +330,43 @@ pub fn create_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             csrf_protection_middleware,
-        ));
+        ))
+        .layer(DefaultBodyLimit::max(500 * 1024 * 1024));
 
-    Router::new()
+    let mut root_router = Router::new()
         .nest("/api/v1", api_v1)
-        .merge(SwaggerUi::new("/swagger-ui").url("/api/v1/openapi.json", ApiDoc::openapi()))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api/v1/openapi.json", ApiDoc::openapi()));
+
+    if let Some(ref static_path) = state.config.frontend_static_path {
+        let path = std::path::PathBuf::from(static_path);
+        if path.exists() {
+            let sw_file = path.join("sw.js");
+            let manifest_file = path.join("manifest.webmanifest");
+            let index_file = path.join("index.html");
+
+            if sw_file.exists() {
+                root_router = root_router.route(
+                    "/sw.js",
+                    get(move || serve_static_no_cache(sw_file.clone(), "application/javascript")),
+                );
+            }
+            if manifest_file.exists() {
+                root_router = root_router.route(
+                    "/manifest.webmanifest",
+                    get(move || {
+                        serve_static_no_cache(manifest_file.clone(), "application/manifest+json")
+                    }),
+                );
+            }
+
+            if index_file.exists() {
+                let serve_dir = ServeDir::new(&path).fallback(ServeFile::new(index_file));
+                root_router = root_router.fallback_service(serve_dir);
+            }
+        }
+    }
+
+    root_router
         .layer(middleware::from_fn_with_state(
             state.clone(),
             request_context_middleware,
@@ -341,4 +374,23 @@ pub fn create_router(state: AppState) -> Router {
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn serve_static_no_cache(
+    path: std::path::PathBuf,
+    content_type: &'static str,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => axum::response::Response::builder()
+            .status(axum::http::StatusCode::OK)
+            .header(axum::http::header::CONTENT_TYPE, content_type)
+            .header(
+                axum::http::header::CACHE_CONTROL,
+                "no-cache, no-store, must-revalidate",
+            )
+            .body(axum::body::Body::from(bytes))
+            .unwrap_or_else(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
+    }
 }

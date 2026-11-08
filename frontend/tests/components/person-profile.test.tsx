@@ -11,7 +11,15 @@ import {
   buildDefaultPersonProfile,
   PersonProfilePage,
 } from '../../src/pages/PersonProfilePage';
-import { NoteEditDialog } from '../../src/components/profile';
+import { NoteEditDialog, ProfileChronologyTab } from '../../src/components/profile';
+import { LifeEventDialog } from '../../src/components/person';
+import {
+  normalizeEventType,
+  normalizePedigreeType,
+  normalizePlaceType,
+  normalizeRelationshipType,
+  normalizeSex,
+} from '../../src/lib/domain-enums';
 
 function renderWithProviders(
   node: React.ReactNode,
@@ -220,5 +228,82 @@ describe('Phase 1.7 Person Profile Page: Hero Header, Timeline & Map, Family, Me
     expect(viewerHtml).toContain('Vitebsk Synagogue Metrical Book, 1912, entry #48');
     expect(viewerHtml).not.toContain('Edit Profile');
     expect(viewerHtml).not.toContain('Add Event');
+  });
+
+  it('normalizes uppercase and GEDCOM-tag domain enums (DEATH, BIRT, DEAT, MARR, EVEN, pedigree, relationship, place_type, sex) in UI and LifeEventDialog', () => {
+    expect(normalizeEventType('DEATH')).toBe('death');
+    expect(normalizeEventType('DEAT')).toBe('death');
+    expect(normalizeEventType('BIRT')).toBe('birth');
+    expect(normalizeEventType('CHR')).toBe('baptism');
+    expect(normalizeEventType('MARR')).toBe('marriage');
+    expect(normalizeEventType('DIV')).toBe('divorce');
+    expect(normalizeEventType('EVEN')).toBe('custom');
+
+    expect(normalizePedigreeType('ADOP')).toBe('adopted');
+    expect(normalizePedigreeType('Biological')).toBe('birth');
+    expect(normalizeRelationshipType('MARR')).toBe('married');
+    expect(normalizeRelationshipType('DIV')).toBe('divorced');
+    expect(normalizePlaceType('Guberniya')).toBe('region');
+    expect(normalizePlaceType('Uyezd')).toBe('district');
+    expect(normalizePlaceType('Selo')).toBe('village');
+    expect(normalizePlaceType('Parish')).toBe('address');
+    expect(normalizeSex('мужской')).toBe('M');
+    expect(normalizeSex('female')).toBe('F');
+
+    const sampleProfile = buildDefaultPersonProfile('I0001', 'admin');
+    const chronologyHtmlRu = renderWithProviders(
+      <ProfileChronologyTab
+        person={sampleProfile.person}
+        events={[
+          {
+            id: 'ev-upper-death',
+            gid: 'E999',
+            event_type: 'DEATH',
+            date_sort: 19820510,
+            gedcom_date: '10 MAY 1982',
+            media_ids: [],
+            is_private: false,
+            version: 1,
+          },
+          {
+            id: 'ev-gedcom-birt',
+            gid: 'E998',
+            event_type: 'BIRT',
+            date_sort: 19120301,
+            gedcom_date: '1 MAR 1912',
+            media_ids: [],
+            is_private: false,
+            version: 1,
+          },
+        ]}
+        canEdit={true}
+        onAddEvent={() => {}}
+        onEditEvent={() => {}}
+      />,
+      'ru'
+    );
+    expect(chronologyHtmlRu).toContain('Смерть');
+    expect(chronologyHtmlRu).toContain('Рождение');
+    expect(chronologyHtmlRu).not.toContain('domain.events.DEATH');
+    expect(chronologyHtmlRu).not.toContain('domain.events.BIRT');
+
+    const dialogHtmlRu = renderWithProviders(
+      <LifeEventDialog
+        open={true}
+        onOpenChange={() => {}}
+        individualId={sampleProfile.person.id}
+        initialEvent={{
+          id: 'ev-upper-death',
+          gid: 'E999',
+          event_type: 'DEATH',
+          is_private: false,
+          version: 1,
+        }}
+        initialSourceSuggestions={['ГАРФ']}
+      />,
+      'ru'
+    );
+    expect(dialogHtmlRu).toContain('Смерть');
+    expect(dialogHtmlRu).not.toContain('domain.events.DEATH');
   });
 });

@@ -150,28 +150,28 @@ pub struct DeletedPersonSnapshotPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct StoreSnapshotPayload {
-    pub(crate) persons: Vec<TreePersonNodeDto>,
+pub struct StoreSnapshotPayload {
+    pub persons: Vec<TreePersonNodeDto>,
 
-    pub(crate) families: Vec<FamilyDto>,
+    pub families: Vec<FamilyDto>,
 
-    pub(crate) events: Vec<LifeEventDto>,
+    pub events: Vec<LifeEventDto>,
 
-    pub(crate) notes: Vec<NoteDto>,
+    pub notes: Vec<NoteDto>,
 
-    pub(crate) media: Vec<MediaAssetSummaryDto>,
+    pub media: Vec<MediaAssetSummaryDto>,
 
-    pub(crate) places: Vec<PlaceSummaryDto>,
+    pub places: Vec<PlaceSummaryDto>,
 
-    pub(crate) next_gid_seq: u32,
+    pub next_gid_seq: u32,
 
-    pub(crate) next_family_gid_seq: u32,
+    pub next_family_gid_seq: u32,
 
-    pub(crate) next_event_gid_seq: u32,
+    pub next_event_gid_seq: u32,
 
-    pub(crate) next_place_gid_seq: u32,
+    pub next_place_gid_seq: u32,
 
-    pub(crate) next_media_gid_seq: u32,
+    pub next_media_gid_seq: u32,
 }
 
 /// Logs an atomic mutation to `store.change_log` (`14-change-history-concurrency.md §2, §6 DoD #1`).
@@ -210,6 +210,7 @@ pub fn log_change(
         created_at: Utc::now().to_rfc3339(),
     };
     store.change_log.push(entry.clone());
+    store.persist_if_production();
     entry
 }
 

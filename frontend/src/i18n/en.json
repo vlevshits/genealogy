@@ -311,6 +311,10 @@
       "married": "Married",
       "civil_union": "Civil Union",
       "partners": "Partners",
+      "partner": "Partners",
+      "divorced": "Divorced",
+      "engaged": "Engaged",
+      "unmarried": "Unmarried",
       "unknown": "Union"
     }
   },

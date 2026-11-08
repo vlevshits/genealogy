@@ -206,7 +206,11 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                     "given_name": { "type": "string" },
                     "patronymic": { "type": "string" },
                     "surname": { "type": "string" },
-                    "sex": { "type": "string" },
+                    "sex": {
+                        "type": "string",
+                        "enum": ["M", "F", "X", "U"],
+                        "description": "Canonical sex code: M, F, X, or U"
+                    },
                     "birth_date": { "type": "string" },
                     "birth_place": { "type": "string" }
                 }
@@ -225,6 +229,16 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                     "given_name": { "type": "string" },
                     "patronymic": { "type": "string" },
                     "surname": { "type": "string" },
+                    "sex": {
+                        "type": "string",
+                        "enum": ["M", "F", "X", "U"],
+                        "description": "Canonical sex code: M, F, X, or U"
+                    },
+                    "birth_date": { "type": "string" },
+                    "birth_place": { "type": "string" },
+                    "death_date": { "type": "string" },
+                    "death_place": { "type": "string" },
+                    "is_living": { "type": "boolean" },
                     "biography": { "type": "string" }
                 }
             }),
@@ -238,7 +252,12 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "type": "object",
                 "properties": {
                     "partner1_id": { "type": "string" },
-                    "partner2_id": { "type": "string" }
+                    "partner2_id": { "type": "string" },
+                    "relationship_type": {
+                        "type": "string",
+                        "enum": ["married", "unmarried", "engaged", "divorced", "separated", "annulled", "other", "unknown"],
+                        "description": "Canonical lowercase relationship type (default: married)"
+                    }
                 }
             }),
         },
@@ -252,7 +271,12 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "required": ["parent_id", "child_id"],
                 "properties": {
                     "parent_id": { "type": "string" },
-                    "child_id": { "type": "string" }
+                    "child_id": { "type": "string" },
+                    "pedigree": {
+                        "type": "string",
+                        "enum": ["birth", "adopted", "foster", "step", "guardian", "sealed", "other", "unknown"],
+                        "description": "Canonical lowercase pedigree link type (default: birth)"
+                    }
                 }
             }),
         },
@@ -266,7 +290,12 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "required": ["partner1_id", "partner2_id"],
                 "properties": {
                     "partner1_id": { "type": "string" },
-                    "partner2_id": { "type": "string" }
+                    "partner2_id": { "type": "string" },
+                    "relationship_type": {
+                        "type": "string",
+                        "enum": ["married", "unmarried", "engaged", "divorced", "separated", "annulled", "other", "unknown"],
+                        "description": "Canonical lowercase relationship type (default: married)"
+                    }
                 }
             }),
         },
@@ -280,7 +309,12 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "required": ["person_id", "event_type"],
                 "properties": {
                     "person_id": { "type": "string" },
-                    "event_type": { "type": "string" },
+                    "family_id": { "type": "string" },
+                    "event_type": {
+                        "type": "string",
+                        "enum": ["birth", "baptism", "death", "burial", "cremation", "marriage", "engagement", "divorce", "annulment", "residence", "occupation", "education", "graduation", "military_service", "immigration", "emigration", "naturalization", "census", "adoption", "retirement", "custom", "other"],
+                        "description": "Canonical lowercase event type (e.g. birth, death, marriage, residence, occupation, military_service, custom)"
+                    },
                     "date_text": { "type": "string" },
                     "place": { "type": "string" },
                     "description": { "type": "string" }
@@ -297,7 +331,11 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "required": ["name"],
                 "properties": {
                     "name": { "type": "string" },
-                    "place_type": { "type": "string" }
+                    "place_type": {
+                        "type": "string",
+                        "enum": ["country", "region", "district", "city", "village", "address", "cemetery", "church", "other"],
+                        "description": "Canonical lowercase place type (default: city)"
+                    }
                 }
             }),
         },

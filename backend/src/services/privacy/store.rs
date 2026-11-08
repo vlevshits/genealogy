@@ -1,7 +1,8 @@
 #[allow(unused_imports)]
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GenealogyPrivacyStore {
     pub persons: Vec<TreePersonNodeDto>,
     pub families: Vec<FamilyDto>,
@@ -48,6 +49,32 @@ impl GenealogyPrivacyStore {
             next_place_gid_seq: 100,
             next_media_gid_seq: 100,
             is_demo_seed: false,
+        }
+    }
+
+    /// Persists the live store to `{BACKUP_PATH}/live-store.json` when running as the server binary (`BACKUP_PATH` set).
+    pub fn persist_if_production(&self) {
+        if cfg!(test) || std::env::var("APP_ENV").as_deref() == Ok("test") {
+            return;
+        }
+        let Ok(backup_dir) = std::env::var("BACKUP_PATH") else {
+            return;
+        };
+        if backup_dir.trim().is_empty() {
+            return;
+        }
+        if self.is_demo_seed || (self.persons.is_empty() && self.personal_access_tokens.is_empty())
+        {
+            return;
+        }
+        let dir_path = std::path::Path::new(&backup_dir);
+        let _ = std::fs::create_dir_all(dir_path);
+        let tmp_path = dir_path.join("live-store.json.tmp");
+        let final_path = dir_path.join("live-store.json");
+        if let Ok(bytes) = serde_json::to_vec(self) {
+            if std::fs::write(&tmp_path, bytes).is_ok() {
+                let _ = std::fs::rename(&tmp_path, &final_path);
+            }
         }
     }
 

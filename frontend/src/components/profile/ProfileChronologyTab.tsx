@@ -28,6 +28,7 @@ import {
 } from '../../api/client';
 import { ProfileLifeMap } from './ProfileLifeMap';
 import { useI18n } from '../../i18n';
+import { normalizeEventType } from '../../lib/domain-enums';
 import { cn } from '../../lib/utils';
 
 export interface ProfileChronologyTabProps {
@@ -86,10 +87,11 @@ export const ProfileChronologyTab: React.FC<ProfileChronologyTabProps> = ({
   };
 
   const getEventLabel = (ev: ProfileLifeEventDto): string => {
-    if (ev.event_type === 'custom' && ev.custom_type) {
+    const normType = normalizeEventType(ev.event_type);
+    if (normType === 'custom' && ev.custom_type) {
       return ev.custom_type;
     }
-    return t(`domain.events.${ev.event_type}`);
+    return t(`domain.events.${normType}`);
   };
 
   if (isMaskedLiving) {
@@ -163,13 +165,14 @@ export const ProfileChronologyTab: React.FC<ProfileChronologyTabProps> = ({
                 const scansCount = ev.scans_count ?? ev.media_ids?.length ?? 0;
                 const isHighlighted = highlightedEventId === ev.id;
 
+                const normType = normalizeEventType(ev.event_type);
                 const dotColor =
-                  ev.event_type === 'birth' || ev.event_type === 'baptism'
+                  normType === 'birth' || normType === 'baptism'
                     ? 'bg-brand border-brand'
-                    : ev.event_type === 'marriage' ||
-                      ev.event_type === 'marriage_license'
+                    : normType === 'marriage' ||
+                      normType === 'marriage_license'
                     ? 'bg-accent border-accent'
-                    : ev.event_type === 'death' || ev.event_type === 'burial'
+                    : normType === 'death' || normType === 'burial'
                     ? 'bg-secondary border-secondary'
                     : 'bg-surface border-brand';
 

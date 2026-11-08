@@ -17,6 +17,7 @@ This document records the architectural, design, and structural decisions made a
 - [ADR-009: Strict Unauthenticated Navigation Segregation & Default Clean Slate](#adr-009-strict-unauthenticated-navigation-segregation--default-clean-slate)
 - [~~ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation~~](#adr-010-client-side-external-llm-extraction-with-server-side-tree-reconciliation)
 - [ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key)
+- [ADR-012: On-Demand GitHub Releases and Native LXC / Bare-Metal Deployment Pipeline](#adr-012-on-demand-github-releases-and-native-lxc--bare-metal-deployment-pipeline)
 
 ---
 
@@ -86,5 +87,11 @@ This document records the architectural, design, and structural decisions made a
 - **Decision:** Execute Gemini 3.8 Flash entity extraction and speech transcription exclusively on the backend (`backend/src/services/story_intake/gemini.rs`), configured centrally via `GEMINI_API_KEY` and `GEMINI_MODEL` (defaults to `"gemini-3.8-flash"`), sending credentials via the `x-goog-api-key` HTTP header. Expose `ai_enabled: bool` in `GET /api/v1/system/info`. Purge any legacy client-side API key (`genealogy_gemini_api_key`) in `frontend/src/api/gemini-story-extractor.ts` and retain the built-in offline NLP engine as an automatic fallback.
 - **Consequences:** Zero-configuration experience for family members using the web UI; server-side audio transcription accepts `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`; API key is kept strictly on the server in `.env` without client leakage or URL query-string exposure; instances without an API key gracefully fall back to the built-in offline NLP engine.
 
-_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
+### ADR-012: On-Demand GitHub Releases and Native LXC / Bare-Metal Deployment Pipeline
+- **Status:** Accepted
+- **Context:** Container-only deployment (Docker Compose) introduces memory overhead and operational friction on minimal Linux containers (e.g. Proxmox VE LXC) or low-resource VPSs. Furthermore, compiling Docker images or cutting releases on every single commit produces release churn, fills package registries with intermediate builds, and complicates production stability.
+- **Decision:** Establish an on-demand GitHub Releases pipeline (`.github/workflows/release.yml`) triggered strictly on tag push (`v*.*.*`) or manual `workflow_dispatch`, building cross-compiled release archives (`x86_64` and `aarch64`) with checksums (`SHA256SUMS`). Complement with a single-command installer/updater (`scripts/install.sh`) targeting Debian/Ubuntu systemd + Nginx environments, an operator release automation skill (`.agents/skills/genealogy-release/SKILL.md`), and optional native Axum static file serving (`FRONTEND_STATIC_PATH` in `backend/src/routes/mod.rs`).
+- **Consequences:** Provides a high-performance native deployment path with ~30–50MB RAM idle usage, preserves database and media files across in-place atomic updates, guarantees automatic schema migration execution on service start, and prevents untagged/unstable builds from reaching production instances.
+
+_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_
 

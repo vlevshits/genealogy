@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use super::*;
+use chrono::Datelike;
 
 impl AuthService {
     pub async fn is_initialized(state: &AppState) -> bool {
@@ -199,6 +200,12 @@ impl AuthService {
             })
             .collect();
 
+        let admin_user_id_str = users
+            .iter()
+            .find(|u| u.role == "admin" && u.is_active)
+            .or_else(|| users.first())
+            .map(|u| u.id.to_string());
+
         let mut store = state.auth_store.write().await;
         store.users = users;
         store.passkeys = passkeys;
@@ -213,6 +220,179 @@ impl AuthService {
             sessions = store.sessions.len(),
             "Auth memory store hydrated from PostgreSQL"
         );
+        drop(store);
+
+        if state.config.app_env != "test" {
+            let backup_dir = std::path::Path::new(&state.config.backup_path);
+            let live_store_path = backup_dir.join("live-store.json");
+            let current_year = Utc::now().year();
+            let age_threshold = state.config.living_person_age_threshold as i32;
+
+            let mut hydrated_store: Option<crate::services::privacy::GenealogyPrivacyStore> = None;
+            if live_store_path.exists() {
+                if let Ok(bytes) = std::fs::read(&live_store_path) {
+                    if let Ok(mut loaded) = serde_json::from_slice::<
+                        crate::services::privacy::GenealogyPrivacyStore,
+                    >(&bytes)
+                    {
+                        loaded.is_demo_seed = false;
+                        crate::services::genealogy::recompute_all_places_metadata(&mut loaded);
+                        crate::services::genealogy::recompute_all_individuals_vitals(
+                            &mut loaded,
+                            current_year,
+                            age_threshold,
+                        );
+                        hydrated_store = Some(loaded);
+                    }
+                }
+            }
+
+            if hydrated_store.is_none() {
+                let snapshots_dir = backup_dir.join("snapshots");
+                if let Ok(entries) = std::fs::read_dir(&snapshots_dir) {
+                    let mut newest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        let fname = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or_default();
+                        if fname.starts_with("snapshot-") && fname.ends_with(".json") {
+                            if let Ok(meta) = entry.metadata() {
+                                if let Ok(mtime) = meta.modified() {
+                                    if newest.as_ref().is_none_or(|(best_t, _)| mtime > *best_t) {
+                                        newest = Some((mtime, path));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some((_, snap_path)) = newest {
+                        if let Ok(bytes) = std::fs::read(&snap_path) {
+                            if let Ok(payload) = serde_json::from_slice::<
+                                crate::services::history::StoreSnapshotPayload,
+                            >(&bytes)
+                            {
+                                let mut s =
+                                    crate::services::privacy::GenealogyPrivacyStore::empty();
+                                s.persons = payload.persons;
+                                s.families = payload.families;
+                                s.events = payload.events;
+                                s.notes = payload.notes;
+                                s.media = payload.media;
+                                s.places = payload.places;
+                                s.next_gid_seq = payload.next_gid_seq;
+                                s.next_family_gid_seq = payload.next_family_gid_seq;
+                                s.next_event_gid_seq = payload.next_event_gid_seq;
+                                s.next_place_gid_seq = payload.next_place_gid_seq;
+                                s.next_media_gid_seq = payload.next_media_gid_seq;
+                                s.is_demo_seed = false;
+                                crate::services::genealogy::recompute_all_places_metadata(&mut s);
+                                crate::services::genealogy::recompute_all_individuals_vitals(
+                                    &mut s,
+                                    current_year,
+                                    age_threshold,
+                                );
+                                hydrated_store = Some(s);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(mut s) = hydrated_store {
+                // Also load any persisted or seed MCP tokens
+                let tokens_path = backup_dir.join("mcp-tokens.json");
+                if tokens_path.exists() {
+                    if let Ok(bytes) = std::fs::read(&tokens_path) {
+                        if let Ok(tokens) = serde_json::from_slice::<
+                            Vec<crate::services::privacy::PersonalAccessTokenDto>,
+                        >(&bytes)
+                        {
+                            for t in tokens {
+                                if !s
+                                    .personal_access_tokens
+                                    .iter()
+                                    .any(|ex| ex.token_hash == t.token_hash)
+                                {
+                                    s.personal_access_tokens.push(t);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let seed_pat_raw = std::env::var("SEED_MCP_PAT").ok().or_else(|| {
+                    std::fs::read_to_string(backup_dir.join("seed-pat.txt"))
+                        .ok()
+                        .map(|v| v.trim().to_string())
+                });
+                if let Some(raw_spec) = seed_pat_raw.filter(|v| !v.is_empty()) {
+                    let (uid, raw_token) = if let Some((u, t)) = raw_spec.split_once(':') {
+                        (u.trim().to_string(), t.trim().to_string())
+                    } else {
+                        (
+                            admin_user_id_str.clone().unwrap_or_default(),
+                            raw_spec.trim().to_string(),
+                        )
+                    };
+                    if !uid.is_empty() && !raw_token.is_empty() {
+                        let token_hash = crate::services::mcp::hash_mcp_token(&raw_token);
+                        if !s
+                            .personal_access_tokens
+                            .iter()
+                            .any(|ex| ex.token_hash == token_hash)
+                        {
+                            s.personal_access_tokens.push(
+                                crate::services::privacy::PersonalAccessTokenDto {
+                                    id: Uuid::new_v4().to_string(),
+                                    user_id: uid,
+                                    name: "Production MCP Agent".to_string(),
+                                    token_prefix: raw_token.chars().take(16).collect(),
+                                    token_hash,
+                                    scopes: vec![
+                                        "read:tree".to_string(),
+                                        "write:draft".to_string(),
+                                        "write:direct".to_string(),
+                                        "admin:maintenance".to_string(),
+                                    ],
+                                    last_used_at: None,
+                                    expires_at: None,
+                                    revoked_at: None,
+                                    created_at: Utc::now().to_rfc3339(),
+                                },
+                            );
+                        }
+                    }
+                }
+
+                let seed_merge_path = backup_dir.join("seed-merge.ged");
+                if seed_merge_path.exists() {
+                    if let Ok(ged_bytes) = std::fs::read(&seed_merge_path) {
+                        let _ = crate::services::gedcom::import_gedcom_into_store(
+                            &mut s,
+                            &ged_bytes,
+                            "merge",
+                            None,
+                            current_year,
+                            age_threshold,
+                        );
+                    }
+                    let _ = std::fs::remove_file(&seed_merge_path);
+                }
+
+                s.persist_if_production();
+                tracing::info!(
+                    persons = s.persons.len(),
+                    families = s.families.len(),
+                    events = s.events.len(),
+                    places = s.places.len(),
+                    pats = s.personal_access_tokens.len(),
+                    "GenealogyPrivacyStore hydrated from backup storage"
+                );
+                *state.privacy_store.write().await = s;
+            }
+        }
 
         Ok(())
     }

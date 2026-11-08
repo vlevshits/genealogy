@@ -107,11 +107,7 @@ pub async fn create_person(
     let node = TreePersonNodeDto {
         id: person_id.clone(),
         gid,
-        sex: req
-            .sex
-            .unwrap_or_else(|| "U".to_string())
-            .trim()
-            .to_uppercase(),
+        sex: normalize_sex(req.sex.as_deref().unwrap_or("U")),
         is_living,
         living_override: req.living_override,
         is_private: req.is_private.unwrap_or(false),
@@ -365,7 +361,7 @@ pub async fn update_person(
             };
         }
         if let Some(sex) = req.sex {
-            person.sex = sex.trim().to_uppercase();
+            person.sex = normalize_sex(&sex);
         }
         if let Some(bio) = req.biography {
             person.biography = Some(bio);

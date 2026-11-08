@@ -12,7 +12,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | :--- | :--- | :--- |
 | `main.rs` | ~70 | Entrypoint: initializes tracing, loads config, runs DB migrations, builds router, binds TCP listener. |
 | `lib.rs` | ~25 | Crate root: exports `config`, `error`, `models`, `routes`, `services`, and `state`. |
-| `config.rs` | 262 | Configuration struct `AppConfig`: environment variables (`GEMINI_API_KEY`, `GEMINI_MODEL`, etc.), defaults, URL parsing, validation. |
+| `config.rs` | 268 | Configuration struct `AppConfig`: environment variables (`GEMINI_API_KEY`, `GEMINI_MODEL`, `FRONTEND_STATIC_PATH`, etc.), defaults, URL parsing, validation. |
 | `error.rs` | 260 | Standard error enum `AppError` and JSON response envelope with machine-readable `code`. |
 | `state.rs` | 343 | Shared runtime state `AppState`: database pool, config, rate limiter, challenge stores. |
 | `bin/cli.rs` | ~250 | Standalone CLI (`genealogy-cli`): backup, restore, and emergency `create-admin-link`. |
@@ -20,7 +20,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `models/mod.rs` | ~15 | Module declarations and exports. |
 | `models/gendate.rs` | 517 | Genealogical date parser/serializer (`GenDate`): exact, approximate, before/after, ranges, dual years. |
 | `routes/` | | **HTTP Handlers & Adapters** |
-| `routes/mod.rs` | ~780 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), middleware assembly. |
+| `routes/mod.rs` | ~795 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), middleware assembly, native static SPA fallback (`ServeDir` / `ServeFile`). |
 | `routes/auth/` | ~600 | Modular authentication routes: passkey registration/login, magic links, passwords, sessions, recovery codes. |
 | `routes/rbac/` | ~4,000 | Modular domain routes: tree view (`tree_view.rs`), person/family/event CRUD (`person_profile.rs`, `person_mutations.rs`, `person_delete_families.rs`, `events.rs`, `quick_add.rs`), places (`places.rs`), media (`media_list_create.rs`, `media_tags_links.rs`, `notes_media_files.rs`), search/directory (`search.rs`, `people_directory.rs`), history & quality (`history_quality.rs`), GEDCOM/PDF (`gedcom_pdf.rs`), dashboard/kinship (`dashboard_kinship.rs`), onboarding (`onboarding_tree.rs`), AI story intake (`ai_stories.rs`), and MCP (`mcp.rs`). |
 | `routes/system.rs` | 383 | Health check, system information (`ai_enabled` flag), and database readiness endpoints. |
@@ -112,10 +112,25 @@ A complete directory and module responsibility map of the Genealogy repository.
 
 ---
 
-## 3. File Size Compliance & Bundle Splitting
+## 3. Deployment & Operations
+
+| Path | Responsibility |
+| :--- | :--- |
+| `scripts/install.sh` | Unified single-command installer and atomic updater for Debian/Ubuntu LXC and bare-metal environments. |
+| `deploy/lxc/genealogy.service` | Hardened systemd service unit template (`NoNewPrivileges`, `ProtectSystem=full`). |
+| `deploy/lxc/nginx.conf` | Production Nginx reverse proxy configuration template (SPA fallback, caching, 500M body limit). |
+| `deploy/lxc/genealogy.env.example` | Production environment configuration template for LXC. |
+| `.github/workflows/release.yml` | On-demand GitHub Actions release pipeline cross-compiling Linux `x86_64` and `aarch64` tarballs with checksums. |
+| `.agents/skills/genealogy-release/SKILL.md` | Skill automating pre-flight verification test suites, version bumping, and release tag publishing. |
+| `docker-compose.yml` | 3-container Docker Compose deployment definition (`frontend`, `backend`, `postgres`). |
+| `scripts/check-memory-bank.sh` | Automated verification script ensuring all file path references in `docs/memory-bank/` exist. |
+
+---
+
+## 4. File Size Compliance & Bundle Splitting
 
 Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/modular-architecture-and-file-size.md), the hard ceiling for source code files is **800 lines**.
-- **Zero hotspots remain:** Every `.rs` file in `backend/src/` (max 781 lines) and every `.ts`/`.tsx` file in `frontend/src/` (max 744 lines) is strictly ≤ 800 lines.
+- **Zero hotspots remain:** Every `.rs` file in `backend/src/` (max 795 lines) and every `.ts`/`.tsx` file in `frontend/src/` (max 744 lines) is strictly ≤ 800 lines.
 - **Former hotspots decomposed:**
   - `frontend/src/api/client.ts` → split into `core.ts`, `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, and `stories-mcp-api.ts`.
   - `frontend/src/api/openapi-types.ts` → split into `openapi-types.ts` and `openapi-types-domain.ts`.
@@ -126,7 +141,7 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 
 ---
 
-## 4. Where to Put New Code
+## 5. Where to Put New Code
 
 - **New Backend Route:** Create thin handler in `backend/src/routes/rbac/<domain>.rs`, register in `backend/src/routes/rbac/mod.rs` and `backend/src/routes/mod.rs`, and annotate with `#[utoipa::path(...)]`.
 - **New Business Logic / Service:** Add to `backend/src/services/<domain>/`. Keep files ≤ 600 lines; expose public interface via `mod.rs`.
@@ -136,4 +151,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
+_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_

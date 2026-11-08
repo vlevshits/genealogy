@@ -336,7 +336,7 @@ pub(crate) fn rebuild_relationships_and_events(
             events.push(DraftEventDto {
                 temp_id: format!("draft-e-{}", events.len() + 1),
                 person_temp_id: p.temp_id.clone(),
-                event_type: "BIRT".to_string(),
+                event_type: "birth".to_string(),
                 date_text: b_date,
                 place_text: p.birth_place.clone(),
                 description: None,
@@ -351,7 +351,7 @@ pub(crate) fn rebuild_relationships_and_events(
             events.push(DraftEventDto {
                 temp_id: format!("draft-e-{}", events.len() + 1),
                 person_temp_id: p.temp_id.clone(),
-                event_type: "DEAT".to_string(),
+                event_type: "death".to_string(),
                 date_text: d_date,
                 place_text: p.death_place.clone(),
                 description: None,

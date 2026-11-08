@@ -10,6 +10,7 @@ import {
 import { Badge, Button, Card } from '../ui';
 import { PlaceHierarchyIssueDto } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { normalizePlaceType } from '../../lib/domain-enums';
 
 export interface PlaceHierarchyCardProps {
   issue: PlaceHierarchyIssueDto;
@@ -175,7 +176,7 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
               <div className="text-xs text-secondary mt-0.5 flex flex-wrap items-center gap-1.5">
                 <span>
                   {t('quality.places.typeLabel')}:{' '}
-                  {t(`places.types.${issue.current_place_type || 'other'}`)}
+                  {t(`places.types.${normalizePlaceType(issue.current_place_type)}`)}
                 </span>
                 <span>·</span>
                 <span>
@@ -228,7 +229,7 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
                     )}
                     <span className="font-medium text-primary">{step.name}</span>
                     <span className="text-tertiary">
-                      ({t(`places.types.${step.place_type || 'other'}`)})
+                      ({t(`places.types.${normalizePlaceType(step.place_type)}`)})
                     </span>
                     {getStepActionBadge(resolvedAction)}
                   </div>
@@ -238,7 +239,7 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
           ) : (
             <div className="text-xs text-secondary">
               {issue.proposed_clean_name} (
-              {t(`places.types.${issue.proposed_place_type || 'other'}`)})
+              {t(`places.types.${normalizePlaceType(issue.proposed_place_type)}`)})
             </div>
           )}
 

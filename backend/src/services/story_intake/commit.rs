@@ -104,8 +104,9 @@ pub fn commit_story_draft(
                 store.persons[p_idx].primary_name.surname = dp.surname.trim().to_string();
                 changed = true;
             }
-            if store.persons[p_idx].sex == "U" && matches!(dp.sex.as_str(), "M" | "F") {
-                store.persons[p_idx].sex = dp.sex.clone();
+            let norm_dp_sex = crate::services::genealogy::normalize_sex(&dp.sex);
+            if store.persons[p_idx].sex == "U" && matches!(norm_dp_sex.as_str(), "M" | "F") {
+                store.persons[p_idx].sex = norm_dp_sex;
                 changed = true;
             }
             if store.persons[p_idx].biography.is_none() {
@@ -142,7 +143,7 @@ pub fn commit_story_draft(
                 let ev_id = create_event_in_tx(
                     store,
                     &existing_id,
-                    "BIRT",
+                    "birth",
                     dp_birt_date.clone(),
                     dp.birth_place.clone(),
                     place_id,
@@ -229,11 +230,7 @@ pub fn commit_story_draft(
         let new_person = TreePersonNodeDto {
             id: new_id.clone(),
             gid: new_gid,
-            sex: if matches!(dp.sex.as_str(), "M" | "F") {
-                dp.sex.clone()
-            } else {
-                "U".to_string()
-            },
+            sex: crate::services::genealogy::normalize_sex(&dp.sex),
             is_living: dp.is_living && death_summary.is_none(),
             living_override: None,
             is_private: false,
@@ -301,7 +298,7 @@ pub fn commit_story_draft(
             let ev_id = create_event_in_tx(
                 store,
                 &new_id,
-                "BIRT",
+                "birth",
                 birt_date,
                 dp.birth_place.clone(),
                 place_id,
@@ -327,7 +324,7 @@ pub fn commit_story_draft(
             let ev_id = create_event_in_tx(
                 store,
                 &new_id,
-                "DEAT",
+                "death",
                 deat_date,
                 dp.death_place.clone(),
                 place_id,
@@ -370,7 +367,9 @@ pub fn commit_story_draft(
             gid: fam_gid.clone(),
             partner1_id: Some(p1_id),
             partner2_id: Some(p2_id),
-            relationship_type: union.union_type.clone(),
+            relationship_type: crate::services::genealogy::normalize_relationship_type(
+                &union.union_type,
+            ),
             is_private: false,
             children: vec![],
             external_ids: HashMap::new(),
@@ -493,10 +492,12 @@ pub fn commit_story_draft(
                     _ => false,
                 });
 
-        let ped = parent_links
-            .first()
-            .map(|(_, p)| p.clone())
-            .unwrap_or_else(|| "birth".to_string());
+        let ped = crate::services::genealogy::normalize_pedigree_type(
+            parent_links
+                .first()
+                .map(|(_, p)| p.as_str())
+                .unwrap_or("birth"),
+        );
 
         if let Some(fam_idx) = existing_parent_fam_idx {
             let before_fam = store.families[fam_idx].clone();
@@ -631,13 +632,14 @@ pub(crate) fn create_event_in_tx(
     store.next_event_gid_seq += 1;
     let parsed_date = date_text.as_deref().map(GenDate::parse);
     let date_sort = parsed_date.as_ref().and_then(GenDate::compute_sort_key);
+    let normalized_type = crate::services::genealogy::normalize_event_type(event_type);
 
     let new_ev = LifeEventDto {
         id: ev_id.clone(),
         gid: ev_gid.clone(),
         individual_id: Some(person_id.to_string()),
         family_id: None,
-        event_type: event_type.to_string(),
+        event_type: normalized_type.clone(),
         custom_type: None,
         date: parsed_date,
         date_sort,
@@ -659,7 +661,7 @@ pub(crate) fn create_event_in_tx(
         &ev_id,
         "create",
         Some(ev_gid),
-        format!("Created {event_type} event from story draft"),
+        format!("Created {normalized_type} event from story draft"),
         None,
         Some(serde_json::to_value(&new_ev).unwrap_or_else(|_| json!({}))),
         caller_id,

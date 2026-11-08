@@ -13,6 +13,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { normalizeEventType } from '../../lib/domain-enums';
 import { LifeEvent } from '../../types/event';
 import { EventType } from '../../types/common';
 import { GenDateText } from './gen-date-text';
@@ -55,10 +56,11 @@ function getEventIcon(type: EventType): React.ReactNode {
 
 export const EventRow: React.FC<EventRowProps> = ({ event, onEdit, className }) => {
   const { t } = useI18n();
+  const normType = normalizeEventType(event.event_type);
   const typeLabel =
-    event.event_type === 'custom' && event.custom_type
+    normType === 'custom' && event.custom_type
       ? event.custom_type
-      : t(`domain.events.${event.event_type}`);
+      : t(`domain.events.${normType}`);
 
   return (
     <div
@@ -69,7 +71,7 @@ export const EventRow: React.FC<EventRowProps> = ({ event, onEdit, className }) 
     >
       <div className="flex items-start gap-3.5 min-w-0 flex-1">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted border border-border">
-          {getEventIcon(event.event_type)}
+          {getEventIcon(normType)}
         </div>
 
         <div className="min-w-0 flex-1 space-y-1.5">

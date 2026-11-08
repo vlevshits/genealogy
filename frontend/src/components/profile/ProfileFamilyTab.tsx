@@ -15,6 +15,11 @@ import {
   QuickAddRelation,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
+import {
+  normalizePedigreeType,
+  normalizeRelationshipType,
+  normalizeSex,
+} from '../../lib/domain-enums';
 
 export interface ProfileFamilyTabProps {
   families: ProfileFamiliesDto;
@@ -108,9 +113,9 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                   {roleBadgeLabel}
                 </Badge>
               )}
-              {pedigreeRelation && pedigreeRelation !== 'birth' && (
+              {pedigreeRelation && normalizePedigreeType(pedigreeRelation) !== 'birth' && (
                 <Badge variant="brand" size="sm">
-                  {t(`domain.pedigree.${pedigreeRelation}`)}
+                  {t(`domain.pedigree.${normalizePedigreeType(pedigreeRelation)}`)}
                 </Badge>
               )}
             </div>
@@ -206,9 +211,9 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                   parentsList.push({
                     rel: p,
                     roleLabel:
-                      p.sex === 'M'
+                      normalizeSex(p.sex) === 'M'
                         ? t('profile.family.fatherRole')
-                        : p.sex === 'F'
+                        : normalizeSex(p.sex) === 'F'
                         ? t('profile.family.motherRole')
                         : t('profile.family.parentRole'),
                   });
@@ -249,9 +254,9 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                         {pf.siblings.map((sib) =>
                           renderRelativeCard(
                             sib,
-                            sib.sex === 'M'
+                            normalizeSex(sib.sex) === 'M'
                               ? t('profile.family.brotherRole')
-                              : sib.sex === 'F'
+                              : normalizeSex(sib.sex) === 'F'
                               ? t('profile.family.sisterRole')
                               : t('profile.family.siblingRole')
                           )
@@ -335,7 +340,7 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="brand" size="sm">
-                        {t(`domain.relationships.${sf.relationship_type}`)}
+                        {t(`domain.relationships.${normalizeRelationshipType(sf.relationship_type)}`)}
                       </Badge>
                       {(marriageDate || marriagePlace) && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-secondary">

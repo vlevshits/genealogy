@@ -20,6 +20,7 @@ import {
 } from '../../api/client';
 import { GenDate } from '../../types/gendate';
 import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import { normalizeEventType } from '../../lib/domain-enums';
 import { useI18n } from '../../i18n';
 
 export interface LifeEventDialogProps {
@@ -51,7 +52,7 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
   const { addToast } = useToast();
 
   const [eventType, setEventType] = useState<LifeEventType | string>(
-    initialEvent?.event_type ?? 'birth'
+    initialEvent?.event_type ? normalizeEventType(initialEvent.event_type) : 'birth'
   );
   const [customType, setCustomType] = useState<string>(
     initialEvent?.custom_type ?? ''
@@ -100,7 +101,11 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
   }, [open, initialSourceSuggestions]);
 
   useEffect(() => {
-    setEventType(initialEvent?.event_type ?? 'birth');
+    setEventType(
+      initialEvent?.event_type
+        ? normalizeEventType(initialEvent.event_type)
+        : 'birth'
+    );
     setCustomType(initialEvent?.custom_type ?? '');
     setDateRaw(initialEvent?.date_text ?? initialEvent?.date?.text ?? '');
     setParsedDate(initialEvent?.date ?? null);
@@ -116,15 +121,23 @@ export const LifeEventDialog: React.FC<LifeEventDialogProps> = ({
     { value: 'baptism', label: t('domain.events.baptism') },
     { value: 'marriage', label: t('domain.events.marriage') },
     { value: 'marriage_license', label: t('domain.events.marriage_license') },
+    { value: 'engagement', label: t('domain.events.engagement') },
     { value: 'divorce', label: t('domain.events.divorce') },
     { value: 'death', label: t('domain.events.death') },
     { value: 'burial', label: t('domain.events.burial') },
+    { value: 'cremation', label: t('domain.events.cremation') },
     { value: 'residence', label: t('domain.events.residence') },
     { value: 'occupation', label: t('domain.events.occupation') },
     { value: 'education', label: t('domain.events.education') },
+    { value: 'graduation', label: t('domain.events.graduation') },
     { value: 'military', label: t('domain.events.military') },
     { value: 'emigration', label: t('domain.events.emigration') },
+    { value: 'immigration', label: t('domain.events.immigration') },
     { value: 'naturalization', label: t('domain.events.naturalization') },
+    { value: 'census', label: t('domain.events.census') },
+    { value: 'religion', label: t('domain.events.religion') },
+    { value: 'adoption', label: t('domain.events.adoption') },
+    { value: 'retirement', label: t('domain.events.retirement') },
     { value: 'custom', label: t('domain.events.custom') },
   ];
 

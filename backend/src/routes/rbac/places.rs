@@ -169,7 +169,7 @@ pub async fn create_place(
         id: new_id.clone(),
         gid,
         name: raw_path.to_string(),
-        place_type: req.place_type.unwrap_or_else(|| "other".to_string()),
+        place_type: normalize_place_type(req.place_type.as_deref().unwrap_or("other")),
         parent_id: resolved_parent_id,
         full_name: raw_path.to_string(),
         country: None,
@@ -321,7 +321,7 @@ pub async fn update_place(
         }
     }
     if let Some(pt) = req.place_type {
-        store.places[idx].place_type = pt;
+        store.places[idx].place_type = normalize_place_type(&pt);
     }
     if let Some(lat) = req.latitude {
         store.places[idx].latitude = Some(lat);

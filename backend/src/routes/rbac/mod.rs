@@ -32,7 +32,9 @@ pub(crate) use crate::{
         genealogy::{
             allocate_gid, build_place_breadcrumbs, calculate_kinship_relation, compute_fan_chart,
             compute_kinship_path, compute_places_map, ensure_no_ancestor_cycle,
-            ensure_no_place_cycle, recompute_all_individuals_vitals, recompute_all_places_metadata,
+            ensure_no_place_cycle, normalize_event_type, normalize_pedigree_type,
+            normalize_place_type, normalize_relationship_type, normalize_sex,
+            recompute_all_individuals_vitals, recompute_all_places_metadata,
             resolve_or_create_place_chain, FanChartQuery, FanChartResponse, KinshipQuery,
             KinshipResponse, PlacesMapResponse, ProfileKinshipDto,
         },

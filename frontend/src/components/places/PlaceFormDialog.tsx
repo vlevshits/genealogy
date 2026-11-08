@@ -17,6 +17,7 @@ import {
   updatePlace,
 } from '../../api/client';
 import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import { normalizePlaceType } from '../../lib/domain-enums';
 import { useI18n } from '../../i18n';
 
 export interface PlaceFormDialogProps {
@@ -43,7 +44,7 @@ export const PlaceFormDialog: React.FC<PlaceFormDialogProps> = ({
   const [chainPath, setChainPath] = useState<string>('');
   const [name, setName] = useState<string>(initialPlace?.name ?? '');
   const [placeType, setPlaceType] = useState<PlaceType>(
-    initialPlace?.place_type ?? 'city'
+    initialPlace?.place_type ? normalizePlaceType(initialPlace.place_type) : 'city'
   );
   const [parentId, setParentId] = useState<string>(
     initialPlace?.parent_id ?? ''
@@ -68,7 +69,7 @@ export const PlaceFormDialog: React.FC<PlaceFormDialogProps> = ({
     if (initialPlace) {
       setMode('single');
       setName(initialPlace.name);
-      setPlaceType(initialPlace.place_type);
+      setPlaceType(normalizePlaceType(initialPlace.place_type));
       setParentId(initialPlace.parent_id ?? '');
       setLatStr(
         initialPlace.latitude !== null && initialPlace.latitude !== undefined

@@ -7,6 +7,7 @@ import {
   PlaceHierarchyIssueDto,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { normalizePlaceType } from '../../lib/domain-enums';
 
 export interface PlaceHierarchyCustomizeModalProps {
   open: boolean;
@@ -48,7 +49,9 @@ export const PlaceHierarchyCustomizeModal: React.FC<
     if (issue) {
       setCleanName(issue.proposed_clean_name || issue.current_name);
       setPlaceType(
-        issue.proposed_place_type || issue.current_place_type || 'city'
+        normalizePlaceType(
+          issue.proposed_place_type || issue.current_place_type || 'city'
+        )
       );
       setParentId(issue.proposed_parent_id || issue.current_parent_id || '');
     }

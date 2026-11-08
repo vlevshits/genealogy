@@ -311,6 +311,10 @@
       "married": "Брак",
       "civil_union": "Гражданский союз",
       "partners": "Партнёры",
+      "partner": "Партнёры",
+      "divorced": "В разводе",
+      "engaged": "Помолвлены",
+      "unmarried": "Гражданский брак",
       "unknown": "Союз"
     }
   },

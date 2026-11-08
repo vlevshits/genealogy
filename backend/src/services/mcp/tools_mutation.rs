@@ -40,11 +40,9 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 .and_then(|v| v.as_str())
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
-            let sex = args
-                .get("sex")
-                .and_then(|v| v.as_str())
-                .unwrap_or("U")
-                .to_uppercase();
+            let sex = crate::services::genealogy::normalize_sex(
+                args.get("sex").and_then(|v| v.as_str()).unwrap_or("U"),
+            );
             let birth_date = args
                 .get("birth_date")
                 .or_else(|| args.get("birth_date_text"))
@@ -78,11 +76,7 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
             let new_person = TreePersonNodeDto {
                 id: new_id.clone(),
                 gid: new_gid,
-                sex: if matches!(sex.as_str(), "M" | "F") {
-                    sex
-                } else {
-                    "U".to_string()
-                },
+                sex,
                 is_living: args
                     .get("is_living")
                     .and_then(|v| v.as_bool())
@@ -166,12 +160,79 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
             if let Some(pat) = args.get("patronymic").and_then(|v| v.as_str()) {
                 store.persons[idx].primary_name.patronymic = Some(pat.trim().to_string());
             }
+            if let Some(sx) = args.get("sex").and_then(|v| v.as_str()) {
+                store.persons[idx].sex = crate::services::genealogy::normalize_sex(sx);
+            }
             if let Some(bio) = args.get("biography").and_then(|v| v.as_str()) {
                 store.persons[idx].biography = Some(bio.trim().to_string());
+            }
+            let bd = args
+                .get("birth_date")
+                .or_else(|| args.get("birth_date_text"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            let bp = args
+                .get("birth_place")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            if bd.is_some() || bp.is_some() {
+                let cur = store.persons[idx]
+                    .birth
+                    .clone()
+                    .unwrap_or(VitalEventSummaryDto {
+                        date: None,
+                        place: None,
+                    });
+                let next_date = bd.or(cur.date);
+                let next_place = bp.or(cur.place);
+                store.persons[idx].birth_sort = next_date
+                    .as_deref()
+                    .and_then(|d| GenDate::parse(d).compute_sort_key());
+                store.persons[idx].birth = Some(VitalEventSummaryDto {
+                    date: next_date,
+                    place: next_place,
+                });
+            }
+            let dd = args
+                .get("death_date")
+                .or_else(|| args.get("death_date_text"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            let dp = args
+                .get("death_place")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            if dd.is_some() || dp.is_some() {
+                let cur = store.persons[idx]
+                    .death
+                    .clone()
+                    .unwrap_or(VitalEventSummaryDto {
+                        date: None,
+                        place: None,
+                    });
+                let next_date = dd.or(cur.date);
+                let next_place = dp.or(cur.place);
+                store.persons[idx].death_sort = next_date
+                    .as_deref()
+                    .and_then(|d| GenDate::parse(d).compute_sort_key());
+                store.persons[idx].has_death_event = true;
+                store.persons[idx].death = Some(VitalEventSummaryDto {
+                    date: next_date,
+                    place: next_place,
+                });
+            }
+            if let Some(living) = args.get("is_living").and_then(|v| v.as_bool()) {
+                store.persons[idx].living_override = Some(living);
+                store.persons[idx].is_living = living;
             }
             let tx_id = format!("tx-{}", Uuid::new_v4());
             store.persons[idx].version += 1;
             store.persons[idx].tx_id = Some(tx_id.clone());
+            recompute_all_individuals_vitals(store, current_year, age_threshold);
             let after = store.persons[idx].clone();
             log_change(
                 store,
@@ -203,6 +264,12 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 .get("partner2_id")
                 .and_then(|v| v.as_str())
                 .and_then(|id| store.resolve_person_id(id));
+            let rel_type = crate::services::genealogy::normalize_relationship_type(
+                args.get("relationship_type")
+                    .or_else(|| args.get("union_type"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("married"),
+            );
             let fam_id = Uuid::new_v4().to_string();
             let fam_gid = format!("F{:04}", store.next_family_gid_seq);
             store.next_family_gid_seq += 1;
@@ -212,7 +279,7 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 gid: fam_gid.clone(),
                 partner1_id: p1,
                 partner2_id: p2,
-                relationship_type: "married".to_string(),
+                relationship_type: rel_type,
                 is_private: false,
                 children: vec![],
                 external_ids: HashMap::new(),
@@ -248,6 +315,13 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 .and_then(|v| v.as_str())
                 .and_then(|id| store.resolve_person_id(id))
                 .ok_or(AppError::NotFound)?;
+            let ped = crate::services::genealogy::normalize_pedigree_type(
+                args.get("pedigree")
+                    .or_else(|| args.get("rel_to_partner1"))
+                    .or_else(|| args.get("rel_to_partner2"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("birth"),
+            );
             let tx_id = format!("tx-{}", Uuid::new_v4());
 
             if let Some(fam_idx) = store.families.iter().position(|f| {
@@ -264,8 +338,8 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                     store.families[fam_idx].children.push(FamilyChildDto {
                         child_id,
                         sort_order,
-                        rel_to_partner1: "birth".to_string(),
-                        rel_to_partner2: "birth".to_string(),
+                        rel_to_partner1: ped.clone(),
+                        rel_to_partner2: ped,
                     });
                 }
                 store.families[fam_idx].version += 1;
@@ -299,8 +373,8 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                     children: vec![FamilyChildDto {
                         child_id,
                         sort_order: 0,
-                        rel_to_partner1: "birth".to_string(),
-                        rel_to_partner2: "birth".to_string(),
+                        rel_to_partner1: ped.clone(),
+                        rel_to_partner2: ped,
                     }],
                     external_ids: HashMap::new(),
                     version: 1,
@@ -328,22 +402,50 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
         "create_event" => {
             let person_id = args
                 .get("person_id")
+                .or_else(|| args.get("individual_id"))
                 .and_then(|v| v.as_str())
-                .and_then(|id| store.resolve_person_id(id))
-                .ok_or(AppError::NotFound)?;
-            let event_type = args
-                .get("event_type")
+                .and_then(|id| store.resolve_person_id(id));
+            let family_id = args
+                .get("family_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("EVEN")
-                .to_uppercase();
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .and_then(|fid| {
+                    store
+                        .families
+                        .iter()
+                        .find(|f| f.id == fid || f.gid.eq_ignore_ascii_case(fid))
+                        .map(|f| f.id.clone())
+                });
+            if person_id.is_none() && family_id.is_none() {
+                return Err(AppError::NotFound);
+            }
+            let event_type = crate::services::genealogy::normalize_event_type(
+                args.get("event_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("custom"),
+            );
             let date_text = args
                 .get("date_text")
+                .or_else(|| args.get("date"))
+                .or_else(|| args.get("gedcom_date"))
                 .and_then(|v| v.as_str())
-                .map(ToString::to_string);
-            let place = args
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            let raw_place = args
                 .get("place")
+                .or_else(|| args.get("place_path"))
+                .or_else(|| args.get("place_name"))
                 .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
                 .map(ToString::to_string);
+            let resolved_place = raw_place.as_deref().and_then(|rp| {
+                crate::services::genealogy::resolve_or_create_place_chain(
+                    store, rp, None, None, None, None,
+                )
+                .ok()
+            });
 
             let ev_id = Uuid::new_v4().to_string();
             let ev_gid = format!("E{:04}", store.next_event_gid_seq);
@@ -354,15 +456,22 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
             let new_ev = LifeEventDto {
                 id: ev_id.clone(),
                 gid: ev_gid.clone(),
-                individual_id: Some(person_id),
-                family_id: None,
+                individual_id: person_id,
+                family_id,
                 event_type,
-                custom_type: None,
+                custom_type: args
+                    .get("custom_type")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
                 date: parsed_date,
                 date_sort,
                 gedcom_date: date_text,
-                place_id: None,
-                place_full_name: place,
+                place_id: resolved_place.as_ref().map(|p| p.id.clone()),
+                place_full_name: resolved_place
+                    .as_ref()
+                    .map(|p| p.full_name.clone())
+                    .or(raw_place),
                 description: args
                     .get("description")
                     .and_then(|v| v.as_str())
@@ -387,6 +496,7 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 Some(caller.user_id.clone()),
                 Some(caller.username.clone()),
             );
+            recompute_all_places_metadata(store);
             recompute_all_individuals_vitals(store, current_year, age_threshold);
             Ok(serde_json::to_value(new_ev).unwrap_or_else(|_| json!({})))
         }
@@ -419,11 +529,11 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 id: pid.clone(),
                 gid: pgid,
                 name: name.to_string(),
-                place_type: args
-                    .get("place_type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("city")
-                    .to_string(),
+                place_type: crate::services::genealogy::normalize_place_type(
+                    args.get("place_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("city"),
+                ),
                 parent_id: None,
                 full_name: name.to_string(),
                 country: None,

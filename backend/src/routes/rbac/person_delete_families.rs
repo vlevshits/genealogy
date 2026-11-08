@@ -414,8 +414,8 @@ pub async fn create_family(
         if !input_children.iter().any(|c| c.child_id == cid) {
             input_children.push(FamilyChildDto {
                 child_id: cid,
-                rel_to_partner1: "biological".to_string(),
-                rel_to_partner2: "biological".to_string(),
+                rel_to_partner1: "birth".to_string(),
+                rel_to_partner2: "birth".to_string(),
                 sort_order: 0,
             });
         }
@@ -427,6 +427,8 @@ pub async fn create_family(
             ensure_no_ancestor_cycle(&store.families, parent_id, &resolved_cid)?;
         }
         ch.child_id = resolved_cid;
+        ch.rel_to_partner1 = normalize_pedigree_type(&ch.rel_to_partner1);
+        ch.rel_to_partner2 = normalize_pedigree_type(&ch.rel_to_partner2);
         if ch.sort_order == 0 {
             ch.sort_order = idx as i32;
         }
@@ -446,9 +448,9 @@ pub async fn create_family(
         gid,
         partner1_id: p1_id,
         partner2_id: p2_id,
-        relationship_type: req
-            .relationship_type
-            .unwrap_or_else(|| "married".to_string()),
+        relationship_type: normalize_relationship_type(
+            req.relationship_type.as_deref().unwrap_or("married"),
+        ),
         is_private: req.is_private.unwrap_or(false),
         children: resolved_children,
         external_ids: HashMap::new(),
@@ -557,6 +559,8 @@ pub async fn update_family(
             let cid = resolve_person_id_in_store(&store.persons, &ch.child_id)
                 .ok_or(AppError::NotFound)?;
             ch.child_id = cid;
+            ch.rel_to_partner1 = normalize_pedigree_type(&ch.rel_to_partner1);
+            ch.rel_to_partner2 = normalize_pedigree_type(&ch.rel_to_partner2);
             resolved.push(ch);
         }
         resolved
@@ -587,7 +591,7 @@ pub async fn update_family(
     fam.partner2_id = next_p2;
     fam.children = next_children;
     if let Some(rel_type) = req.relationship_type {
-        fam.relationship_type = rel_type;
+        fam.relationship_type = normalize_relationship_type(&rel_type);
     }
     if let Some(is_priv) = req.is_private {
         fam.is_private = is_priv;

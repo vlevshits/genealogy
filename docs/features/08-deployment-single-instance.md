@@ -1,18 +1,62 @@
-# Feature Specification: Single-Instance Architecture & Docker Compose Deployment
+# Feature Specification: Single-Instance Architecture & Production Deployment (LXC & Docker)
 
 ## 1. Overview & Architectural Philosophy
-The application follows a **Single-Instance = Single-Family-Tree** architecture. A self-hoster deploys **one single Docker Compose file** to run their entire private family archive.
+The application follows a **Single-Instance = Single-Family-Tree** architecture. A self-hoster deploys their entire private family archive using either:
+1. **LXC / Bare-Metal Linux (Recommended):** A single script (`scripts/install.sh`) that downloads precompiled release binaries and web assets from GitHub Releases and configures `systemd` and `nginx` without any Docker layer.
+2. **Docker Compose:** A 3-service stack (`frontend`, `backend`, `postgres`).
 
 ### Core Architectural Guarantees:
-1. **Single-Command Startup:** Running `docker compose up -d` boots the complete production stack (Frontend, Backend, PostgreSQL) with zero manual database provisioning or manual migration scripts.
-2. **100% Configurable via Environment Variables:** Every single configuration option (domain, ports, SMTP credentials, WebAuthn RP ID, living person age thresholds, public access) is defined in a single `.env` file with sensible production defaults.
-3. **Absolute Data Privacy:** Family data, private photos, and sensitive records are physically isolated in dedicated local volumes (`postgres-data`, `media-data`, `backup-data`).
-4. **Zero Multi-Tenant Complexity:** No tenant IDs, no cross-account data leaks, and in-memory tree topology caching with ~30-50MB RAM footprint for the backend.
-5. **Default Clean Slate (Zero Dummy Data in Production):** Fresh database migrations initialize an empty archive (0 individuals, 0 families, 0 events, 0 media, 0 places). No demo, test, or mock genealogical data may ever be seeded in production builds. The frontend displays the genuine Empty Tree Onboarding flow until real family data is imported or added.
+1. **Single-Command Startup:** Running `scripts/install.sh` on LXC (or `docker compose up -d`) boots the complete production stack with zero manual database schema provisioning or manual migration scripts.
+2. **Precompiled GitHub Releases on Demand:** Releases are created deliberately when milestones are cut via git tags (`v*.*.*`), never on every commit. Precompiled Linux x86_64 and aarch64 binaries with frontend static bundles are published to GitHub Releases.
+3. **100% Configurable via Environment Variables:** Every single configuration option (domain, ports, SMTP credentials, WebAuthn RP ID, living person age thresholds, public access) is defined in a single `.env` file with sensible production defaults.
+4. **Absolute Data Privacy:** Family data, private photos, and sensitive records are physically isolated in dedicated directories/volumes (`media`, `backups`, database).
+5. **Zero Multi-Tenant Complexity:** No tenant IDs, no cross-account data leaks, and in-memory tree topology caching with ~30-50MB RAM footprint for the backend.
+6. **Default Clean Slate (Zero Dummy Data in Production):** Fresh database migrations initialize an empty archive (0 individuals, 0 families, 0 events, 0 media, 0 places). No demo, test, or mock genealogical data may ever be seeded in production builds. The frontend displays the genuine Empty Tree Onboarding flow until real family data is imported or added.
 
 ---
 
-## 2. Complete Production `docker-compose.yml` Reference
+## 2. Production Bare-Metal & LXC Deployment (Debian / Ubuntu)
+
+For bare-metal servers or lightweight LXC containers (Debian 11/12, Ubuntu 22.04/24.04), the entire deployment is managed via `scripts/install.sh`. The application listens **directly on port 80** with zero Nginx or reverse proxy layer, with PostgreSQL automatically installed and configured.
+
+### 2.1 Fresh Installation (One-Liner)
+```bash
+curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/install.sh | sudo bash
+```
+
+**Automated operations executed by the installer:**
+1. Checks Debian/Ubuntu compatibility and CPU architecture (`x86_64` or `aarch64`).
+2. Installs core utilities (`curl`, `tar`, `gzip`, `ca-certificates`, `jq`, `openssl`).
+3. Installs and configures PostgreSQL (`postgresql`, `postgresql-contrib`), creates `genealogy` user & database, configures `pg_hba.conf`, and verifies local connectivity.
+4. Creates dedicated `genealogy` system user.
+5. Downloads precompiled release archive (`genealogy-vX.Y.Z-linux-<arch>.tar.gz`) from GitHub Releases.
+6. Installs binaries in `/opt/genealogy/` and creates `/usr/local/bin/genealogy-cli` symlink.
+7. Installs frontend static files to `/var/www/genealogy/`.
+8. Generates production config in `/etc/genealogy/genealogy.env` (`PORT=80`, `FRONTEND_STATIC_PATH=/var/www/genealogy`, permissions `0600`).
+9. Configures systemd unit `/etc/systemd/system/genealogy.service` with `AmbientCapabilities=CAP_NET_BIND_SERVICE` allowing direct binding to port 80 without root privileges, and enables/starts the service.
+10. Axum backend directly serves both SPA static assets and the `/api/v1` REST endpoints on port 80 with SPA fallback and no-cache headers for `/sw.js` and `/manifest.webmanifest`.
+11. Verifies `/api/v1/health` status.
+
+### 2.2 Updating an Existing Installation
+When updating an already-installed LXC instance, simply rerun:
+```bash
+sudo /opt/genealogy/scripts/install.sh
+# or:
+VERSION=v0.2.0 sudo /opt/genealogy/scripts/install.sh
+```
+The updater automatically:
+- Detects the existing installation.
+- Fetches the target release from GitHub.
+- Stops `genealogy.service`.
+- Replaces backend and CLI binaries in `/opt/genealogy/`.
+- Replaces frontend assets in `/var/www/genealogy/`.
+- Preserves `/etc/genealogy/genealogy.env`, database, and media uploads intact.
+- Starts `genealogy.service` — the backend automatically applies any new SQLx migrations under an advisory lock.
+- Verifies backend healthcheck on the configured port.
+
+---
+
+## 3. Production `docker-compose.yml` Reference
 
 ```yaml
 services:
@@ -106,39 +150,42 @@ networks:
 
 ---
 
-## 3. Exhaustive Environment Variables Reference (`.env`)
+## 4. Exhaustive Environment Variables Reference (`.env`)
 
 Every configurable setting is externalized into environment variables:
 
-### 3.1 Web & Server Configuration
+### 4.1 Web & Server Configuration
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `PORT` | No | `8080` | External host port exposed for the web app | `80` or `8080` |
 | `APP_ENV` | No | `production` | Environment mode (`production`, `development`) | `production` |
 | `RUST_LOG` | No | `info,genealogy=debug` | Logging level for Rust Axum backend | `info` |
 
-### 3.2 Domain & Passkeys (WebAuthn / FIDO2)
+### 4.2 Domain & Passkeys (WebAuthn / FIDO2)
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `APP_ORIGIN` | **Yes** | — | Fully qualified public URL of the web app | `https://tree.example.com` |
 | `RP_ID` | **Yes** | — | WebAuthn Relying Party ID (hostname without scheme/port) | `tree.example.com` or `localhost` |
 | `RP_NAME` | No | `Family Tree Archive` | Name displayed in browser Touch ID / Passkey prompts | `Levshits Family Tree` |
 
-### 3.3 Database & Cache
+### 4.3 Database & Cache
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `POSTGRES_USER` | No | `genealogy` | PostgreSQL database username | `genealogy` |
 | `POSTGRES_PASSWORD` | **Yes** | — | Strong password for PostgreSQL database | `sUpErS3cr3tP@ss!` |
 | `POSTGRES_DB` | No | `genealogy` | PostgreSQL database name | `genealogy` |
+| `DATABASE_URL` | No | Constructed | Full PostgreSQL connection string (overrides individual credentials) | `postgresql://user:pass@127.0.0.1:5432/genealogy?sslmode=disable` |
 
-### 3.4 Media & Storage Settings
+### 4.4 Media & Storage Settings
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `MAX_UPLOAD_SIZE_MB` | No | `100` | Maximum file upload size in megabytes | `200` |
 | `THUMBNAIL_QUALITY` | No | `85` | WebP compression quality for cached avatars | `90` |
-| `MEDIA_STORAGE_PATH` | No | `/app/data/media` | Path inside container where photos are stored | `/app/data/media` |
+| `MEDIA_STORAGE_PATH` | No | `/app/data/media` | Path where photos and documents are stored | `/var/lib/genealogy/media` |
+| `BACKUP_PATH` | No | `/app/data/backups` | Path where disaster recovery snapshots are stored | `/var/lib/genealogy/backups` |
+| `FRONTEND_STATIC_PATH` | No | — | Optional path to frontend static bundle for native Axum serving | `/var/www/genealogy` |
 
-### 3.5 Privacy, Access & Internationalization
+### 4.5 Privacy, Access & Internationalization
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `TREE_TITLE` | No | `Family Tree Archive` | Display title shown in navbar and print banners | `Архив Семьи Левшиц` |
@@ -147,7 +194,7 @@ Every configurable setting is externalized into environment variables:
 | `ENABLE_REGISTRATION` | No | `false` | Allow open user registration (if false, invite-only) | `false` |
 | `LIVING_PERSON_AGE_THRESHOLD` | No | `110` | Age in years to assume an individual is living if no death date | `100` |
 
-### 3.6 Transactional Email (SMTP) for Magic Links & Invites
+### 4.6 Transactional Email (SMTP) for Magic Links & Invites
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `SMTP_ENABLED` | No | `false` | Enable transactional email delivery | `true` |
@@ -158,7 +205,7 @@ Every configurable setting is externalized into environment variables:
 | `SMTP_FROM_EMAIL` | If enabled| — | Sender email address for magic links | `tree@example.com` |
 | `SMTP_FROM_NAME` | No | `Family Tree` | Sender display name | `Levshits Archive` |
 
-### 3.7 Automated Backups & Disaster Recovery
+### 4.7 Automated Backups & Disaster Recovery
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `BACKUP_ENABLED` | No | `true` | Enable automated scheduled snapshots | `true` |
@@ -166,7 +213,7 @@ Every configurable setting is externalized into environment variables:
 | `BACKUP_RETENTION_DAYS` | No | `30` | Number of daily archives kept before auto-pruning | `30` |
 | `BACKUP_INCLUDE_GEDCOM` | No | `false` | Also write a GEDZIP export next to each nightly backup | `true` |
 
-### 3.8 Authentication, Sessions & Limits (added by specs 01 / 17)
+### 4.8 Authentication, Sessions & Limits (added by specs 01 / 17)
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `AUTH_PASSWORD_ENABLED` | No | `auto` | Password fallback: `auto` (on when no HTTPS or no SMTP), `true`, `false` | `auto` |
@@ -174,7 +221,7 @@ Every configurable setting is externalized into environment variables:
 | `MAX_IMPORT_SIZE_MB` | No | `2048` | Max uncompressed size of GEDZIP/ZIP imports | `4096` |
 | `JOB_WORKERS` | No | `2` | Concurrent background job workers | `2` |
 
-### 3.9 Maps, History & Settings (added by specs 10 / 12 / 14)
+### 4.9 Maps, History & Settings (added by specs 10 / 12 / 14)
 | Variable | Required | Default | Description | Example |
 | :--- | :---: | :---: | :--- | :--- |
 | `MAP_TILE_URL` | No | OSM tiles | Map tile URL template; **empty disables maps** (no external requests) | `https://tiles.home.lan/{z}/{x}/{y}.png` |
@@ -187,29 +234,53 @@ Every configurable setting is externalized into environment variables:
 
 ---
 
-## 4. Disaster Recovery & CLI Operations
+## 5. Disaster Recovery & CLI Operations
 
-### 4.1 Creating an On-Demand Backup
+### 5.1 Creating an On-Demand Backup
 ```bash
+# LXC / Bare-Metal:
+sudo genealogy-cli backup
+
+# Docker:
 docker compose exec backend ./genealogy-cli backup
 ```
-Generates `/app/data/backups/backup-[TIMESTAMP].tar.gz` containing `database.dump`, media assets, and checksum manifest.
+Generates `/var/lib/genealogy/backups/backup-[TIMESTAMP].tar.gz` (or `/app/data/backups/`) containing `database.dump`, media assets, and checksum manifest.
 
-### 4.2 Restoring from Backup Archive
+### 5.2 Restoring from Backup Archive
 ```bash
+# LXC / Bare-Metal:
+sudo genealogy-cli restore /var/lib/genealogy/backups/backup-2026-10-26.tar.gz
+
+# Docker:
 docker compose exec backend ./genealogy-cli restore /app/data/backups/backup-2026-10-26.tar.gz
 ```
 
-### 4.3 Other CLI Commands
+### 5.3 Other CLI Commands
 ```bash
-docker compose exec backend ./genealogy-cli create-admin-link <email>   # emergency sign-in link if all admins are locked out
-docker compose exec backend ./genealogy-cli regenerate-thumbnails
-docker compose exec backend ./genealogy-cli export-gedcom /app/data/backups/tree.gdz
+genealogy-cli create-admin-link <email>   # emergency sign-in link if all admins are locked out
+genealogy-cli regenerate-thumbnails
+genealogy-cli export-gedcom /var/lib/genealogy/backups/tree.gdz
 ```
 
 ---
 
-## 5. Hosting on a Home Network (HTTPS & Passkeys)
+## 6. Release Pipeline & Versioning Cadence
+
+### 6.1 On-Demand Release Strategy
+- Releases are **never** generated for each individual commit. Commits land on `main` via PRs or direct milestones.
+- Releases are triggered exclusively by pushing an annotated git tag (`v*.*.*`) or through manual `workflow_dispatch` on GitHub Actions (`.github/workflows/release.yml`).
+- Use the `.agents/skills/genealogy-release/` skill to automate version bumping, verification test runs, tag creation, and release dispatch.
+
+### 6.2 Artifact Packaging
+Each release builds two cross-compiled packages:
+- `genealogy-vX.Y.Z-linux-x86_64.tar.gz` (Standard 64-bit x86 LXC / Proxmox / Bare-Metal)
+- `genealogy-vX.Y.Z-linux-aarch64.tar.gz` (64-bit ARM LXC / Raspberry Pi / Ampere)
+
+Each tarball bundles the precompiled `genealogy-backend` binary, `genealogy-cli` binary, production `frontend/` static assets, systemd unit file, Nginx reverse proxy template, and `scripts/install.sh`.
+
+---
+
+## 7. Hosting on a Home Network (HTTPS & Passkeys)
 Passkeys only work on `https://` or `http://localhost`. Choose one:
 
 | Option | Effort | Result |
@@ -223,13 +294,16 @@ Passkeys only work on `https://` or `http://localhost`. Choose one:
 
 ---
 
-## 6. Definition of Done (DoD)
+## 8. Definition of Done (DoD)
 
-- [ ] **Single File Execution:** Running `docker compose up -d` with a populated `.env` brings all services online into a healthy state without interactive terminal prompts.
-- [ ] **Full Variable Coverage:** Changing any variable in `.env` (ports, locale, public access, SMTP, living age threshold) immediately takes effect upon container restart.
-- [ ] **Volume Persistence:** Completely stopping containers (`docker compose down`) and starting them again preserves all data, accounts, passkeys, and media.
+- [ ] **LXC Single-Script Deployment:** Running `scripts/install.sh` on a Debian or Ubuntu system installs binaries, provisions PostgreSQL if needed, configures systemd and Nginx, and starts a healthy application without Docker.
+- [ ] **LXC In-Place Update:** Running `scripts/install.sh` on an existing install updates backend binaries and frontend assets while preserving `.env`, database records, and media files, automatically running database migrations on startup.
+- [ ] **On-Demand Releases:** GitHub Actions release workflow triggers solely on tag push (`v*.*.*`) or manual dispatch, cross-compiling binaries for `x86_64` and `aarch64` and packaging complete tarballs with checksums.
+- [ ] **Single File Execution (Docker):** Running `docker compose up -d` with a populated `.env` brings all services online into a healthy state without interactive terminal prompts.
+- [ ] **Full Variable Coverage:** Changing any variable in `.env` (ports, locale, public access, SMTP, living age threshold) immediately takes effect upon container/service restart.
+- [ ] **Volume Persistence:** Completely stopping containers/services and starting them again preserves all data, accounts, passkeys, and media.
 - [ ] **Healthcheck Verification:** Backend waits for PostgreSQL to be fully healthy before initiating database connection pools and automatic migrations.
-- [ ] **Non-Root Security:** Containers run as unprivileged users (`appuser`) with minimal attack surface.
-- [ ] **Minimal Footprint:** Full stack runs with 3 containers (frontend, backend, postgres) and idles under ~150 MB RAM total.
+- [ ] **Non-Root Security:** Processes run as unprivileged user (`genealogy` on LXC, `appuser` on Docker) with minimal attack surface.
+- [ ] **Minimal Footprint:** Full stack runs with minimal resource usage (~30-50MB RAM for Axum backend).
 - [ ] **Lockout Recovery:** `genealogy-cli create-admin-link` lets the server owner regain admin access without the UI.
 - [ ] **Default Clean Slate:** Fresh deployment initializes an empty database with zero dummy/demo individuals, families, places, or mock dashboard items; the UI presents the authentic empty-tree onboarding card.

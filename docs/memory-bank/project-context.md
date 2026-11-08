@@ -51,7 +51,17 @@ The application enforces role-based access control ([`02-rbac-access-control`](f
 
 ## 4. Deployment Model
 
-The production environment is orchestrated via [`docker-compose.yml`](../../docker-compose.yml) comprising 3 isolated containers:
+The system supports two official deployment approaches:
+
+### 4.1 Native LXC / Bare-Metal (Recommended Production)
+Targeted at Debian 11/12 and Ubuntu 22.04/24.04 (x86_64, aarch64) in Proxmox LXC containers or bare-metal servers:
+- **Installer / Updater (`scripts/install.sh`):** Single-command script (`curl -fsSL ... | sudo bash` or `sudo /opt/genealogy/scripts/install.sh`) fetching precompiled release archives from GitHub Releases.
+- **Service Management:** Systemd service (`deploy/lxc/genealogy.service`) running hardened as system user `genealogy` (`ProtectSystem=full`, `NoNewPrivileges=true`).
+- **Web Layer:** Production Nginx reverse proxy (`deploy/lxc/nginx.conf`) handling SPA fallback, cache-control headers, and API proxying; optionally Axum native static file serving via `FRONTEND_STATIC_PATH`.
+- **Resource Footprint:** ~30–50MB RAM idle for Axum backend.
+
+### 4.2 Docker Compose (Containerized)
+Packaged via [`docker-compose.yml`](../../docker-compose.yml) comprising 3 isolated containers:
 
 ```mermaid
 graph LR
@@ -79,6 +89,8 @@ Environment variables are defined in [`.env.example`](../../.env.example) and pa
 - `APP_ORIGIN`: Base URL (e.g. `http://localhost:5173` or `https://family.example.com`) for CSRF verification
 - `STORAGE_DIR`: Filesystem directory for uploaded media (`./data/media` or `/app/data/media`)
 - `BACKUP_DIR`: Directory for scheduled and manual database archives (`./data/backups`)
+- `FRONTEND_STATIC_PATH`: Optional path to pre-built frontend distribution directory for native Axum SPA static file serving
+- `GEMINI_API_KEY`, `GEMINI_MODEL`: Optional Google Gemini API key and model identifier for server-side oral story transcription and entity extraction
 - `SMTP_*`: Optional configuration for sending magic links and notification emails (falls back to terminal/in-memory logging)
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_

@@ -31,8 +31,10 @@ feature/phase and after significant fixes/refactors.
   protection); EN + RU from day 0 (Slavic naming, patronymics).
 - **Stack:** Rust (Axum 0.8, Tokio, SQLx 0.8 runtime queries, utoipa OpenAPI)
   + PostgreSQL 16 (`pg_trgm`, `unaccent`, `pgcrypto`); React 19 + TypeScript
-  (strict) + Vite 6 + Tailwind CSS v4; Docker Compose with 3 containers
-  (`frontend` Nginx reverse proxy → `backend` → `postgres`).
+  (strict) + Vite 6 + Tailwind CSS v4.
+- **Deployment:** Production bare-metal / LXC (Debian or Ubuntu) via single
+  install/update script (`scripts/install.sh`) downloading precompiled GitHub Releases,
+  or 3-container Docker Compose (`frontend` Nginx reverse proxy → `backend` → `postgres`).
 - **Specs:** [`docs/features/README.md`](docs/features/README.md) (index),
   [`docs/pages/`](docs/pages/), [`docs/design-system/`](docs/design-system/);
   plan in [`docs/roadmap.md`](docs/roadmap.md); debt in
@@ -61,8 +63,10 @@ feature/phase and after significant fixes/refactors.
 | Backend format / lint / test | `cargo fmt --all -- --check` · `cargo clippy --all-targets -- -D warnings` · `cargo test` (`backend/`) |
 | Frontend build (tsc + vite) / tests | `npm run build` · `npm test` · `npm run test:i18n` · `npm run test:e2e` (`frontend/`) |
 | Frontend dev server | `npm run dev` → http://localhost:5173 (`frontend/`) |
-| Full stack | `docker compose up -d --build` → http://localhost (repo root) |
-| Admin CLI | `docker compose exec backend ./genealogy-cli backup \| restore <file> \| create-admin-link <email>` |
+| Full stack (Docker) | `docker compose up -d --build` → http://localhost (repo root) |
+| LXC install / update | `curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/install.sh \| sudo bash` (fresh) · `sudo /opt/genealogy/scripts/install.sh` (update) |
+| Admin CLI | `docker compose exec backend ./genealogy-cli backup \| restore <file> \| create-admin-link <email>` (Docker) or `genealogy-cli ...` (LXC) |
+| Release creation | Use `.agents/skills/genealogy-release/` skill or tag `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z` |
 | Memory bank link check | `scripts/check-memory-bank.sh` (repo root) |
 
 ## 4. Working agreements
@@ -82,4 +86,9 @@ feature/phase and after significant fixes/refactors.
   components instead of raw `<button>/<input>/<select>`; source files ≤ 800 lines.
 - **Scope discipline:** build only what the current roadmap phase asks for;
   record shortcuts in `docs/technical-debt.md`; ask when specs are ambiguous.
+- **Release cadence:** commits land on `main` via normal feature/fix workflow
+  without triggering releases. Production releases are triggered deliberately via
+  version tags (`v*.*.*`) or manual `workflow_dispatch` through
+  `.github/workflows/release.yml`, never on every commit. Use the
+  `genealogy-release` skill for version bumping and tag publishing.
 

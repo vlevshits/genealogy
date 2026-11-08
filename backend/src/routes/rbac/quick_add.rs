@@ -80,7 +80,7 @@ pub async fn quick_add_relative(
         let person = TreePersonNodeDto {
             id: new_id.clone(),
             gid,
-            sex: sex.trim().to_uppercase(),
+            sex: normalize_sex(&sex),
             is_living: !has_death,
             living_override: None,
             is_private: false,
@@ -206,7 +206,9 @@ pub async fn quick_add_relative(
     let mut created_new_person = false;
     let rel_person_id: String;
     let family_id: String;
-    let child_rel = req.child_relation.unwrap_or_else(|| "birth".to_string());
+    let child_rel = normalize_pedigree_type(req.child_relation.as_deref().unwrap_or("birth"));
+    let rel_union_type =
+        normalize_relationship_type(req.relationship_type.as_deref().unwrap_or("married"));
 
     match relation.as_str() {
         "father" | "mother" | "parent" => {
@@ -282,9 +284,7 @@ pub async fn quick_add_relative(
                     gid: fam_gid,
                     partner1_id: Some(rel_person_id.clone()),
                     partner2_id: None,
-                    relationship_type: req
-                        .relationship_type
-                        .unwrap_or_else(|| "married".to_string()),
+                    relationship_type: rel_union_type,
                     is_private: false,
                     children: vec![FamilyChildDto {
                         child_id: anchor.id.clone(),
@@ -353,9 +353,7 @@ pub async fn quick_add_relative(
                 gid: fam_gid,
                 partner1_id: Some(anchor.id.clone()),
                 partner2_id: Some(rel_person_id.clone()),
-                relationship_type: req
-                    .relationship_type
-                    .unwrap_or_else(|| "married".to_string()),
+                relationship_type: rel_union_type,
                 is_private: false,
                 children: vec![],
                 external_ids: HashMap::new(),
@@ -398,9 +396,7 @@ pub async fn quick_add_relative(
                     gid: fam_gid,
                     partner1_id: Some(anchor.id.clone()),
                     partner2_id: None,
-                    relationship_type: req
-                        .relationship_type
-                        .unwrap_or_else(|| "married".to_string()),
+                    relationship_type: rel_union_type,
                     is_private: false,
                     children: vec![],
                     external_ids: HashMap::new(),

@@ -22,6 +22,7 @@ import {
 } from '../ui';
 import { PlaceDto } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { normalizePlaceType } from '../../lib/domain-enums';
 import { cn } from '../../lib/utils';
 
 export interface PlacesTreeListCardProps {
@@ -59,7 +60,8 @@ export const PlacesTreeListCard: React.FC<PlacesTreeListCardProps> = ({
   const [viewMode, setViewMode] = useState<'tree' | 'table'>(initialViewMode);
 
   const formatPlaceType = (type: string): string => {
-    const key = `places.types.${type}`;
+    const normType = normalizePlaceType(type);
+    const key = `places.types.${normType}`;
     const translated = t(key);
     return translated === key ? t('places.types.other') : translated;
   };

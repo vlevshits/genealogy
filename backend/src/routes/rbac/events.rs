@@ -121,7 +121,7 @@ pub async fn create_event(
         ));
     }
 
-    let event_type = req.event_type.trim().to_ascii_lowercase();
+    let event_type = normalize_event_type(&req.event_type);
     if ind_id.is_some() && is_family_only_event_type(&event_type) {
         let mut fields = HashMap::new();
         fields.insert(
@@ -268,7 +268,7 @@ pub async fn update_event(
     let before_json = serde_json::to_value(&store.events[ev_idx]).ok();
 
     if let Some(ref et) = req.event_type {
-        let normalized_et = et.trim().to_ascii_lowercase();
+        let normalized_et = normalize_event_type(et);
         if store.events[ev_idx].individual_id.is_some() && is_family_only_event_type(&normalized_et)
         {
             let mut fields = HashMap::new();

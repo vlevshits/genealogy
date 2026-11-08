@@ -160,6 +160,7 @@ pub fn create_mcp_token(
     };
 
     store.personal_access_tokens.push(dto.clone());
+    store.persist_if_production();
 
     Ok(CreateMcpTokenResponse {
         id: dto.id.clone(),
@@ -206,6 +207,7 @@ pub fn revoke_mcp_token(
     }
 
     token.revoked_at = Some(Utc::now().to_rfc3339());
+    store.persist_if_production();
     Ok(())
 }
 

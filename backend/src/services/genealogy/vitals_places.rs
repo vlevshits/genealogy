@@ -1,6 +1,112 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// Normalizes an event type or GEDCOM event tag (e.g. `"BIRT"`, `"DEAT"`, `"DEATH"`, `"EVEN"`)
+/// into the canonical lowercase `event_type` enum (`11-events-and-notes.md §2.1`).
+pub fn normalize_event_type(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "birt" | "birth" => "birth".to_string(),
+        "bapm" | "chr" | "chra" | "baptism" | "christening" => "baptism".to_string(),
+        "deat" | "death" => "death".to_string(),
+        "buri" | "burial" => "burial".to_string(),
+        "crem" | "cremation" => "cremation".to_string(),
+        "marr" | "marriage" => "marriage".to_string(),
+        "enga" | "engagement" => "engagement".to_string(),
+        "div" | "divf" | "divorce" => "divorce".to_string(),
+        "anul" | "annulment" => "annulment".to_string(),
+        "resi" | "residence" => "residence".to_string(),
+        "occu" | "occupation" => "occupation".to_string(),
+        "educ" | "education" => "education".to_string(),
+        "grad" | "graduation" => "graduation".to_string(),
+        "mili" | "military" | "military_service" | "_mili" => "military_service".to_string(),
+        "immi" | "immigration" => "immigration".to_string(),
+        "emig" | "emigration" => "emigration".to_string(),
+        "natu" | "naturalization" => "naturalization".to_string(),
+        "cens" | "census" => "census".to_string(),
+        "adop" | "adoption" => "adoption".to_string(),
+        "ret" | "reti" | "retirement" => "retirement".to_string(),
+        "prob" | "probate" | "will" => "other".to_string(),
+        "even" | "fact" | "custom" => "custom".to_string(),
+        "other" => "other".to_string(),
+        other if !other.is_empty() => other.to_string(),
+        _ => "custom".to_string(),
+    }
+}
+
+/// Normalizes sex strings (`"M"`, `"male"`, `"F"`, `"female"`, `"U"`, `"unknown"`, etc.)
+/// into canonical uppercase `"M" | "F" | "X" | "U"`.
+pub fn normalize_sex(raw: &str) -> String {
+    match raw.trim().to_ascii_uppercase().as_str() {
+        "M" | "MALE" | "MAN" | "BOY" | "МУЖ" | "МУЖСКОЙ" | "М" => "M".to_string(),
+        "F" | "FEMALE" | "WOMAN" | "GIRL" | "ЖЕН" | "ЖЕНСКИЙ" | "Ж" => "F".to_string(),
+        "X" | "OTHER" | "NON-BINARY" | "NONBINARY" => "X".to_string(),
+        _ => "U".to_string(),
+    }
+}
+
+/// Normalizes family relationship/union types (`"MARR"`, `"married"`, `"partner"`, etc.)
+/// into canonical lowercase `relationship_type` (`10-core-data-model.md §4.2`).
+pub fn normalize_relationship_type(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "marr" | "marriage" | "married" | "spouse" | "spouses" | "husband_wife" => {
+            "married".to_string()
+        }
+        "unmarried"
+        | "partner"
+        | "partners"
+        | "partnership"
+        | "domestic_partnership"
+        | "cohabitation" => "unmarried".to_string(),
+        "div" | "divf" | "divorce" | "divorced" => "divorced".to_string(),
+        "enga" | "engagement" | "engaged" => "engaged".to_string(),
+        "sep" | "separated" | "separation" => "separated".to_string(),
+        "anul" | "annulled" | "annulment" => "annulled".to_string(),
+        "other" => "other".to_string(),
+        "unknown" | "" => "unknown".to_string(),
+        _ => "married".to_string(),
+    }
+}
+
+/// Normalizes parent-child pedigree links (`"biological"`, `"BIRTH"`, `"ADOP"`, etc.)
+/// into canonical lowercase `pedigree_type` (`10-core-data-model.md §4.3`).
+pub fn normalize_pedigree_type(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "birth" | "biological" | "bio" | "natural" | "" => "birth".to_string(),
+        "adopted" | "adop" | "adoption" => "adopted".to_string(),
+        "foster" | "fostered" => "foster".to_string(),
+        "step" | "stepchild" | "step-child" => "step".to_string(),
+        "guardian" | "guardianship" | "ward" => "guardian".to_string(),
+        "sealed" | "seal" => "sealed".to_string(),
+        "other" => "other".to_string(),
+        "unknown" => "unknown".to_string(),
+        _ => "birth".to_string(),
+    }
+}
+
+/// Normalizes place types (`"VILLAGE"`, `"City"`, `"STATE"`, etc.)
+/// into canonical lowercase `place_type` (`12-places.md §2.1`).
+pub fn normalize_place_type(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "country" | "state_country" | "nation" => "country".to_string(),
+        "region" | "state" | "province" | "oblast" | "krai" | "gubernia" | "governorate"
+        | "republic" => "region".to_string(),
+        "district" | "county" | "raion" | "rayon" | "uezd" | "uyezd" | "parish" | "volost" => {
+            "district".to_string()
+        }
+        "city" | "town" | "municipality" | "gorod" | "mestechko" | "poselok" | "settlement" => {
+            "city".to_string()
+        }
+        "village" | "hamlet" | "selo" | "derevnya" | "khutor" | "stanitsa" | "sloboda"
+        | "rural" => "village".to_string(),
+        "address" | "street" | "building" | "house" => "address".to_string(),
+        "cemetery" | "graveyard" | "burial_ground" => "cemetery".to_string(),
+        "church" | "cathedral" | "chapel" | "synagogue" | "mosque" | "temple" | "monastery" => {
+            "church".to_string()
+        }
+        _ => "other".to_string(),
+    }
+}
+
 /// Allocates a stable, monotonically increasing GID (`I0100`, `F0100`, `E0100`, `P0100`, `M0100`).
 /// Preserves an explicit GEDCOM xref/GID if supplied and unused, advancing the sequence past it.
 /// Never reuses a GID after deletion (`10-core-data-model.md §3.1, §8 DoD #3`).
@@ -182,11 +288,13 @@ pub fn recompute_all_places_metadata(store: &mut GenealogyPrivacyStore) {
             place.full_name = place.name.clone();
         }
 
+        place.place_type = normalize_place_type(&place.place_type);
         place.children_count = children_counts.get(&place.id).copied().unwrap_or(0);
         if let Some(ev_cnt) = event_counts.get(&place.id) {
             place.events_count = *ev_cnt;
         }
     }
+    store.persist_if_production();
 }
 
 /// Builds root-to-leaf breadcrumbs for a place (`12-places.md §3.3`).
@@ -253,15 +361,19 @@ pub fn resolve_or_create_place_chain(
         let is_leaf = depth_from_top + 1 == total_levels;
         let (_, inferred_opt) = crate::services::quality::infer_place_type_and_clean_name(seg_name);
         let inferred_type = if let Some(ref inf_type) = inferred_opt {
-            inf_type.as_str()
+            normalize_place_type(inf_type)
         } else if is_leaf {
-            leaf_place_type.unwrap_or(if total_levels >= 3 { "city" } else { "other" })
+            normalize_place_type(leaf_place_type.unwrap_or(if total_levels >= 3 {
+                "city"
+            } else {
+                "other"
+            }))
         } else if depth_from_top == 0 && total_levels >= 2 {
-            "country"
+            "country".to_string()
         } else if depth_from_top == 1 {
-            "region"
+            "region".to_string()
         } else {
-            "district"
+            "district".to_string()
         };
 
         if inferred_type == "country" {
@@ -387,6 +499,23 @@ pub fn recompute_all_individuals_vitals(
     current_year: i32,
     age_threshold: i32,
 ) {
+    for ev in &mut store.events {
+        ev.event_type = normalize_event_type(&ev.event_type);
+    }
+    for p in &mut store.persons {
+        p.sex = normalize_sex(&p.sex);
+    }
+    for f in &mut store.families {
+        f.relationship_type = normalize_relationship_type(&f.relationship_type);
+        for ch in &mut f.children {
+            ch.rel_to_partner1 = normalize_pedigree_type(&ch.rel_to_partner1);
+            ch.rel_to_partner2 = normalize_pedigree_type(&ch.rel_to_partner2);
+        }
+    }
+    for pl in &mut store.places {
+        pl.place_type = normalize_place_type(&pl.place_type);
+    }
+
     let place_names: HashMap<String, String> = store
         .places
         .iter()
@@ -558,4 +687,5 @@ pub fn recompute_all_individuals_vitals(
                 .all(|pid| person_living_map.get(*pid).copied().unwrap_or(false));
         }
     }
+    store.persist_if_production();
 }

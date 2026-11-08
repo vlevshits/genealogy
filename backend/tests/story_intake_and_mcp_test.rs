@@ -812,7 +812,7 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
                 "arguments": {
                     "given_name": "Clara",
                     "surname": "Doe",
-                    "sex": "F",
+                    "sex": "female",
                     "birth_date": "1998"
                 }
             }
@@ -820,9 +820,107 @@ async fn test_protected_mcp_server_pat_scopes_rbac_and_living_person_privacy() {
     )
     .await;
     assert_eq!(a_create_status, StatusCode::OK);
+    let clara_id = a_create_res["result"]["structuredContent"]["person"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(
         a_create_res["result"]["structuredContent"]["person"]["primary_name"]["given_name"],
         "Clara"
+    );
+    assert_eq!(
+        a_create_res["result"]["structuredContent"]["person"]["sex"],
+        "F"
+    );
+    assert_eq!(
+        a_create_res["result"]["structuredContent"]["person"]["is_living"],
+        true
+    );
+
+    // Admin PAT creates a BIRT and DEATH event via MCP tool create_event with uppercase/GEDCOM tags
+    let (a_birt_status, a_birt_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 61,
+            "method": "tools/call",
+            "params": {
+                "name": "create_event",
+                "arguments": {
+                    "person_id": clara_id,
+                    "event_type": "BIRT",
+                    "date": "14 FEB 1925",
+                    "place_path": "Brista, Chausy, Mogilev, Belarus"
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(a_birt_status, StatusCode::OK);
+    assert_eq!(
+        a_birt_res["result"]["structuredContent"]["event_type"],
+        "birth"
+    );
+
+    let (a_deat_status, a_deat_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 62,
+            "method": "tools/call",
+            "params": {
+                "name": "create_event",
+                "arguments": {
+                    "person_id": clara_id,
+                    "event_type": "DEATH",
+                    "date_text": "18 OCT 2013",
+                    "place": "Minsk, Belarus"
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(a_deat_status, StatusCode::OK);
+    assert_eq!(
+        a_deat_res["result"]["structuredContent"]["event_type"],
+        "death"
+    );
+
+    // Verify Clara's birth, death, and is_living were recomputed from the normalized events
+    let (_, clara_after) =
+        get_json(&app, &format!("/api/v1/persons/{clara_id}"), &admin_auth).await;
+    assert_eq!(clara_after["birth"]["date"], "14 FEB 1925");
+    assert_eq!(clara_after["death"]["date"], "18 OCT 2013");
+    assert_eq!(clara_after["is_living"], false);
+    assert_eq!(clara_after["has_death_event"], true);
+
+    // Verify MCP create_or_resolve_place normalizes uppercase place_type ("VILLAGE" -> "village")
+    let (a_place_status, a_place_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_raw_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 63,
+            "method": "tools/call",
+            "params": {
+                "name": "create_or_resolve_place",
+                "arguments": {
+                    "name": "Samotevichi",
+                    "place_type": "VILLAGE"
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(a_place_status, StatusCode::OK);
+    assert_eq!(
+        a_place_res["result"]["structuredContent"]["place_type"],
+        "village"
     );
 
     // 8. Revoke Viewer PAT and verify subsequent MCP call returns 401 Unauthorized

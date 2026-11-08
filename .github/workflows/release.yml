@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    name: Build Frontend SPA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Run frontend tests
+        run: cd frontend && npm test -- --run
+
+      - name: Build frontend distribution
+        run: cd frontend && npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+  build-backend:
+    name: Build Backend (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            use_cross: false
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            use_cross: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Install cross-compilation tools
+        if: matrix.use_cross
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build binaries (native x86_64)
+        if: "!matrix.use_cross"
+        run: |
+          cd backend
+          cargo build --release --target ${{ matrix.target }} --bin genealogy-backend --bin genealogy-cli
+
+      - name: Build binaries (cross aarch64)
+        if: matrix.use_cross
+        run: |
+          cd backend
+          cross build --release --target ${{ matrix.target }} --bin genealogy-backend --bin genealogy-cli
+
+      - name: Upload backend artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: |
+            backend/target/${{ matrix.target }}/release/genealogy-backend
+            backend/target/${{ matrix.target }}/release/genealogy-cli
+          retention-days: 1
+
+  package-and-publish:
+    name: Package and Publish Release
+    needs: [build-frontend, build-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist-frontend/
+
+      - name: Download x86_64 binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-x86_64
+          path: bin-x86_64/
+
+      - name: Download aarch64 binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-aarch64
+          path: bin-aarch64/
+
+      - name: Package distributions
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          mkdir -p release-assets
+
+          for ARCH in x86_64 aarch64; do
+            PKG_DIR="genealogy-${TAG}-linux-${ARCH}"
+            mkdir -p "${PKG_DIR}"
+            mkdir -p "${PKG_DIR}/scripts"
+            mkdir -p "${PKG_DIR}/deploy/lxc"
+            mkdir -p "${PKG_DIR}/frontend"
+
+            # Binaries
+            cp "bin-${ARCH}/genealogy-backend" "${PKG_DIR}/genealogy-backend"
+            cp "bin-${ARCH}/genealogy-cli" "${PKG_DIR}/genealogy-cli"
+            chmod +x "${PKG_DIR}/genealogy-backend" "${PKG_DIR}/genealogy-cli"
+
+            # Frontend dist
+            cp -r dist-frontend/* "${PKG_DIR}/frontend/"
+
+            # Deployment scripts & templates
+            cp scripts/install.sh "${PKG_DIR}/scripts/install.sh"
+            chmod +x "${PKG_DIR}/scripts/install.sh"
+            cp deploy/lxc/genealogy.service "${PKG_DIR}/deploy/lxc/genealogy.service"
+            cp deploy/lxc/genealogy.env.example "${PKG_DIR}/deploy/lxc/genealogy.env.example"
+
+            # Root convenience files
+            cp deploy/lxc/genealogy.service "${PKG_DIR}/genealogy.service"
+            cp deploy/lxc/genealogy.env.example "${PKG_DIR}/genealogy.env.example"
+
+            # Create tarball
+            tar -czf "release-assets/genealogy-${TAG}-linux-${ARCH}.tar.gz" -C "${PKG_DIR}" .
+          done
+
+          # Standalone install script for convenience
+          cp scripts/install.sh release-assets/install.sh
+
+          # Compute SHA256 checksums
+          cd release-assets
+          sha256sum genealogy-*.tar.gz install.sh > SHA256SUMS
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-assets/genealogy-*.tar.gz
+            release-assets/install.sh
+            release-assets/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

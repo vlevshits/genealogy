@@ -69,6 +69,9 @@ pub struct AppConfig {
     // 3.10 AI & Multimodal Story Intake (Gemini)
     pub gemini_api_key: Option<String>,
     pub gemini_model: String,
+
+    // 3.11 Frontend Static Serving (Standalone / LXC)
+    pub frontend_static_path: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -201,6 +204,9 @@ impl AppConfig {
         let gemini_api_key = get("GEMINI_API_KEY").or_else(|| get("VITE_GEMINI_API_KEY"));
         let gemini_model = get("GEMINI_MODEL").unwrap_or_else(|| "gemini-3.8-flash".to_string());
 
+        // 3.11 Frontend Static Serving (Standalone / LXC)
+        let frontend_static_path = get("FRONTEND_STATIC_PATH");
+
         Ok(Self {
             port,
             app_env,
@@ -246,6 +252,7 @@ impl AppConfig {
             public_search_show_living,
             gemini_api_key,
             gemini_model,
+            frontend_static_path,
         })
     }
 
