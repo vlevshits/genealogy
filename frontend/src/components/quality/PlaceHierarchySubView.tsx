@@ -10,6 +10,7 @@ import {
 import {
   FixPlaceHierarchyRequest,
   historyApi,
+  normalizePlaceHierarchyIssue,
   PlaceDto,
   PlaceHierarchyIssueDto,
   qualityApi,
@@ -201,28 +202,35 @@ export const PlaceHierarchySubView: React.FC<PlaceHierarchySubViewProps> = ({
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchFixing, setBatchFixing] = useState(false);
 
-  const filteredIssues = useMemo(() => {
-    if (categoryFilter === 'all') return issues;
-    return issues.filter((item) => item.category === categoryFilter);
-  }, [issues, categoryFilter]);
-
-  const highConfidenceIssues = useMemo(
-    () =>
-      issues.filter(
-        (item) =>
-          item.confidence_tier === 'high' || item.confidence_score >= 85
-      ),
+  const normalizedIssues = useMemo(
+    () => issues.map(normalizePlaceHierarchyIssue),
     [issues]
   );
 
-  const unparsedCount = issues.filter(
+  const filteredIssues = useMemo(() => {
+    if (categoryFilter === 'all') return normalizedIssues;
+    return normalizedIssues.filter((item) => item.category === categoryFilter);
+  }, [normalizedIssues, categoryFilter]);
+
+  const highConfidenceIssues = useMemo(
+    () =>
+      normalizedIssues.filter(
+        (item) =>
+          item.confidence_tier === 'high' || item.confidence_score >= 85
+      ),
+    [normalizedIssues]
+  );
+
+  const unparsedCount = normalizedIssues.filter(
     (i) => i.category === 'unparsed_paths'
   ).length;
-  const orphansCount = issues.filter((i) => i.category === 'orphans').length;
-  const typeMismatchCount = issues.filter(
+  const orphansCount = normalizedIssues.filter(
+    (i) => i.category === 'orphans'
+  ).length;
+  const typeMismatchCount = normalizedIssues.filter(
     (i) => i.category === 'type_mismatches'
   ).length;
-  const duplicatesCount = issues.filter(
+  const duplicatesCount = normalizedIssues.filter(
     (i) => i.category === 'duplicates'
   ).length;
 

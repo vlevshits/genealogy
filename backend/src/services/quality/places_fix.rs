@@ -11,6 +11,7 @@ pub fn analyze_place_hierarchies(
     let type_filter = query
         .issue_type
         .as_deref()
+        .or(query.category.as_deref())
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
@@ -31,22 +32,38 @@ pub fn analyze_place_hierarchies(
     let mut counts = PlaceHierarchyAnalysisCountsDto {
         total_places: store.places.len(),
         total_issues: all_issues.len(),
+        total: all_issues.len(),
         ..Default::default()
     };
 
     for iss in &all_issues {
         if iss.confidence >= 85 {
             counts.high_confidence_count += 1;
+            counts.high_confidence += 1;
         } else if iss.confidence >= 60 {
             counts.medium_confidence_count += 1;
+            counts.medium_confidence += 1;
         } else {
             counts.low_confidence_count += 1;
+            counts.low_confidence += 1;
         }
         match iss.issue_type.as_str() {
-            "unparsed_path" => counts.unparsed_paths_count += 1,
-            "orphan_hierarchy" => counts.orphan_places_count += 1,
-            "type_mismatch" => counts.type_mismatches_count += 1,
-            "duplicate_node" => counts.duplicate_nodes_count += 1,
+            "unparsed_path" => {
+                counts.unparsed_paths_count += 1;
+                counts.unparsed_paths += 1;
+            }
+            "orphan_hierarchy" => {
+                counts.orphan_places_count += 1;
+                counts.orphans += 1;
+            }
+            "type_mismatch" => {
+                counts.type_mismatches_count += 1;
+                counts.type_mismatches += 1;
+            }
+            "duplicate_node" => {
+                counts.duplicate_nodes_count += 1;
+                counts.duplicates += 1;
+            }
             _ => {}
         }
     }
@@ -58,9 +75,7 @@ pub fn analyze_place_hierarchies(
                 return false;
             }
             if let Some(tf) = type_filter {
-                if !iss.issue_type.eq_ignore_ascii_case(tf)
-                    && !iss.rule_code.eq_ignore_ascii_case(tf)
-                {
+                if !matches_issue_type_or_category(iss, tf) {
                     return false;
                 }
             }
@@ -106,45 +121,78 @@ pub fn preview_place_hierarchy_issue(
         existing_place_id: Some(place.id.clone()),
         existing_place_gid: Some(place.gid.clone()),
         is_new: false,
+        action: "clean_leaf".to_string(),
     });
     let parent_name = place
         .parent_id
         .as_deref()
         .and_then(|pid| store.places.iter().find(|p| p.id == pid))
+        .filter(|p| !is_placeholder_place_name(&p.name))
         .map(|p| p.full_name.clone());
 
-    Ok(PlaceHierarchyIssueDto {
-        id: format!("PLACE_PREVIEW:{}", place.id),
-        place_id: place.id.clone(),
-        place_gid: place.gid.clone(),
-        issue_type: "none".to_string(),
-        rule_code: "NONE".to_string(),
-        severity: "info".to_string(),
-        confidence: 100,
-        confidence_tier: "high".to_string(),
-        current_name: place.name.clone(),
-        current_full_name: place.full_name.clone(),
-        current_place_type: place.place_type.clone(),
-        current_parent_id: place.parent_id.clone(),
-        current_parent_name: parent_name.clone(),
-        latitude: place.latitude,
-        longitude: place.longitude,
-        events_count: place.events_count,
-        children_count: place.children_count,
-        proposed_leaf_name: place.name.clone(),
-        proposed_clean_name: place.name.clone(),
-        proposed_place_type: place.place_type.clone(),
-        proposed_parent_id: place.parent_id.clone(),
-        proposed_parent_name: parent_name,
-        proposed_full_name: place.full_name.clone(),
-        proposed_chain: chain,
-        parent_candidates: vec![],
-        consolidate_with_place_id: None,
-        consolidate_with_name: None,
-        distance_km: None,
-        reason: "Place hierarchy is already structured.".to_string(),
-        preserve_alt_name: None,
-    })
+    Ok(build_place_issue_dto(
+        format!("PLACE_PREVIEW:{}", place.id),
+        place,
+        "none",
+        "NONE",
+        "info",
+        100,
+        place.parent_id.clone(),
+        parent_name.clone(),
+        place.name.clone(),
+        place.place_type.clone(),
+        place.parent_id.clone(),
+        parent_name,
+        place.full_name.clone(),
+        chain,
+        vec![],
+        None,
+        None,
+        None,
+        "Place hierarchy is already structured.".to_string(),
+        None,
+    ))
+}
+
+fn prune_orphan_placeholder_places(
+    store: &mut GenealogyPrivacyStore,
+    tx_id: &str,
+    tx_label: &str,
+    actor_id: Option<String>,
+    actor_name: Option<String>,
+) {
+    let orphans: Vec<PlaceSummaryDto> = store
+        .places
+        .iter()
+        .filter(|p| {
+            is_placeholder_place_name(&p.name) && p.events_count == 0 && p.children_count == 0
+        })
+        .cloned()
+        .collect();
+    if orphans.is_empty() {
+        return;
+    }
+    for orphan in orphans {
+        store.places.retain(|p| p.id != orphan.id);
+        log_change(
+            store,
+            Some(tx_id.to_string()),
+            tx_label,
+            "place",
+            &orphan.id,
+            "delete",
+            Some(format!("{} ({})", orphan.name, orphan.gid)),
+            format!(
+                "Removed orphan placeholder place {} ({})",
+                orphan.name, orphan.gid
+            ),
+            serde_json::to_value(&orphan).ok(),
+            None,
+            actor_id.clone(),
+            actor_name.clone(),
+        );
+    }
+    recompute_all_places_metadata(store);
 }
 
 pub(crate) fn fix_single_place_in_tx(
@@ -263,8 +311,18 @@ pub(crate) fn fix_single_place_in_tx(
             let ancestor_steps = &issue.proposed_chain[..issue.proposed_chain.len() - 1];
             let mut curr_pid: Option<String> = None;
             for step in ancestor_steps {
+                if is_placeholder_place_name(&step.name) {
+                    continue;
+                }
+                if step.place_type == "country" {
+                    curr_pid = None;
+                }
                 if let Some(ref ex_id) = step.existing_place_id {
-                    if store.places.iter().any(|p| &p.id == ex_id) {
+                    if store
+                        .places
+                        .iter()
+                        .any(|p| &p.id == ex_id && !is_placeholder_place_name(&p.name))
+                    {
                         curr_pid = Some(ex_id.clone());
                         continue;
                     }
@@ -278,6 +336,8 @@ pub(crate) fn fix_single_place_in_tx(
                     let found_id = existing.id.clone();
                     // If existing top-level place had no parent_id yet and we now have a higher parent, link it
                     if existing.parent_id.is_none()
+                        && step.place_type != "country"
+                        && existing.place_type != "country"
                         && curr_pid.is_some()
                         && ensure_no_place_cycle(&store.places, &found_id, curr_pid.as_deref())
                             .is_ok()
@@ -364,10 +424,6 @@ pub(crate) fn fix_single_place_in_tx(
         resolved_parent_id = place_snapshot.parent_id.clone();
     }
 
-    if let Some(ref pid) = resolved_parent_id {
-        ensure_no_place_cycle(&store.places, &place_id, Some(pid))?;
-    }
-
     let target_leaf_name = req
         .clean_name
         .as_deref()
@@ -395,6 +451,24 @@ pub(crate) fn fix_single_place_in_tx(
         })
         .unwrap_or_else(|| place_snapshot.place_type.clone());
 
+    if target_place_type == "country" {
+        resolved_parent_id = None;
+    }
+    if let Some(ref pid) = resolved_parent_id {
+        if store
+            .places
+            .iter()
+            .find(|p| &p.id == pid)
+            .is_some_and(|p| is_placeholder_place_name(&p.name))
+        {
+            resolved_parent_id = None;
+        }
+    }
+
+    if let Some(ref pid) = resolved_parent_id {
+        ensure_no_place_cycle(&store.places, &place_id, Some(pid))?;
+    }
+
     // 2. Check if consolidating into an existing duplicate target place under the same parent
     let explicit_consolidate_id = req
         .consolidate_with_place_id
@@ -412,6 +486,7 @@ pub(crate) fn fix_single_place_in_tx(
                 .iter()
                 .find(|p| {
                     p.id != place_id
+                        && !is_placeholder_place_name(&p.name)
                         && p.parent_id == resolved_parent_id
                         && !p.name.contains(',')
                         && normalize_place_match_key(&p.name) == norm_leaf
@@ -588,11 +663,12 @@ pub(crate) fn fix_single_place_in_tx(
                 ),
                 serde_json::to_value(&place_snapshot).ok(),
                 None,
-                actor_id,
-                actor_name,
+                actor_id.clone(),
+                actor_name.clone(),
             );
 
             recompute_all_places_metadata(store);
+            prune_orphan_placeholder_places(store, tx_id, tx_label, actor_id, actor_name);
             let surviving = store
                 .places
                 .iter()
@@ -633,7 +709,13 @@ pub(crate) fn fix_single_place_in_tx(
     store.places[place_idx].version += 1;
 
     recompute_all_places_metadata(store);
-    let updated_place = store.places[place_idx].clone();
+    prune_orphan_placeholder_places(store, tx_id, tx_label, actor_id.clone(), actor_name.clone());
+    let updated_place = store
+        .places
+        .iter()
+        .find(|p| p.id == place_id)
+        .cloned()
+        .ok_or(AppError::NotFound)?;
 
     log_change(
         store,

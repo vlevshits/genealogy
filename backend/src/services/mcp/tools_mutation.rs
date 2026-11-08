@@ -540,6 +540,7 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                     min_confidence,
                     place_ids,
                     issue_type: None,
+                    category: None,
                 },
                 Some(caller.user_id.clone()),
                 Some(caller.username.clone()),

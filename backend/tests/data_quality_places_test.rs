@@ -543,6 +543,9 @@ async fn test_place_hierarchy_analysis_unparsed_paths_haversine_orphans_batch_fi
 
     let (an_st, analysis) = get_json(&app, "/api/v1/quality/places/analysis", &admin_auth).await;
     assert_eq!(an_st, StatusCode::OK);
+    assert_eq!(analysis["counts"]["unparsed_paths"], 1);
+    assert!(analysis["counts"]["orphans"].as_u64().unwrap() >= 1);
+    assert!(analysis["counts"]["high_confidence"].as_u64().unwrap() >= 2);
     let issues = analysis["items"].as_array().unwrap();
 
     // Check Pokrovka unparsed path issue
@@ -551,19 +554,29 @@ async fn test_place_hierarchy_analysis_unparsed_paths_haversine_orphans_batch_fi
         .find(|i| i["place_id"].as_str() == Some(pokrovka_id.as_str()))
         .expect("Pokrovka unparsed path issue should be detected");
     assert_eq!(pokrovka_issue["issue_type"], "unparsed_path");
+    assert_eq!(pokrovka_issue["category"], "unparsed_paths");
     assert_eq!(pokrovka_issue["rule_code"], "PLACE_UNPARSED_PATH");
     assert!(pokrovka_issue["confidence"].as_u64().unwrap() >= 90);
+    assert_eq!(
+        pokrovka_issue["confidence_score"],
+        pokrovka_issue["confidence"]
+    );
+    assert!(!pokrovka_issue["rationale"].as_str().unwrap().is_empty());
     assert_eq!(pokrovka_issue["proposed_clean_name"], "Покровка");
     let chain = pokrovka_issue["proposed_chain"].as_array().unwrap();
     assert_eq!(chain.len(), 4);
     assert_eq!(chain[0]["name"], "Российская империя");
     assert_eq!(chain[0]["place_type"], "country");
+    assert_eq!(chain[0]["action"], "create");
     assert_eq!(chain[1]["name"], "Самарская губерния");
     assert_eq!(chain[1]["place_type"], "region");
+    assert_eq!(chain[1]["action"], "create");
     assert_eq!(chain[2]["name"], "Новоузенский уезд");
     assert_eq!(chain[2]["place_type"], "district");
+    assert_eq!(chain[2]["action"], "create");
     assert_eq!(chain[3]["name"], "Покровка");
     assert_eq!(chain[3]["place_type"], "village");
+    assert_eq!(chain[3]["action"], "clean_leaf");
 
     // Check single-place preview endpoint (`GET /api/v1/quality/places/preview?id=...`)
     let (prev_st, prev_dto) = get_json(
@@ -582,10 +595,14 @@ async fn test_place_hierarchy_analysis_unparsed_paths_haversine_orphans_batch_fi
         .find(|i| i["place_id"].as_str() == Some(mednoye_id.as_str()))
         .expect("Mednoye orphan issue should be detected");
     assert_eq!(mednoye_issue["issue_type"], "orphan_hierarchy");
+    assert_eq!(mednoye_issue["category"], "orphans");
     assert_eq!(mednoye_issue["rule_code"], "PLACE_ORPHAN_HIERARCHY");
     assert_eq!(mednoye_issue["proposed_parent_id"], tver_district_id);
     assert_eq!(mednoye_issue["proposed_clean_name"], "Медное");
     assert_eq!(mednoye_issue["proposed_place_type"], "village");
+    let med_chain = mednoye_issue["proposed_chain"].as_array().unwrap();
+    assert_eq!(med_chain[0]["action"], "reuse");
+    assert_eq!(med_chain.last().unwrap()["action"], "clean_leaf");
     let dist_km = mednoye_issue["distance_km"].as_f64().unwrap();
     assert!(
         dist_km > 15.0 && dist_km <= 40.0,

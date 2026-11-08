@@ -6,15 +6,34 @@ pub(crate) fn analyze_single_place_issue(
     store: &GenealogyPrivacyStore,
     include_dismissed: bool,
 ) -> Option<PlaceHierarchyIssueDto> {
-    let parent_name = place
+    if is_placeholder_place_name(&place.name) {
+        return None;
+    }
+
+    let parent_is_placeholder = place
         .parent_id
         .as_deref()
         .and_then(|pid| store.places.iter().find(|p| p.id == pid))
-        .map(|p| p.full_name.clone());
+        .is_some_and(|p| is_placeholder_place_name(&p.name));
+
+    let parent_name = if parent_is_placeholder {
+        None
+    } else {
+        place
+            .parent_id
+            .as_deref()
+            .and_then(|pid| store.places.iter().find(|p| p.id == pid))
+            .map(|p| p.full_name.clone())
+    };
+    let effective_current_parent_id = if parent_is_placeholder {
+        None
+    } else {
+        place.parent_id.clone()
+    };
 
     let has_delimiters_in_name =
         place.name.contains(',') || place.name.contains(';') || place.name.contains('/');
-    let has_unlinked_full_name_path = place.parent_id.is_none()
+    let has_unlinked_full_name_path = (place.parent_id.is_none() || parent_is_placeholder)
         && (place.full_name.contains(',')
             || place.full_name.contains(';')
             || place.full_name.contains('/'));
@@ -67,6 +86,10 @@ pub(crate) fn analyze_single_place_issue(
                     "district".to_string()
                 };
 
+                if seg_type == "country" {
+                    curr_parent_id = None;
+                }
+
                 if is_leaf {
                     proposed_chain.push(ProposedHierarchyStepDto {
                         name: clean_seg,
@@ -74,6 +97,7 @@ pub(crate) fn analyze_single_place_issue(
                         existing_place_id: Some(place.id.clone()),
                         existing_place_gid: Some(place.gid.clone()),
                         is_new: false,
+                        action: "clean_leaf".to_string(),
                     });
                 } else {
                     let existing = find_matching_place_in_store(
@@ -86,7 +110,7 @@ pub(crate) fn analyze_single_place_issue(
                         curr_parent_id = Some(ex.id.clone());
                         proposed_chain.push(ProposedHierarchyStepDto {
                             name: ex.name.clone(),
-                            place_type: if ex.place_type == "other" {
+                            place_type: if ex.place_type == "other" || seg_type == "country" {
                                 seg_type
                             } else {
                                 ex.place_type.clone()
@@ -94,6 +118,7 @@ pub(crate) fn analyze_single_place_issue(
                             existing_place_id: Some(ex.id.clone()),
                             existing_place_gid: Some(ex.gid.clone()),
                             is_new: false,
+                            action: "reuse".to_string(),
                         });
                     } else {
                         curr_parent_id = None;
@@ -103,6 +128,7 @@ pub(crate) fn analyze_single_place_issue(
                             existing_place_id: None,
                             existing_place_gid: None,
                             is_new: true,
+                            action: "create".to_string(),
                         });
                     }
                 }
@@ -110,7 +136,7 @@ pub(crate) fn analyze_single_place_issue(
 
             let leaf_step = proposed_chain.last().cloned().unwrap();
             let parent_step = if proposed_chain.len() >= 2 {
-                Some(&proposed_chain[proposed_chain.len() - 2])
+                Some(proposed_chain[proposed_chain.len() - 2].clone())
             } else {
                 None
             };
@@ -128,53 +154,61 @@ pub(crate) fn analyze_single_place_issue(
             // Check if a clean place with this leaf name already exists under the resolved parent
             let dup_target = store.places.iter().find(|p| {
                 p.id != place.id
+                    && !is_placeholder_place_name(&p.name)
                     && !p.name.contains(',')
                     && normalize_place_match_key(&p.name)
                         == normalize_place_match_key(&leaf_step.name)
                     && (parent_step
+                        .as_ref()
                         .and_then(|ps| ps.existing_place_id.as_deref())
                         .is_some_and(|pid| p.parent_id.as_deref() == Some(pid))
                         || normalize_place_match_key(&p.full_name)
                             == normalize_place_match_key(&proposed_full_name))
             });
 
-            let confidence = 95;
-            return Some(PlaceHierarchyIssueDto {
-                id: issue_id,
-                place_id: place.id.clone(),
-                place_gid: place.gid.clone(),
-                issue_type: "unparsed_path".to_string(),
-                rule_code: RULE_PLACE_UNPARSED_PATH.to_string(),
-                severity: "warning".to_string(),
-                confidence,
-                confidence_tier: confidence_tier(confidence),
-                current_name: place.name.clone(),
-                current_full_name: place.full_name.clone(),
-                current_place_type: place.place_type.clone(),
-                current_parent_id: place.parent_id.clone(),
-                current_parent_name: parent_name,
-                latitude: place.latitude,
-                longitude: place.longitude,
-                events_count: place.events_count,
-                children_count: place.children_count,
-                proposed_leaf_name: leaf_step.name.clone(),
-                proposed_clean_name: leaf_step.name.clone(),
-                proposed_place_type: leaf_step.place_type.clone(),
-                proposed_parent_id: parent_step.and_then(|s| s.existing_place_id.clone()),
-                proposed_parent_name: parent_step.map(|s| s.name.clone()),
+            if dup_target.is_some() {
+                if let Some(last) = proposed_chain.last_mut() {
+                    last.action = "consolidate".to_string();
+                }
+            }
+
+            return Some(build_place_issue_dto(
+                issue_id,
+                place,
+                "unparsed_path",
+                RULE_PLACE_UNPARSED_PATH,
+                "warning",
+                95,
+                effective_current_parent_id,
+                parent_name,
+                leaf_step.name,
+                leaf_step.place_type,
+                parent_step.as_ref().and_then(|s| s.existing_place_id.clone()),
+                parent_step.map(|s| s.name),
                 proposed_full_name,
                 proposed_chain,
-                parent_candidates: vec![],
-                consolidate_with_place_id: dup_target.map(|d| d.id.clone()),
-                consolidate_with_name: dup_target.map(|d| d.full_name.clone()),
-                distance_km: None,
-                reason: "Right-to-left jurisdiction decomposition; original raw string archived to alternate names.".to_string(),
-                preserve_alt_name: Some(place.name.clone()),
-            });
+                vec![],
+                dup_target.map(|d| d.id.clone()),
+                dup_target.map(|d| d.full_name.clone()),
+                None,
+                "Right-to-left jurisdiction decomposition; original raw string archived to alternate names.".to_string(),
+                Some(place.name.clone()),
+            ));
         }
     }
 
-    let (clean_name, inferred_type_opt) = infer_place_type_and_clean_name(&place.name);
+    let single_seg_after_strip = if has_delimiters_in_name {
+        let segs = split_jurisdiction_segments(&place.name);
+        if segs.len() == 1 {
+            segs.into_iter().next()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let name_for_inference = single_seg_after_strip.as_deref().unwrap_or(&place.name);
+    let (clean_name, inferred_type_opt) = infer_place_type_and_clean_name(name_for_inference);
     let effective_type = if let Some(ref inf) = inferred_type_opt {
         inf.clone()
     } else if place.place_type != "other" {
@@ -190,6 +224,7 @@ pub(crate) fn analyze_single_place_issue(
     if !place_norm_key.is_empty() {
         let duplicate_target = store.places.iter().find(|other| {
             if other.id == place.id
+                || is_placeholder_place_name(&other.name)
                 || other.name.contains(',')
                 || other.name.contains(';')
                 || other.name.contains('/')
@@ -199,7 +234,31 @@ pub(crate) fn analyze_single_place_issue(
             if normalize_place_match_key(&other.name) != place_norm_key {
                 return false;
             }
-            if place.parent_id == other.parent_id {
+            let other_parent_is_placeholder = other
+                .parent_id
+                .as_deref()
+                .and_then(|pid| store.places.iter().find(|p| p.id == pid))
+                .is_some_and(|p| is_placeholder_place_name(&p.name));
+
+            if effective_type == "country" {
+                if place.parent_id.is_none() && place.place_type == "country" {
+                    other.parent_id.is_none()
+                        && other.place_type == "country"
+                        && (other.events_count > place.events_count
+                            || (other.events_count == place.events_count
+                                && other.children_count > place.children_count)
+                            || (other.events_count == place.events_count
+                                && other.children_count == place.children_count
+                                && other.id < place.id))
+                } else if other.parent_id.is_none() {
+                    place.parent_id.is_some()
+                        || other.place_type == "country"
+                        || other.events_count > place.events_count
+                        || (other.events_count == place.events_count && other.id < place.id)
+                } else {
+                    false
+                }
+            } else if place.parent_id == other.parent_id {
                 // Prefer keeping the one with clean name (no abbreviation), or more events, or lower id
                 let other_is_cleaner = other.name == infer_place_type_and_clean_name(&other.name).0
                     && place.name != clean_name;
@@ -208,9 +267,10 @@ pub(crate) fn analyze_single_place_issue(
                     || other_has_more_events
                     || (other.events_count == place.events_count && other.id < place.id)
             } else {
-                // If `place` is an orphan (`parent_id == None`) and `other` already has a parent hierarchy
-                place.parent_id.is_none()
+                // If `place` is an orphan (`parent_id == None` or placeholder parent) and `other` already has a valid parent hierarchy
+                (place.parent_id.is_none() || parent_is_placeholder)
                     && other.parent_id.is_some()
+                    && !other_parent_is_placeholder
                     && (place.latitude.is_none()
                         || other.latitude.is_none()
                         || haversine_distance_km(
@@ -232,62 +292,66 @@ pub(crate) fn analyze_single_place_issue(
                 Some(&dup.id),
             );
             if include_dismissed || !dismissed {
-                let mut chain = if let Some(ref pid) = dup.parent_id {
+                let (_, dup_inferred_opt) = infer_place_type_and_clean_name(&dup.name);
+                let dup_eff_type = if dup_inferred_opt.as_deref() == Some("country") {
+                    "country".to_string()
+                } else if dup.place_type == "other" {
+                    dup_inferred_opt.unwrap_or_else(|| dup.place_type.clone())
+                } else {
+                    dup.place_type.clone()
+                };
+                let dup_parent_id = if dup_eff_type == "country" {
+                    None
+                } else {
+                    dup.parent_id.clone()
+                };
+                let mut chain = if let Some(ref pid) = dup_parent_id {
                     build_ancestor_steps_for_parent(&store.places, pid)
                 } else {
                     vec![]
                 };
                 chain.push(ProposedHierarchyStepDto {
                     name: dup.name.clone(),
-                    place_type: dup.place_type.clone(),
+                    place_type: dup_eff_type.clone(),
                     existing_place_id: Some(dup.id.clone()),
                     existing_place_gid: Some(dup.gid.clone()),
                     is_new: false,
+                    action: "consolidate".to_string(),
                 });
-                let confidence = 88;
-                return Some(PlaceHierarchyIssueDto {
-                    id: issue_id,
-                    place_id: place.id.clone(),
-                    place_gid: place.gid.clone(),
-                    issue_type: "duplicate_node".to_string(),
-                    rule_code: RULE_PLACE_DUPLICATE_CANDIDATE.to_string(),
-                    severity: "warning".to_string(),
-                    confidence,
-                    confidence_tier: confidence_tier(confidence),
-                    current_name: place.name.clone(),
-                    current_full_name: place.full_name.clone(),
-                    current_place_type: place.place_type.clone(),
-                    current_parent_id: place.parent_id.clone(),
-                    current_parent_name: parent_name,
-                    latitude: place.latitude,
-                    longitude: place.longitude,
-                    events_count: place.events_count,
-                    children_count: place.children_count,
-                    proposed_leaf_name: dup.name.clone(),
-                    proposed_clean_name: dup.name.clone(),
-                    proposed_place_type: dup.place_type.clone(),
-                    proposed_parent_id: dup.parent_id.clone(),
-                    proposed_parent_name: dup
-                        .parent_id
-                        .as_deref()
-                        .and_then(|pid| store.places.iter().find(|p| p.id == pid))
-                        .map(|p| p.full_name.clone()),
-                    proposed_full_name: dup.full_name.clone(),
-                    proposed_chain: chain,
-                    parent_candidates: vec![],
-                    consolidate_with_place_id: Some(dup.id.clone()),
-                    consolidate_with_name: Some(dup.full_name.clone()),
-                    distance_km: None,
-                    reason: format!(
+                let dup_parent_name = dup_parent_id
+                    .as_deref()
+                    .and_then(|pid| store.places.iter().find(|p| p.id == pid))
+                    .filter(|p| !is_placeholder_place_name(&p.name))
+                    .map(|p| p.full_name.clone());
+                return Some(build_place_issue_dto(
+                    issue_id,
+                    place,
+                    "duplicate_node",
+                    RULE_PLACE_DUPLICATE_CANDIDATE,
+                    "warning",
+                    88,
+                    effective_current_parent_id,
+                    parent_name,
+                    dup.name.clone(),
+                    dup_eff_type,
+                    dup_parent_id,
+                    dup_parent_name,
+                    dup.full_name.clone(),
+                    chain,
+                    vec![],
+                    Some(dup.id.clone()),
+                    Some(dup.full_name.clone()),
+                    None,
+                    format!(
                         "Duplicate place record matching structured node '{}' ({}).",
                         dup.full_name, dup.gid
                     ),
-                    preserve_alt_name: if place.name != dup.name {
+                    if place.name != dup.name {
                         Some(place.name.clone())
                     } else {
                         None
                     },
-                });
+                ));
             }
         }
     }
@@ -298,12 +362,13 @@ pub(crate) fn analyze_single_place_issue(
     } else {
         &effective_type
     });
-    if place.parent_id.is_none() && effective_type != "country" {
+    if (place.parent_id.is_none() || parent_is_placeholder) && effective_type != "country" {
         let my_stem = extract_jurisdiction_stem(&clean_name);
         let mut candidates: Vec<ParentPlaceCandidateDto> = Vec::new();
 
         for cand in &store.places {
             if cand.id == place.id
+                || is_placeholder_place_name(&cand.name)
                 || cand.name.contains(',')
                 || cand.name.contains(';')
                 || ensure_no_place_cycle(&store.places, &place.id, Some(&cand.id)).is_err()
@@ -383,33 +448,27 @@ pub(crate) fn analyze_single_place_issue(
 
             if stem_matches && spatial_matches {
                 let d_rounded = min_dist_km.map(|d| (d * 10.0).round() / 10.0);
-                candidates.push(ParentPlaceCandidateDto {
-                    place_id: cand.id.clone(),
-                    gid: cand.gid.clone(),
-                    name: cand.name.clone(),
-                    full_name: cand.full_name.clone(),
-                    place_type: cand_eff_type,
-                    distance_km: d_rounded,
-                    confidence: 92,
-                    match_reason: format!(
+                candidates.push(make_parent_candidate(
+                    cand,
+                    cand_eff_type,
+                    d_rounded,
+                    92,
+                    format!(
                         "Administrative stem and coordinate proximity match '{}'",
                         cand.full_name
                     ),
-                });
+                ));
             } else if stem_matches {
-                candidates.push(ParentPlaceCandidateDto {
-                    place_id: cand.id.clone(),
-                    gid: cand.gid.clone(),
-                    name: cand.name.clone(),
-                    full_name: cand.full_name.clone(),
-                    place_type: cand_eff_type,
-                    distance_km: min_dist_km.map(|d| (d * 10.0).round() / 10.0),
-                    confidence: 88,
-                    match_reason: format!(
+                candidates.push(make_parent_candidate(
+                    cand,
+                    cand_eff_type,
+                    min_dist_km.map(|d| (d * 10.0).round() / 10.0),
+                    88,
+                    format!(
                         "Administrative stem matches parent jurisdiction '{}'",
                         cand.full_name
                     ),
-                });
+                ));
             } else if spatial_matches {
                 let d_rounded = min_dist_km.map(|d| (d * 10.0).round() / 10.0);
                 let conf = if cand_eff_type == "district" || inside_bounding_box {
@@ -417,26 +476,24 @@ pub(crate) fn analyze_single_place_issue(
                 } else {
                     85
                 };
-                candidates.push(ParentPlaceCandidateDto {
-                    place_id: cand.id.clone(),
-                    gid: cand.gid.clone(),
-                    name: cand.name.clone(),
-                    full_name: cand.full_name.clone(),
-                    place_type: cand_eff_type,
-                    distance_km: d_rounded,
-                    confidence: conf,
-                    match_reason: if let Some(d) = d_rounded {
-                        format!(
-                            "Coordinates within {:.1} km of parent {} '{}'",
-                            d, cand.place_type, cand.full_name
-                        )
-                    } else {
-                        format!(
-                            "Coordinates inside child cluster envelope of '{}'",
-                            cand.full_name
-                        )
-                    },
-                });
+                let match_reason = if let Some(d) = d_rounded {
+                    format!(
+                        "Coordinates within {:.1} km of parent {} '{}'",
+                        d, cand.place_type, cand.full_name
+                    )
+                } else {
+                    format!(
+                        "Coordinates inside child cluster envelope of '{}'",
+                        cand.full_name
+                    )
+                };
+                candidates.push(make_parent_candidate(
+                    cand,
+                    cand_eff_type,
+                    d_rounded,
+                    conf,
+                    match_reason,
+                ));
             }
         }
 
@@ -461,6 +518,7 @@ pub(crate) fn analyze_single_place_issue(
             && !candidates[0].match_reason.contains("stem")
         {
             candidates[0].confidence = 75;
+            candidates[0].score = 75;
         }
 
         if let Some(best) = candidates.first().cloned() {
@@ -485,124 +543,124 @@ pub(crate) fn analyze_single_place_issue(
                     existing_place_id: Some(place.id.clone()),
                     existing_place_gid: Some(place.gid.clone()),
                     is_new: false,
+                    action: "clean_leaf".to_string(),
                 });
                 let proposed_full_name = format!("{}, {}", clean_name, best.full_name);
 
-                return Some(PlaceHierarchyIssueDto {
-                    id: issue_id,
-                    place_id: place.id.clone(),
-                    place_gid: place.gid.clone(),
-                    issue_type: "orphan_hierarchy".to_string(),
-                    rule_code: RULE_PLACE_ORPHAN_HIERARCHY.to_string(),
-                    severity: "warning".to_string(),
-                    confidence: best.confidence,
-                    confidence_tier: confidence_tier(best.confidence),
-                    current_name: place.name.clone(),
-                    current_full_name: place.full_name.clone(),
-                    current_place_type: place.place_type.clone(),
-                    current_parent_id: None,
-                    current_parent_name: None,
-                    latitude: place.latitude,
-                    longitude: place.longitude,
-                    events_count: place.events_count,
-                    children_count: place.children_count,
-                    proposed_leaf_name: clean_name.clone(),
-                    proposed_clean_name: clean_name.clone(),
-                    proposed_place_type: leaf_type,
-                    proposed_parent_id: Some(best.place_id.clone()),
-                    proposed_parent_name: Some(best.full_name.clone()),
+                return Some(build_place_issue_dto(
+                    issue_id,
+                    place,
+                    "orphan_hierarchy",
+                    RULE_PLACE_ORPHAN_HIERARCHY,
+                    "warning",
+                    best.confidence,
+                    None,
+                    None,
+                    clean_name.clone(),
+                    leaf_type,
+                    Some(best.place_id),
+                    Some(best.full_name),
                     proposed_full_name,
-                    proposed_chain: chain,
-                    parent_candidates: candidates,
-                    consolidate_with_place_id: None,
-                    consolidate_with_name: None,
-                    distance_km: best.distance_km,
-                    reason: best.match_reason,
-                    preserve_alt_name: if place.name != clean_name {
+                    chain,
+                    candidates,
+                    None,
+                    None,
+                    best.distance_km,
+                    best.match_reason,
+                    if place.name != clean_name {
                         Some(place.name.clone())
                     } else {
                         None
                     },
-                });
+                ));
             }
         }
     }
 
     // --- Category 4: Place Type Mismatch or Unstripped Locality Prefix (`PLACE_TYPE_MISMATCH`) ---
-    if let Some(inferred_type) = inferred_type_opt {
-        if place.place_type != inferred_type || place.name != clean_name {
-            let issue_id = format!("{RULE_PLACE_TYPE_MISMATCH}:{}", place.id);
-            let dismissed = is_warning_dismissed(
-                &store.dismissed_warnings,
-                &issue_id,
+    let target_mismatch_type = inferred_type_opt
+        .clone()
+        .unwrap_or_else(|| effective_type.clone());
+    let has_type_or_prefix_mismatch = inferred_type_opt
+        .as_ref()
+        .is_some_and(|inf| place.place_type != *inf || place.name != clean_name)
+        || place.name != clean_name
+        || parent_is_placeholder
+        || (effective_type == "country" && place.parent_id.is_some());
+
+    if has_type_or_prefix_mismatch {
+        let issue_id = format!("{RULE_PLACE_TYPE_MISMATCH}:{}", place.id);
+        let dismissed = is_warning_dismissed(
+            &store.dismissed_warnings,
+            &issue_id,
+            RULE_PLACE_TYPE_MISMATCH,
+            &place.id,
+            None,
+        );
+        if include_dismissed || !dismissed {
+            let detach_parent = target_mismatch_type == "country" || parent_is_placeholder;
+            let prop_parent_id = if detach_parent {
+                None
+            } else {
+                place.parent_id.clone()
+            };
+            let prop_parent_name = if detach_parent {
+                None
+            } else {
+                parent_name.clone()
+            };
+            let mut chain = if let Some(ref pid) = prop_parent_id {
+                build_ancestor_steps_for_parent(&store.places, pid)
+            } else {
+                vec![]
+            };
+            chain.push(ProposedHierarchyStepDto {
+                name: clean_name.clone(),
+                place_type: target_mismatch_type.clone(),
+                existing_place_id: Some(place.id.clone()),
+                existing_place_gid: Some(place.gid.clone()),
+                is_new: false,
+                action: "clean_leaf".to_string(),
+            });
+            let proposed_full_name = if let Some(ref pname) = prop_parent_name {
+                format!("{clean_name}, {pname}")
+            } else {
+                clean_name.clone()
+            };
+            return Some(build_place_issue_dto(
+                issue_id,
+                place,
+                "type_mismatch",
                 RULE_PLACE_TYPE_MISMATCH,
-                &place.id,
+                "info",
+                90,
+                effective_current_parent_id,
+                parent_name,
+                clean_name.clone(),
+                target_mismatch_type.clone(),
+                prop_parent_id,
+                prop_parent_name,
+                proposed_full_name,
+                chain,
+                vec![],
                 None,
-            );
-            if include_dismissed || !dismissed {
-                let mut chain = if let Some(ref pid) = place.parent_id {
-                    build_ancestor_steps_for_parent(&store.places, pid)
+                None,
+                None,
+                format!(
+                    "Administrative keyword indicates place_type '{}' (currently '{}').",
+                    target_mismatch_type, place.place_type
+                ),
+                if place.name != clean_name {
+                    Some(place.name.clone())
                 } else {
-                    vec![]
-                };
-                chain.push(ProposedHierarchyStepDto {
-                    name: clean_name.clone(),
-                    place_type: inferred_type.clone(),
-                    existing_place_id: Some(place.id.clone()),
-                    existing_place_gid: Some(place.gid.clone()),
-                    is_new: false,
-                });
-                let proposed_full_name = if let Some(ref pname) = parent_name {
-                    format!("{clean_name}, {pname}")
-                } else {
-                    clean_name.clone()
-                };
-                let confidence = 90;
-                return Some(PlaceHierarchyIssueDto {
-                    id: issue_id,
-                    place_id: place.id.clone(),
-                    place_gid: place.gid.clone(),
-                    issue_type: "type_mismatch".to_string(),
-                    rule_code: RULE_PLACE_TYPE_MISMATCH.to_string(),
-                    severity: "info".to_string(),
-                    confidence,
-                    confidence_tier: confidence_tier(confidence),
-                    current_name: place.name.clone(),
-                    current_full_name: place.full_name.clone(),
-                    current_place_type: place.place_type.clone(),
-                    current_parent_id: place.parent_id.clone(),
-                    current_parent_name: parent_name.clone(),
-                    latitude: place.latitude,
-                    longitude: place.longitude,
-                    events_count: place.events_count,
-                    children_count: place.children_count,
-                    proposed_leaf_name: clean_name.clone(),
-                    proposed_clean_name: clean_name.clone(),
-                    proposed_place_type: inferred_type.clone(),
-                    proposed_parent_id: place.parent_id.clone(),
-                    proposed_parent_name: parent_name,
-                    proposed_full_name,
-                    proposed_chain: chain,
-                    parent_candidates: vec![],
-                    consolidate_with_place_id: None,
-                    consolidate_with_name: None,
-                    distance_km: None,
-                    reason: format!(
-                        "Administrative keyword indicates place_type '{}' (currently '{}').",
-                        inferred_type, place.place_type
-                    ),
-                    preserve_alt_name: if place.name != clean_name {
-                        Some(place.name.clone())
-                    } else {
-                        None
-                    },
-                });
-            }
+                    None
+                },
+            ));
         }
     }
 
     // Fallback Low-Confidence Orphan Locality if parent_id is None and other higher-level places exist in the tree
-    if place.parent_id.is_none()
+    if (place.parent_id.is_none() || parent_is_placeholder)
         && effective_type != "country"
         && effective_type != "region"
         && store.places.len() > 1
@@ -621,45 +679,35 @@ pub(crate) fn analyze_single_place_issue(
             } else {
                 effective_type
             };
-            let confidence = 50;
-            return Some(PlaceHierarchyIssueDto {
-                id: issue_id,
-                place_id: place.id.clone(),
-                place_gid: place.gid.clone(),
-                issue_type: "orphan_hierarchy".to_string(),
-                rule_code: RULE_PLACE_ORPHAN_HIERARCHY.to_string(),
-                severity: "warning".to_string(),
-                confidence,
-                confidence_tier: confidence_tier(confidence),
-                current_name: place.name.clone(),
-                current_full_name: place.full_name.clone(),
-                current_place_type: place.place_type.clone(),
-                current_parent_id: None,
-                current_parent_name: None,
-                latitude: place.latitude,
-                longitude: place.longitude,
-                events_count: place.events_count,
-                children_count: place.children_count,
-                proposed_leaf_name: clean_name.clone(),
-                proposed_clean_name: clean_name.clone(),
-                proposed_place_type: leaf_type.clone(),
-                proposed_parent_id: None,
-                proposed_parent_name: None,
-                proposed_full_name: clean_name.clone(),
-                proposed_chain: vec![ProposedHierarchyStepDto {
+            return Some(build_place_issue_dto(
+                issue_id,
+                place,
+                "orphan_hierarchy",
+                RULE_PLACE_ORPHAN_HIERARCHY,
+                "warning",
+                50,
+                None,
+                None,
+                clean_name.clone(),
+                leaf_type.clone(),
+                None,
+                None,
+                clean_name.clone(),
+                vec![ProposedHierarchyStepDto {
                     name: clean_name,
                     place_type: leaf_type,
                     existing_place_id: Some(place.id.clone()),
                     existing_place_gid: Some(place.gid.clone()),
                     is_new: false,
+                    action: "clean_leaf".to_string(),
                 }],
-                parent_candidates: vec![],
-                consolidate_with_place_id: None,
-                consolidate_with_name: None,
-                distance_km: None,
-                reason: "Locality has no parent jurisdiction assigned.".to_string(),
-                preserve_alt_name: None,
-            });
+                vec![],
+                None,
+                None,
+                None,
+                "Locality has no parent jurisdiction assigned.".to_string(),
+                None,
+            ));
         }
     }
 

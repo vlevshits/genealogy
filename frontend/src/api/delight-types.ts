@@ -163,7 +163,20 @@ export interface ProposedHierarchyStepDto {
   place_type: string;
   existing_place_id?: string | null;
   existing_place_gid?: string | null;
-  action: 'reuse' | 'create' | 'clean_leaf' | 'consolidate';
+  is_new?: boolean;
+  action?: 'reuse' | 'create' | 'clean_leaf' | 'consolidate';
+}
+
+export interface PlaceHierarchyCandidateParentDto {
+  place_id: string;
+  place_gid?: string;
+  gid?: string;
+  name: string;
+  full_name: string;
+  place_type: string;
+  distance_km?: number | null;
+  score: number;
+  confidence?: number;
 }
 
 export interface PlaceHierarchyIssueDto {
@@ -189,23 +202,20 @@ export interface PlaceHierarchyIssueDto {
     | 'type_mismatches'
     | 'duplicates'
     | string;
+  issue_type?: string;
   confidence_score: number;
+  confidence?: number;
   confidence_tier: 'high' | 'medium' | 'low';
   rationale: string;
+  reason?: string;
   proposed_clean_name: string;
   proposed_place_type: string;
   proposed_parent_id?: string | null;
   proposed_parent_name?: string | null;
+  consolidate_with_place_id?: string | null;
   proposed_chain: ProposedHierarchyStepDto[];
-  candidate_parents?: Array<{
-    place_id: string;
-    place_gid?: string;
-    name: string;
-    full_name: string;
-    place_type: string;
-    distance_km?: number | null;
-    score: number;
-  }>;
+  candidate_parents?: PlaceHierarchyCandidateParentDto[];
+  parent_candidates?: PlaceHierarchyCandidateParentDto[];
 }
 
 export interface PlaceQualityCountsDto {

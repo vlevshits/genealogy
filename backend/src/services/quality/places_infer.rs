@@ -14,18 +14,22 @@ pub struct ProposedHierarchyStepDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub existing_place_gid: Option<String>,
     pub is_new: bool,
+    #[serde(default)]
+    pub action: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ParentPlaceCandidateDto {
     pub place_id: String,
     pub gid: String,
+    pub place_gid: String,
     pub name: String,
     pub full_name: String,
     pub place_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub distance_km: Option<f64>,
     pub confidence: i32,
+    pub score: i32,
     pub match_reason: String,
 }
 
@@ -35,9 +39,11 @@ pub struct PlaceHierarchyIssueDto {
     pub place_id: String,
     pub place_gid: String,
     pub issue_type: String,
+    pub category: String,
     pub rule_code: String,
     pub severity: String,
     pub confidence: i32,
+    pub confidence_score: i32,
     pub confidence_tier: String,
     pub current_name: String,
     pub current_full_name: String,
@@ -62,6 +68,7 @@ pub struct PlaceHierarchyIssueDto {
     pub proposed_full_name: String,
     pub proposed_chain: Vec<ProposedHierarchyStepDto>,
     pub parent_candidates: Vec<ParentPlaceCandidateDto>,
+    pub candidate_parents: Vec<ParentPlaceCandidateDto>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consolidate_with_place_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -69,6 +76,7 @@ pub struct PlaceHierarchyIssueDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub distance_km: Option<f64>,
     pub reason: String,
+    pub rationale: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preserve_alt_name: Option<String>,
 }
@@ -77,13 +85,21 @@ pub struct PlaceHierarchyIssueDto {
 pub struct PlaceHierarchyAnalysisCountsDto {
     pub total_places: usize,
     pub total_issues: usize,
+    pub total: usize,
     pub high_confidence_count: usize,
     pub medium_confidence_count: usize,
     pub low_confidence_count: usize,
+    pub high_confidence: usize,
+    pub medium_confidence: usize,
+    pub low_confidence: usize,
     pub unparsed_paths_count: usize,
     pub orphan_places_count: usize,
     pub type_mismatches_count: usize,
     pub duplicate_nodes_count: usize,
+    pub unparsed_paths: usize,
+    pub orphans: usize,
+    pub type_mismatches: usize,
+    pub duplicates: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -99,6 +115,8 @@ pub struct PlaceHierarchyAnalysisResponseDto {
 pub struct PlaceHierarchyAnalysisQuery {
     #[serde(default)]
     pub issue_type: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
     #[serde(default)]
     pub min_confidence: Option<i32>,
     #[serde(default)]
@@ -155,6 +173,8 @@ pub struct BatchFixPlacesRequest {
     pub place_ids: Option<Vec<String>>,
     #[serde(default)]
     pub issue_type: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -178,6 +198,30 @@ pub struct DismissPlaceIssueRequest {
     pub id: Option<String>,
     #[serde(default)]
     pub rule_code: Option<String>,
+}
+
+pub fn is_placeholder_place_name(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let lower = trimmed.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "unknown"
+            | "неизвестно"
+            | "неизвестный"
+            | "неизвестная"
+            | "неизвестное"
+            | "unk"
+            | "n/a"
+            | "na"
+            | "none"
+            | "null"
+            | "?"
+            | "-"
+            | "—"
+    )
 }
 
 /// Computes the great-circle distance in kilometers between two `(lat, lon)` points using the Haversine formula (`15 §4.2.3`).
@@ -594,6 +638,9 @@ pub(crate) fn find_matching_place_in_store<'a>(
     expected_parent_id: Option<&str>,
     exclude_place_id: &str,
 ) -> Option<&'a PlaceSummaryDto> {
+    if is_placeholder_place_name(segment_name) {
+        return None;
+    }
     let target_key = normalize_place_match_key(segment_name);
     if target_key.is_empty() {
         return None;
@@ -602,6 +649,7 @@ pub(crate) fn find_matching_place_in_store<'a>(
     // 1. Prefer exact parent match + normalized name/alt_name match
     if let Some(found) = places.iter().find(|p| {
         p.id != exclude_place_id
+            && !is_placeholder_place_name(&p.name)
             && p.parent_id.as_deref() == expected_parent_id
             && (normalize_place_match_key(&p.name) == target_key
                 || p.alt_names
@@ -614,11 +662,18 @@ pub(crate) fn find_matching_place_in_store<'a>(
     // 2. Fallback: match a top-level jurisdiction (`country` / `region` / `district`) with matching normalized name
     let (_, seg_inferred_type) = infer_place_type_and_clean_name(segment_name);
     places.iter().find(|p| {
+        let p_parent_is_placeholder = p
+            .parent_id
+            .as_deref()
+            .and_then(|pid| places.iter().find(|cand| cand.id == pid))
+            .is_some_and(|cand| is_placeholder_place_name(&cand.name));
         p.id != exclude_place_id
+            && !is_placeholder_place_name(&p.name)
             && !p.name.contains(',')
             && !p.name.contains(';')
             && (expected_parent_id.is_none()
                 || p.parent_id.is_none()
+                || p_parent_is_placeholder
                 || p.parent_id.as_deref() == expected_parent_id)
             && (seg_inferred_type.is_none()
                 || p.place_type == "other"
@@ -634,7 +689,7 @@ pub(crate) fn split_jurisdiction_segments(raw_path: &str) -> Vec<String> {
     let mut parts: Vec<String> = raw_path
         .split([',', ';', '/'])
         .map(str::trim)
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty() && !is_placeholder_place_name(s))
         .map(|s| s.to_string())
         .collect();
 
@@ -683,19 +738,22 @@ pub(crate) fn build_ancestor_steps_for_parent(
     let mut curr = places.iter().find(|p| p.id == parent_id);
     let mut guard = 0usize;
     while let Some(p) = curr {
-        let (_, inferred) = infer_place_type_and_clean_name(&p.name);
-        let eff_type = if p.place_type == "other" {
-            inferred.unwrap_or_else(|| p.place_type.clone())
-        } else {
-            p.place_type.clone()
-        };
-        steps.push(ProposedHierarchyStepDto {
-            name: p.name.clone(),
-            place_type: eff_type,
-            existing_place_id: Some(p.id.clone()),
-            existing_place_gid: Some(p.gid.clone()),
-            is_new: false,
-        });
+        if !is_placeholder_place_name(&p.name) {
+            let (_, inferred) = infer_place_type_and_clean_name(&p.name);
+            let eff_type = if p.place_type == "other" {
+                inferred.unwrap_or_else(|| p.place_type.clone())
+            } else {
+                p.place_type.clone()
+            };
+            steps.push(ProposedHierarchyStepDto {
+                name: p.name.clone(),
+                place_type: eff_type,
+                existing_place_id: Some(p.id.clone()),
+                existing_place_gid: Some(p.gid.clone()),
+                is_new: false,
+                action: "reuse".to_string(),
+            });
+        }
         guard += 1;
         if guard > 16 {
             break;

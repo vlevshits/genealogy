@@ -1,6 +1,106 @@
 #[allow(unused_imports)]
 use super::*;
 
+pub(crate) fn issue_type_to_category(issue_type: &str) -> String {
+    match issue_type {
+        "unparsed_path" | "unparsed_paths" => "unparsed_paths".to_string(),
+        "orphan_hierarchy" | "orphans" => "orphans".to_string(),
+        "type_mismatch" | "type_mismatches" => "type_mismatches".to_string(),
+        "duplicate_node" | "duplicates" => "duplicates".to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub(crate) fn matches_issue_type_or_category(issue: &PlaceHierarchyIssueDto, filter: &str) -> bool {
+    let f = filter.trim().to_ascii_lowercase();
+    issue.issue_type.eq_ignore_ascii_case(&f)
+        || issue.category.eq_ignore_ascii_case(&f)
+        || issue.rule_code.eq_ignore_ascii_case(&f)
+        || issue_type_to_category(&f) == issue.category
+}
+
+pub(crate) fn make_parent_candidate(
+    cand: &PlaceSummaryDto,
+    place_type: String,
+    distance_km: Option<f64>,
+    confidence: i32,
+    match_reason: String,
+) -> ParentPlaceCandidateDto {
+    ParentPlaceCandidateDto {
+        place_id: cand.id.clone(),
+        gid: cand.gid.clone(),
+        place_gid: cand.gid.clone(),
+        name: cand.name.clone(),
+        full_name: cand.full_name.clone(),
+        place_type,
+        distance_km,
+        confidence,
+        score: confidence,
+        match_reason,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_place_issue_dto(
+    id: String,
+    place: &PlaceSummaryDto,
+    issue_type: &str,
+    rule_code: &str,
+    severity: &str,
+    confidence: i32,
+    current_parent_id: Option<String>,
+    current_parent_name: Option<String>,
+    proposed_clean_name: String,
+    proposed_place_type: String,
+    proposed_parent_id: Option<String>,
+    proposed_parent_name: Option<String>,
+    proposed_full_name: String,
+    proposed_chain: Vec<ProposedHierarchyStepDto>,
+    parent_candidates: Vec<ParentPlaceCandidateDto>,
+    consolidate_with_place_id: Option<String>,
+    consolidate_with_name: Option<String>,
+    distance_km: Option<f64>,
+    reason: String,
+    preserve_alt_name: Option<String>,
+) -> PlaceHierarchyIssueDto {
+    PlaceHierarchyIssueDto {
+        id,
+        place_id: place.id.clone(),
+        place_gid: place.gid.clone(),
+        issue_type: issue_type.to_string(),
+        category: issue_type_to_category(issue_type),
+        rule_code: rule_code.to_string(),
+        severity: severity.to_string(),
+        confidence,
+        confidence_score: confidence,
+        confidence_tier: confidence_tier(confidence),
+        current_name: place.name.clone(),
+        current_full_name: place.full_name.clone(),
+        current_place_type: place.place_type.clone(),
+        current_parent_id,
+        current_parent_name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        events_count: place.events_count,
+        children_count: place.children_count,
+        proposed_leaf_name: proposed_clean_name.clone(),
+        proposed_clean_name,
+        proposed_place_type,
+        proposed_parent_id,
+        proposed_parent_name,
+        proposed_full_name,
+        proposed_chain,
+        candidate_parents: parent_candidates.clone(),
+        parent_candidates,
+        consolidate_with_place_id,
+        consolidate_with_name,
+        distance_km,
+        rationale: reason.clone(),
+        reason,
+        preserve_alt_name,
+    }
+}
+
 /// Applies hierarchy restructuring for a single place (`POST /api/v1/quality/places/fix`).
 pub fn fix_place_hierarchy(
     store: &mut GenealogyPrivacyStore,
@@ -57,7 +157,8 @@ pub fn batch_fix_places(
     let analysis = analyze_place_hierarchies(
         store,
         &PlaceHierarchyAnalysisQuery {
-            issue_type: req.issue_type.clone(),
+            issue_type: req.issue_type.clone().or(req.category.clone()),
+            category: req.category.clone(),
             min_confidence: Some(min_confidence),
             include_dismissed: Some(false),
         },
@@ -411,5 +512,138 @@ mod tests {
         let names = collect_person_given_names(&p);
         assert!(names.contains(&"sasha".to_string()));
         assert!(names.contains(&"alexander".to_string()));
+    }
+
+    #[test]
+    fn test_root_country_belarus_not_demoted_under_unknown_placeholder() {
+        use crate::services::genealogy::resolve_or_create_place_chain;
+
+        let mut store = GenealogyPrivacyStore::empty();
+
+        // 1. Canonical root country "Беларусь" (P0106, country, parent: None)
+        store.places.push(PlaceSummaryDto {
+            id: "pl-belarus-root".to_string(),
+            gid: "P0106".to_string(),
+            name: "Беларусь".to_string(),
+            place_type: "country".to_string(),
+            parent_id: None,
+            full_name: "Беларусь".to_string(),
+            country: Some("Беларусь".to_string()),
+            latitude: None,
+            longitude: None,
+            events_count: 1,
+            children_count: 0,
+            alt_names: vec![],
+            version: 1,
+        });
+
+        // 2. Bogus "Unknown" root country and duplicate "Беларусь" (region) under "Unknown"
+        store.places.push(PlaceSummaryDto {
+            id: "pl-unknown".to_string(),
+            gid: "P0101".to_string(),
+            name: "Unknown".to_string(),
+            place_type: "country".to_string(),
+            parent_id: None,
+            full_name: "Unknown".to_string(),
+            country: Some("Unknown".to_string()),
+            latitude: None,
+            longitude: None,
+            events_count: 0,
+            children_count: 1,
+            alt_names: vec![],
+            version: 1,
+        });
+        store.places.push(PlaceSummaryDto {
+            id: "pl-belarus-bogus".to_string(),
+            gid: "P0102".to_string(),
+            name: "Беларусь".to_string(),
+            place_type: "region".to_string(),
+            parent_id: Some("pl-unknown".to_string()),
+            full_name: "Беларусь, Unknown".to_string(),
+            country: Some("Unknown".to_string()),
+            latitude: None,
+            longitude: None,
+            events_count: 2,
+            children_count: 0,
+            alt_names: vec![],
+            version: 1,
+        });
+
+        // 3. Also resolve a GEDCOM-style path with ", Unknown": "Кобрин, Беларусь, Unknown"
+        let kobrin = resolve_or_create_place_chain(
+            &mut store,
+            "Кобрин, Беларусь, Unknown",
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("should resolve Кобрин under Беларусь without creating Unknown");
+        assert_eq!(kobrin.name, "Кобрин");
+        assert!(
+            !kobrin.full_name.contains("Unknown"),
+            "full_name must never include Unknown: {}",
+            kobrin.full_name
+        );
+
+        let analysis = analyze_place_hierarchies(&store, &PlaceHierarchyAnalysisQuery::default());
+
+        // Canonical root country "Беларусь" (P0106) must NEVER be flagged as an issue!
+        assert!(
+            !analysis
+                .issues
+                .iter()
+                .any(|i| i.place_id == "pl-belarus-root"),
+            "Canonical root country Беларусь (P0106) must not be flagged: {:?}",
+            analysis.issues
+        );
+        // Placeholder "Unknown" itself must not be flagged
+        assert!(
+            !analysis.issues.iter().any(|i| i.place_id == "pl-unknown"),
+            "Placeholder Unknown must not generate a hierarchy proposal"
+        );
+
+        // Bogus "Беларусь" (P0102, region under Unknown) MUST be flagged to consolidate into root "Беларусь" (P0106)
+        let bogus_issue = analysis
+            .issues
+            .iter()
+            .find(|i| i.place_id == "pl-belarus-bogus")
+            .expect("Bogus Беларусь under Unknown should be flagged as duplicate");
+        assert_eq!(bogus_issue.category, "duplicates");
+        assert_eq!(
+            bogus_issue.consolidate_with_place_id.as_deref(),
+            Some("pl-belarus-root")
+        );
+        assert_eq!(bogus_issue.proposed_chain.len(), 1);
+        assert_eq!(bogus_issue.proposed_chain[0].name, "Беларусь");
+        assert_eq!(bogus_issue.proposed_chain[0].place_type, "country");
+        assert_eq!(bogus_issue.proposed_chain[0].action, "consolidate");
+
+        // Applying batch-fix consolidates P0102 into P0106 and prunes orphan "Unknown"
+        let fix_res = batch_fix_places(
+            &mut store,
+            BatchFixPlacesRequest::default(),
+            None,
+            None,
+            2026,
+            110,
+        )
+        .unwrap();
+        assert!(fix_res.consolidated_count >= 1);
+        assert!(
+            !store.places.iter().any(|p| p.id == "pl-unknown"),
+            "Orphan Unknown placeholder place should be pruned after fix"
+        );
+        assert!(
+            !store.places.iter().any(|p| p.id == "pl-belarus-bogus"),
+            "Bogus Беларусь under Unknown should be consolidated into P0106"
+        );
+        let root_belarus = store
+            .places
+            .iter()
+            .find(|p| p.id == "pl-belarus-root")
+            .unwrap();
+        assert_eq!(root_belarus.place_type, "country");
+        assert_eq!(root_belarus.parent_id, None);
     }
 }

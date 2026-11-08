@@ -163,7 +163,9 @@ pub fn recompute_all_places_metadata(store: &mut GenealogyPrivacyStore) {
                 break;
             }
             if let Some((pname, next_parent)) = parent_map.get(&pid) {
-                chain_names.push(pname.clone());
+                if !crate::services::quality::is_placeholder_place_name(pname) {
+                    chain_names.push(pname.clone());
+                }
                 curr_parent = next_parent.clone();
             } else {
                 break;
@@ -196,12 +198,14 @@ pub fn build_place_breadcrumbs(
     let mut curr = places.iter().find(|p| p.id == place_id);
     let mut guard = 0usize;
     while let Some(p) = curr {
-        crumbs.push(PlaceBreadcrumbDto {
-            id: p.id.clone(),
-            gid: p.gid.clone(),
-            name: p.name.clone(),
-            place_type: p.place_type.clone(),
-        });
+        if p.id == place_id || !crate::services::quality::is_placeholder_place_name(&p.name) {
+            crumbs.push(PlaceBreadcrumbDto {
+                id: p.id.clone(),
+                gid: p.gid.clone(),
+                name: p.name.clone(),
+                place_type: p.place_type.clone(),
+            });
+        }
         guard += 1;
         if guard > 32 {
             break;
@@ -228,7 +232,7 @@ pub fn resolve_or_create_place_chain(
     let segments: Vec<&str> = raw_path
         .split(',')
         .map(str::trim)
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty() && !crate::services::quality::is_placeholder_place_name(s))
         .collect();
 
     if segments.is_empty() {
@@ -247,17 +251,48 @@ pub fn resolve_or_create_place_chain(
     // Traverse from right (top-most jurisdiction, e.g. Country) to left (leaf locality)
     for (depth_from_top, seg_name) in segments.iter().rev().enumerate() {
         let is_leaf = depth_from_top + 1 == total_levels;
+        let (_, inferred_opt) = crate::services::quality::infer_place_type_and_clean_name(seg_name);
+        let inferred_type = if let Some(ref inf_type) = inferred_opt {
+            inf_type.as_str()
+        } else if is_leaf {
+            leaf_place_type.unwrap_or(if total_levels >= 3 { "city" } else { "other" })
+        } else if depth_from_top == 0 && total_levels >= 2 {
+            "country"
+        } else if depth_from_top == 1 {
+            "region"
+        } else {
+            "district"
+        };
+
+        if inferred_type == "country" {
+            current_parent_id = None;
+        }
 
         // Check if a place with this name and parent already exists (or when single segment, matches name/full_name)
         let existing_idx = store.places.iter().position(|p| {
+            if crate::services::quality::is_placeholder_place_name(&p.name) {
+                return false;
+            }
             let name_matches = p.name.eq_ignore_ascii_case(seg_name)
                 || p.alt_names
                     .iter()
                     .any(|a| a.name.eq_ignore_ascii_case(seg_name));
+            if !name_matches {
+                return false;
+            }
             if total_levels == 1 {
-                name_matches
+                true
+            } else if depth_from_top == 0 || inferred_type == "country" {
+                let parent_is_placeholder = p
+                    .parent_id
+                    .as_deref()
+                    .and_then(|pid| store.places.iter().find(|cand| cand.id == pid))
+                    .is_some_and(|cand| {
+                        crate::services::quality::is_placeholder_place_name(&cand.name)
+                    });
+                p.parent_id == current_parent_id || p.parent_id.is_none() || parent_is_placeholder
             } else {
-                name_matches && p.parent_id == current_parent_id
+                p.parent_id == current_parent_id
             }
         });
 
@@ -298,16 +333,6 @@ pub fn resolve_or_create_place_chain(
                 store.places.iter().map(|p| p.gid.clone()).collect();
             let gid = allocate_gid('P', &mut store.next_place_gid_seq, None, &existing_gids);
             let new_id = Uuid::new_v4().to_string();
-
-            let inferred_type = if is_leaf {
-                leaf_place_type.unwrap_or(if total_levels >= 3 { "city" } else { "other" })
-            } else if depth_from_top == 0 && total_levels >= 2 {
-                "country"
-            } else if depth_from_top == 1 {
-                "region"
-            } else {
-                "district"
-            };
 
             let new_place = PlaceSummaryDto {
                 id: new_id.clone(),

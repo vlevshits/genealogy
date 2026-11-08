@@ -23,7 +23,11 @@ import { SideNav } from '../../src/components/ui/side-nav';
 import { AudioRecorderWidget } from '../../src/components/stories/AudioRecorderWidget';
 import { DashboardPage } from '../../src/pages/DashboardPage';
 import { MediaCard } from '../../src/components/media/MediaCard';
-import type { StoryDraftDto } from '../../src/api/client';
+import {
+  normalizePlaceHierarchyIssue,
+  type PlaceHierarchyIssueDto,
+  type StoryDraftDto,
+} from '../../src/api/client';
 
 function renderWithProviders(node: React.ReactElement, locale: Locale = 'en'): string {
   return renderToStaticMarkup(
@@ -388,5 +392,78 @@ describe('Milestone 2.9 & 3.2 — Place Hierarchy, Relationship Duplicate Reason
       'en'
     );
     expect(dashEditorHtml).toContain('data-testid="dashboard-story-intake-btn"');
+  });
+
+  it('normalizes backend place hierarchy aliases and guards against NaN%, blank category badges, (0) filter counts, and [Clean leaf] on ancestor steps', () => {
+    const rawBackendIssue = {
+      place_id: 'pl-raw-1',
+      place_gid: 'P0042',
+      current_name: 'Тверь, Тверская губерния, Российская империя',
+      current_full_name: 'Тверь, Тверская губерния, Российская империя',
+      current_place_type: 'other',
+      events_count: 5,
+      rule_code: 'PLACE_UNPARSED_PATH',
+      category: '',
+      issue_type: 'unparsed_path',
+      confidence_score: undefined as unknown as number,
+      confidence: 92,
+      confidence_tier: 'high',
+      rationale: '',
+      reason: 'Comma-separated path detected.',
+      proposed_clean_name: 'Тверь',
+      proposed_place_type: 'city',
+      proposed_chain: [
+        {
+          name: 'Unknown',
+          place_type: 'country',
+          existing_place_id: null,
+          is_new: true,
+        },
+        {
+          name: 'Российская империя',
+          place_type: 'country',
+          existing_place_id: 'pl-empire',
+          is_new: false,
+        },
+        {
+          name: 'Тверская губерния',
+          place_type: 'region',
+          existing_place_id: null,
+          is_new: true,
+        },
+        {
+          name: 'Тверь',
+          place_type: 'city',
+          existing_place_id: 'pl-raw-1',
+          is_new: false,
+        },
+      ],
+    } satisfies PlaceHierarchyIssueDto;
+
+    const normalized = normalizePlaceHierarchyIssue(rawBackendIssue);
+    expect(normalized.confidence_score).toBe(92);
+    expect(normalized.category).toBe('unparsed_paths');
+    expect(normalized.rationale).toBe('Comma-separated path detected.');
+    expect(normalized.proposed_chain).toHaveLength(3);
+    expect(normalized.proposed_chain[0].action).toBe('reuse');
+    expect(normalized.proposed_chain[1].action).toBe('create');
+    expect(normalized.proposed_chain[2].action).toBe('clean_leaf');
+
+    const htmlEn = renderWithProviders(
+      <PlaceHierarchySubView
+        issues={[rawBackendIssue]}
+        onIssuesChange={() => {}}
+        availablePlaces={[]}
+      />,
+      'en'
+    );
+    expect(htmlEn).not.toContain('NaN%');
+    expect(htmlEn).toContain('High (92%)');
+    expect(htmlEn).toContain('Comma paths (1)');
+    expect(htmlEn).toContain('Comma-separated path');
+    expect(htmlEn).toContain('Existing');
+    expect(htmlEn).toContain('Create level');
+    expect(htmlEn).toContain('Clean leaf');
+    expect(htmlEn).not.toContain('Unknown');
   });
 });

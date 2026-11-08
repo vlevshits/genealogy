@@ -33,42 +33,72 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
       null
   );
 
-  const scorePct =
-    issue.confidence_score <= 1
-      ? Math.round(issue.confidence_score * 100)
-      : Math.round(issue.confidence_score);
+  const rawScore = issue.confidence_score ?? issue.confidence ?? 85;
+  const numericScore = Number.isFinite(rawScore)
+    ? rawScore > 0 && rawScore <= 1
+      ? rawScore * 100
+      : rawScore
+    : 85;
+  const scorePct = Math.round(numericScore);
+
+  const tier =
+    issue.confidence_tier === 'high' ||
+    issue.confidence_tier === 'medium' ||
+    issue.confidence_tier === 'low'
+      ? issue.confidence_tier
+      : scorePct >= 85
+        ? 'high'
+        : scorePct >= 60
+          ? 'medium'
+          : 'low';
 
   const tierVariant =
-    issue.confidence_tier === 'high'
+    tier === 'high'
       ? 'success'
-      : issue.confidence_tier === 'medium'
+      : tier === 'medium'
         ? 'warning'
         : 'neutral';
 
   const getCategoryLabel = (cat: string): string => {
     switch (cat) {
+      case 'unparsed_path':
       case 'unparsed_paths':
         return t('quality.places.category.unparsed');
+      case 'orphan_hierarchy':
       case 'orphans':
         return t('quality.places.category.orphans');
+      case 'type_mismatch':
       case 'type_mismatches':
         return t('quality.places.category.typeMismatch');
+      case 'duplicate_node':
       case 'duplicates':
         return t('quality.places.category.duplicates');
       default:
+        if (issue.rule_code === 'PLACE_UNPARSED_PATH') {
+          return t('quality.places.category.unparsed');
+        }
+        if (issue.rule_code === 'PLACE_ORPHAN_HIERARCHY') {
+          return t('quality.places.category.orphans');
+        }
+        if (issue.rule_code === 'PLACE_TYPE_MISMATCH') {
+          return t('quality.places.category.typeMismatch');
+        }
+        if (issue.rule_code === 'PLACE_DUPLICATE_CANDIDATE') {
+          return t('quality.places.category.duplicates');
+        }
         return cat;
     }
   };
 
   const getStepActionBadge = (action: string) => {
-    if (action === 'reuse') {
+    if (action === 'reuse' || action === 'match_existing') {
       return (
         <Badge variant="neutral" size="sm">
           {t('quality.places.stepAction.reuse')}
         </Badge>
       );
     }
-    if (action === 'create') {
+    if (action === 'create' || action === 'create_new') {
       return (
         <Badge variant="brand" size="sm">
           {t('quality.places.stepAction.create')}
@@ -89,6 +119,20 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
     );
   };
 
+  const visibleChain = (issue.proposed_chain ?? []).filter((step) => {
+    const lower = (step.name || '').trim().toLowerCase();
+    return Boolean(lower) && lower !== 'unknown' && lower !== 'неизвестно';
+  });
+
+  const visibleCandidates = (
+    issue.candidate_parents ??
+    issue.parent_candidates ??
+    []
+  ).filter((cand) => {
+    const lower = (cand.name || '').trim().toLowerCase();
+    return Boolean(lower) && lower !== 'unknown' && lower !== 'неизвестно';
+  });
+
   return (
     <Card
       data-testid={`place-hierarchy-card-${issue.place_id}`}
@@ -98,13 +142,13 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={tierVariant} size="sm">
-            {t(`quality.places.confidence.${issue.confidence_tier}`, {
+            {t(`quality.places.confidence.${tier}`, {
               score: scorePct,
               pct: scorePct,
             })}
           </Badge>
           <Badge variant="neutral" size="sm">
-            {getCategoryLabel(issue.category)}
+            {getCategoryLabel(issue.category || issue.issue_type || '')}
           </Badge>
           <span className="font-mono text-xs text-tertiary">
             ({issue.place_gid})
@@ -156,24 +200,40 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
           <div className="text-xs font-semibold uppercase tracking-wider text-tertiary">
             {t('quality.places.proposedHierarchyLabel')}
           </div>
-          {issue.proposed_chain && issue.proposed_chain.length > 0 ? (
+          {visibleChain.length > 0 ? (
             <div className="space-y-1.5">
-              {issue.proposed_chain.map((step, idx) => (
-                <div
-                  key={`${step.name}-${idx}`}
-                  className="flex flex-wrap items-center gap-1.5 text-xs"
-                  style={{ paddingLeft: `${idx * 14}px` }}
-                >
-                  {idx > 0 && (
-                    <CornerDownRight className="h-3.5 w-3.5 text-tertiary shrink-0" />
-                  )}
-                  <span className="font-medium text-primary">{step.name}</span>
-                  <span className="text-tertiary">
-                    ({t(`places.types.${step.place_type || 'other'}`)})
-                  </span>
-                  {getStepActionBadge(step.action)}
-                </div>
-              ))}
+              {visibleChain.map((step, idx) => {
+                const isLast = idx === visibleChain.length - 1;
+                const rawCategory = issue.category || issue.issue_type || '';
+                const resolvedAction =
+                  step.action ||
+                  (isLast
+                    ? issue.consolidate_with_place_id ||
+                      rawCategory === 'duplicates' ||
+                      rawCategory === 'duplicate_node' ||
+                      issue.rule_code === 'PLACE_DUPLICATE_CANDIDATE'
+                      ? 'consolidate'
+                      : 'clean_leaf'
+                    : step.is_new || !step.existing_place_id
+                      ? 'create'
+                      : 'reuse');
+                return (
+                  <div
+                    key={`${step.name}-${idx}`}
+                    className="flex flex-wrap items-center gap-1.5 text-xs"
+                    style={{ paddingLeft: `${idx * 14}px` }}
+                  >
+                    {idx > 0 && (
+                      <CornerDownRight className="h-3.5 w-3.5 text-tertiary shrink-0" />
+                    )}
+                    <span className="font-medium text-primary">{step.name}</span>
+                    <span className="text-tertiary">
+                      ({t(`places.types.${step.place_type || 'other'}`)})
+                    </span>
+                    {getStepActionBadge(resolvedAction)}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="text-xs text-secondary">
@@ -183,13 +243,13 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
           )}
 
           {/* Candidate Parents Selector for Medium/Ambiguous Issues */}
-          {issue.candidate_parents && issue.candidate_parents.length > 1 && (
+          {visibleCandidates.length > 1 && (
             <div className="pt-2 space-y-1.5 border-t border-border mt-2">
               <div className="text-xs font-medium text-secondary">
                 {t('quality.places.selectCandidateParentLabel')}:
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {issue.candidate_parents.map((cand) => {
+                {visibleCandidates.map((cand) => {
                   const isSelected = selectedCandidateId === cand.place_id;
                   return (
                     <Button
@@ -213,7 +273,9 @@ export const PlaceHierarchyCard: React.FC<PlaceHierarchyCardProps> = ({
 
       {/* Rule Rationale & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-        <p className="text-xs text-secondary">{issue.rationale}</p>
+        <p className="text-xs text-secondary">
+          {issue.rationale || issue.reason || ''}
+        </p>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Button
