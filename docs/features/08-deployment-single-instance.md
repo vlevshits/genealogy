@@ -276,7 +276,7 @@ Each release builds two cross-compiled packages:
 - `genealogy-vX.Y.Z-linux-x86_64.tar.gz` (Standard 64-bit x86 LXC / Proxmox / Bare-Metal)
 - `genealogy-vX.Y.Z-linux-aarch64.tar.gz` (64-bit ARM LXC / Raspberry Pi / Ampere)
 
-Each tarball bundles the precompiled `genealogy-backend` binary, `genealogy-cli` binary, production `frontend/` static assets, systemd unit file, Nginx reverse proxy template, and `scripts/install.sh`.
+Each tarball bundles the precompiled `genealogy-backend` binary, `genealogy-cli` binary, production `frontend/` static assets, systemd unit file, and `scripts/install.sh`.
 
 ---
 

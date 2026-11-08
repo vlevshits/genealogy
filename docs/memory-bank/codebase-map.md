@@ -116,10 +116,9 @@ A complete directory and module responsibility map of the Genealogy repository.
 
 | Path | Responsibility |
 | :--- | :--- |
-| `scripts/install.sh` | Unified single-command installer and atomic updater for Debian/Ubuntu LXC and bare-metal environments. |
-| `deploy/lxc/genealogy.service` | Hardened systemd service unit template (`NoNewPrivileges`, `ProtectSystem=full`). |
-| `deploy/lxc/nginx.conf` | Production Nginx reverse proxy configuration template (SPA fallback, caching, 500M body limit). |
-| `deploy/lxc/genealogy.env.example` | Production environment configuration template for LXC. |
+| `scripts/install.sh` | Unified single-command installer and atomic updater for Debian/Ubuntu LXC and bare-metal environments (automated PostgreSQL setup, direct port 80 Axum serving, zero Nginx). |
+| `deploy/lxc/genealogy.service` | Hardened systemd service unit template (`CAP_NET_BIND_SERVICE`, `NoNewPrivileges`, `ProtectSystem=full`). |
+| `deploy/lxc/genealogy.env.example` | Production environment configuration template for LXC (`PORT=80`, `FRONTEND_STATIC_PATH`). |
 | `.github/workflows/release.yml` | On-demand GitHub Actions release pipeline cross-compiling Linux `x86_64` and `aarch64` tarballs with checksums. |
 | `.agents/skills/genealogy-release/SKILL.md` | Skill automating pre-flight verification test suites, version bumping, and release tag publishing. |
 | `docker-compose.yml` | 3-container Docker Compose deployment definition (`frontend`, `backend`, `postgres`). |
@@ -151,4 +150,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_
+_Last curated: 2026-11-08 (Zero-proxy LXC port 80 direct binding, CAP_NET_BIND_SERVICE, automated PostgreSQL setup)_

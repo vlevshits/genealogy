@@ -55,9 +55,9 @@ The system supports two official deployment approaches:
 
 ### 4.1 Native LXC / Bare-Metal (Recommended Production)
 Targeted at Debian 11/12 and Ubuntu 22.04/24.04 (x86_64, aarch64) in Proxmox LXC containers or bare-metal servers:
-- **Installer / Updater (`scripts/install.sh`):** Single-command script (`curl -fsSL ... | sudo bash` or `sudo /opt/genealogy/scripts/install.sh`) fetching precompiled release archives from GitHub Releases.
-- **Service Management:** Systemd service (`deploy/lxc/genealogy.service`) running hardened as system user `genealogy` (`ProtectSystem=full`, `NoNewPrivileges=true`).
-- **Web Layer:** Production Nginx reverse proxy (`deploy/lxc/nginx.conf`) handling SPA fallback, cache-control headers, and API proxying; optionally Axum native static file serving via `FRONTEND_STATIC_PATH`.
+- **Installer / Updater (`scripts/install.sh`):** Single-command script (`curl -fsSL ... | sudo bash` or `sudo /opt/genealogy/scripts/install.sh`) fetching precompiled release archives from GitHub Releases and automatically installing/configuring PostgreSQL (`postgresql`, `postgresql-contrib`, role `genealogy`, db `genealogy`, `pg_hba.conf` local auth).
+- **Service Management:** Systemd service (`deploy/lxc/genealogy.service`) running hardened as system user `genealogy` (`ProtectSystem=full`, `NoNewPrivileges=true`, `AmbientCapabilities=CAP_NET_BIND_SERVICE`).
+- **Web Layer:** Direct web listening on port 80 (Axum native serving of SPA static files via `FRONTEND_STATIC_PATH` and `/api/v1` REST endpoints) with ZERO Nginx / proxy layer.
 - **Resource Footprint:** ~30–50MB RAM idle for Axum backend.
 
 ### 4.2 Docker Compose (Containerized)
@@ -93,4 +93,4 @@ Environment variables are defined in [`.env.example`](../../.env.example) and pa
 - `GEMINI_API_KEY`, `GEMINI_MODEL`: Optional Google Gemini API key and model identifier for server-side oral story transcription and entity extraction
 - `SMTP_*`: Optional configuration for sending magic links and notification emails (falls back to terminal/in-memory logging)
 
-_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_
+_Last curated: 2026-11-08 (Zero-proxy LXC port 80 direct binding, CAP_NET_BIND_SERVICE, automated PostgreSQL setup)_
