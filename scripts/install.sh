@@ -6,14 +6,29 @@
 #
 # Usage:
 #   Install latest: curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/install.sh | sudo bash
+#   Clean install:  curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/install.sh | sudo FORCE=1 bash
 #   Update:         sudo /opt/genealogy/scripts/install.sh
-#   Options:        VERSION=v0.1.0 PORT=80 sudo -E bash install.sh
+#   Options:        VERSION=v0.1.0 PORT=80 FORCE=1 sudo -E bash install.sh
 # ==============================================================================
 
 set -euo pipefail
 
 REPO="${REPO:-vlevshits/genealogy}"
 APP_VERSION="${APP_VERSION:-${VERSION:-latest}}"
+FORCE="${FORCE:-0}"
+CLEAN="${CLEAN:-0}"
+
+# Handle CLI arguments like --force or --clean
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f)
+            FORCE=1
+            ;;
+        --clean|-c)
+            CLEAN=1
+            ;;
+    esac
+done
 INSTALL_DIR="/opt/genealogy"
 WEB_DIR="/var/www/genealogy"
 DATA_DIR="/var/lib/genealogy"
@@ -94,8 +109,10 @@ fetch_latest_release_tag() {
 # 3. Detect Mode: Update vs Initial Install
 # ------------------------------------------------------------------------------
 IS_UPDATE=0
-if [ -f "${INSTALL_DIR}/genealogy-backend" ] && [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
-    IS_UPDATE=1
+if [ "$FORCE" -ne 1 ] && [ "$CLEAN" -ne 1 ]; then
+    if [ -f "${INSTALL_DIR}/genealogy-backend" ] && [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
+        IS_UPDATE=1
+    fi
 fi
 
 TMP_DIR="$(mktemp -d /tmp/genealogy-install-XXXXXX)"
@@ -218,13 +235,20 @@ systemctl enable --now postgresql
 log_info "Configuring local PostgreSQL database and role 'genealogy'..."
 PG_PASS="$(openssl rand -hex 16)"
 
-su - postgres -c "psql -c \"DO \\\$do\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'genealogy') THEN CREATE USER genealogy WITH ENCRYPTED PASSWORD '${PG_PASS}'; ELSE ALTER USER genealogy WITH ENCRYPTED PASSWORD '${PG_PASS}'; END IF; END \\\$do\\\$;\"" >/dev/null
-
-PG_DB_EXISTS=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='genealogy'\"" 2>/dev/null || true)
-if [ "$PG_DB_EXISTS" != "1" ]; then
-    su - postgres -c "psql -c \"CREATE DATABASE genealogy OWNER genealogy;\"" >/dev/null
+# Force clean reset of database if requested
+if [ "$FORCE" = "1" ] || [ "$CLEAN" = "1" ]; then
+    log_warn "Clean installation requested (FORCE=1). Resetting database 'genealogy'..."
+    su - postgres -c "psql -c 'DROP DATABASE IF EXISTS genealogy WITH (FORCE);'" >/dev/null 2>&1 || true
+    rm -f "${CONFIG_FILE}"
 fi
-su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE genealogy TO genealogy;\"" >/dev/null
+
+su - postgres -c "psql -c \"DO \\\$do\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'genealogy') THEN CREATE USER genealogy WITH ENCRYPTED PASSWORD '${PG_PASS}'; ELSE ALTER USER genealogy WITH ENCRYPTED PASSWORD '${PG_PASS}'; END IF; END \\\$do\\\$;\"" >/dev/null 2>&1 || true
+
+DB_EXISTS=$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='genealogy'\"" 2>/dev/null | tr -d ' \r\n' || true)
+if [ "$DB_EXISTS" != "1" ]; then
+    su - postgres -c "psql -c \"CREATE DATABASE genealogy OWNER genealogy;\"" >/dev/null 2>&1 || true
+fi
+su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE genealogy TO genealogy;\"" >/dev/null 2>&1 || true
 
 # Ensure pg_hba.conf permits password authentication over 127.0.0.1
 PG_HBA=$(find /etc/postgresql/ -name "pg_hba.conf" 2>/dev/null | head -n 1 || true)
