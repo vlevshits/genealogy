@@ -24,6 +24,7 @@ import {
   fetchOnboardingStatus,
   fetchSystemInfo,
   OnboardingStatusResponse,
+  TREE_DATA_UPDATED_EVENT,
 } from './api/client';
 import { useAuth } from './lib/auth-context';
 import { buildLoginUrl } from './lib/navigation-utils';
@@ -85,7 +86,7 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
 
   const loadOnboardingStatus = useCallback(() => {
     if (initialOnboardingStatus) return;
-    if (!isAuthenticated) return;
+    if (!isAuthenticated && !setupStatus?.enable_public_access) return;
     fetchOnboardingStatus()
       .then((status) => {
         setOnboardingStatus(status);
@@ -102,7 +103,11 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
           start_page: 'dashboard',
         });
       });
-  }, [initialOnboardingStatus, isAuthenticated]);
+  }, [
+    initialOnboardingStatus,
+    isAuthenticated,
+    setupStatus?.enable_public_access,
+  ]);
 
   useEffect(() => {
     if (initialOnboardingStatus) {
@@ -111,6 +116,23 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
     }
     loadOnboardingStatus();
   }, [initialOnboardingStatus, loadOnboardingStatus, isAuthenticated]);
+
+  useEffect(() => {
+    if (path === '/') {
+      loadOnboardingStatus();
+    }
+  }, [path, loadOnboardingStatus]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleTreeUpdated = () => {
+      loadOnboardingStatus();
+    };
+    window.addEventListener(TREE_DATA_UPDATED_EVENT, handleTreeUpdated);
+    return () => {
+      window.removeEventListener(TREE_DATA_UPDATED_EVENT, handleTreeUpdated);
+    };
+  }, [loadOnboardingStatus]);
 
   const navigate = useCallback((nextPath: string) => {
     initialRedirectAttemptedRef.current = true;

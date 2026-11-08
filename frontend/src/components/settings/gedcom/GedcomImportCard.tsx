@@ -16,6 +16,7 @@ import {
   GedcomAnalysisReport,
   GedcomImportResult,
   importGedcom,
+  notifyTreeDataChanged,
 } from '../../../api/client';
 import { getLocalizedErrorMessage } from '../../../lib/error-formatter';
 import { useI18n } from '../../../i18n';
@@ -156,6 +157,7 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
       setImportProgress(100);
       setImportResult(result);
       setConfirmCleanSlateOpen(false);
+      notifyTreeDataChanged();
       addToast({
         type: 'success',
         title: t('gedcom.import.successToast'),
@@ -168,6 +170,7 @@ export const GedcomImportCard: React.FC<GedcomImportCardProps> = ({
         setImportProgress(100);
         setImportResult(DEFAULT_GEDCOM_IMPORT_RESULT);
         setConfirmCleanSlateOpen(false);
+        notifyTreeDataChanged();
         addToast({
           type: 'success',
           title: t('gedcom.import.successToast'),

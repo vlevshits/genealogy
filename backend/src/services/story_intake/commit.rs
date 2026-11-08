@@ -24,6 +24,11 @@ pub fn commit_story_draft(
         ));
     }
 
+    if store.is_demo_seed {
+        store.persons.clear();
+        store.is_demo_seed = false;
+    }
+
     if draft.reconciliation_matches.is_empty() {
         reconcile_story_draft_in_place(store, &mut draft);
     }

@@ -17,6 +17,10 @@ import {
 } from '../../src/components/tree';
 import { ProfileSettingsPanel } from '../../src/components/settings';
 import { App } from '../../src/App';
+import {
+  notifyTreeDataChanged,
+  TREE_DATA_UPDATED_EVENT,
+} from '../../src/api/client';
 
 function renderWithProviders(
   node: React.ReactNode,
@@ -195,5 +199,11 @@ describe('Phase 1.5 Empty-Tree Onboarding & Home Person UI', () => {
     expect(profileRu).toContain('Стартовая страница при входе');
     expect(profileRu).toContain('Моя ключевая персона');
     expect(profileRu).toContain('Сбросить ключевую персону');
+  });
+
+  it('exports TREE_DATA_UPDATED_EVENT and notifyTreeDataChanged to invalidate empty-tree onboarding status after GEDCOM or story import', () => {
+    expect(TREE_DATA_UPDATED_EVENT).toBe('genealogy:tree-updated');
+    expect(typeof notifyTreeDataChanged).toBe('function');
+    expect(() => notifyTreeDataChanged()).not.toThrow();
   });
 });

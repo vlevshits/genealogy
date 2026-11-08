@@ -19,6 +19,7 @@ import {
   dashboardApi,
   DashboardPayloadDto,
   MediaAssetSummaryDto,
+  TREE_DATA_UPDATED_EVENT,
   undoTransaction,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
@@ -264,6 +265,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   useEffect(() => {
     loadDashboard(scope);
+  }, [loadDashboard, scope]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleTreeUpdated = () => {
+      loadDashboard(scope);
+    };
+    window.addEventListener(TREE_DATA_UPDATED_EVENT, handleTreeUpdated);
+    return () => {
+      window.removeEventListener(TREE_DATA_UPDATED_EVENT, handleTreeUpdated);
+    };
   }, [loadDashboard, scope]);
 
   const handleUndoTx = async (txId: string) => {

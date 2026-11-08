@@ -126,7 +126,24 @@ export interface TriggerBackupResponse {
 
 
 export const API_BASE = '/api/v1';
+export const TREE_DATA_UPDATED_EVENT = 'genealogy:tree-updated';
 const SESSION_TOKEN_STORAGE_KEY = 'genealogy_session_token';
+
+export function notifyTreeDataChanged(): void {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent(TREE_DATA_UPDATED_EVENT));
+  }
+}
+
+function isNonTreeMutatingEndpoint(endpoint: string): boolean {
+  return (
+    endpoint.startsWith('/auth/') ||
+    endpoint.startsWith('/gedcom/analyze') ||
+    endpoint.startsWith('/export/pdf/preview-info') ||
+    endpoint.startsWith('/ai/transcribe') ||
+    endpoint.startsWith('/ai/parse-story')
+  );
+}
 
 let inMemoryAuthToken: string | null = null;
 
@@ -208,11 +225,26 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     throw new ApiError(response.status, errData.error);
   }
 
+  const method = (options.method || 'GET').toUpperCase();
+  const shouldNotifyTreeChange =
+    (method === 'POST' ||
+      method === 'PUT' ||
+      method === 'PATCH' ||
+      method === 'DELETE') &&
+    !isNonTreeMutatingEndpoint(endpoint);
+
   if (response.status === 204 || response.headers.get('content-length') === '0') {
+    if (shouldNotifyTreeChange) {
+      notifyTreeDataChanged();
+    }
     return undefined as T;
   }
 
-  return response.json();
+  const data = (await response.json()) as T;
+  if (shouldNotifyTreeChange) {
+    notifyTreeDataChanged();
+  }
+  return data;
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
