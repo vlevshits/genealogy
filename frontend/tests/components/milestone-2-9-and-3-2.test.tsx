@@ -21,6 +21,7 @@ import { Avatar } from '../../src/components/ui/avatar';
 import { Button } from '../../src/components/ui/button';
 import { SideNav } from '../../src/components/ui/side-nav';
 import { AudioRecorderWidget } from '../../src/components/stories/AudioRecorderWidget';
+import { SpeakerSelectorCard } from '../../src/components/stories/SpeakerSelectorCard';
 import { DashboardPage } from '../../src/pages/DashboardPage';
 import { MediaCard } from '../../src/components/media/MediaCard';
 import {
@@ -385,6 +386,20 @@ describe('Milestone 2.9 & 3.2 — Place Hierarchy, Relationship Duplicate Reason
     // 4. AiStoryIntakePage localizes fallback speakers in EN vs RU (UX-122)
     const intakeEn = renderWithProviders(<AiStoryIntakePage userRole="admin" />, 'en');
     expect(intakeEn).toContain('Anna Sergeyevna Volkova (I0001)');
+
+    // 4b. SpeakerSelectorCard displays visible error message when speaker is required
+    const speakerCardError = renderWithProviders(
+      <SpeakerSelectorCard
+        selectedSpeakerId={null}
+        onSelectSpeaker={() => {}}
+        isNewSpeaker={false}
+        onNewSpeakerChange={() => {}}
+        errorMessage="Please select who is telling this story, or check 'Storyteller is not in the tree yet'."
+      />,
+      'en'
+    );
+    expect(speakerCardError).toContain('data-testid="speaker-required-error"');
+    expect(speakerCardError).toContain('Please select who is telling this story');
 
     // 5. DashboardPage renders Story Intake quick-action button for Editors/Admins (UX-120)
     const dashEditorHtml = renderWithProviders(

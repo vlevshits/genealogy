@@ -2104,7 +2104,10 @@
       "title": "Who is telling this story? (Anchor Speaker)",
       "subtitle": "First-person references ('I', 'my grandfather', 'мой дедушка') are resolved relative to the selected speaker.",
       "selectAria": "Select anchor speaker in family tree",
-      "newRelativeToggle": "Storyteller is not in the tree yet"
+      "newRelativeToggle": "Storyteller is not in the tree yet",
+      "searchPlaceholder": "Search relative by name or ID…",
+      "requiredError": "Please select who is telling this story, or check 'Storyteller is not in the tree yet'.",
+      "requiredErrorTitle": "Speaker required"
     },
     "audio": {
       "recordingStatus": "Recording voice story…",

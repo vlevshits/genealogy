@@ -463,9 +463,11 @@ export const storyApi = {
 
   async parseStory(payload: ParseStoryRequestDto): Promise<StoryDraftDto> {
     try {
+      const { speaker_id: _legacySpeakerId, ...rest } = payload;
+      const speakerId = payload.speaker_person_id ?? _legacySpeakerId ?? null;
       const reqBody = {
-        ...payload,
-        speaker_person_id: payload.speaker_person_id ?? payload.speaker_id,
+        ...rest,
+        speaker_person_id: speakerId || null,
       };
       const res = await apiFetch<Record<string, unknown>>('/ai/parse-story', {
         method: 'POST',

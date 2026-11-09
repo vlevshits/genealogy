@@ -11,6 +11,7 @@ export interface AvatarCrop {
 export interface Individual {
   id: string;
   gid: string;
+  display_name?: string | null;
   given_name?: string | null;
   patronymic?: string | null;
   surname?: string | null;

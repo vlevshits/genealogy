@@ -1,6 +1,8 @@
-import React from 'react';
-import { UserCheck } from 'lucide-react';
-import { Card, Checkbox, Select } from '../ui';
+import React, { useMemo } from 'react';
+import { AlertCircle, UserCheck } from 'lucide-react';
+import { Card, Checkbox } from '../ui';
+import { PersonPicker } from '../domain/person-picker';
+import { Individual } from '../../types/person';
 import { useI18n } from '../../i18n';
 
 export interface SpeakerOption {
@@ -10,26 +12,49 @@ export interface SpeakerOption {
 }
 
 export interface SpeakerSelectorCardProps {
-  speakers: SpeakerOption[];
-  selectedSpeakerId: string;
-  onSelectSpeaker: (id: string) => void;
+  speakers?: SpeakerOption[];
+  people?: Individual[];
+  selectedSpeakerId: string | null;
+  onSelectSpeaker: (id: string | null, person?: Individual) => void;
   isNewSpeaker: boolean;
   onNewSpeakerChange: (isNew: boolean) => void;
+  loadPeople?: (query: string, signal: AbortSignal) => Promise<Individual[]>;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
+  errorMessage?: string | null;
 }
 
 export const SpeakerSelectorCard: React.FC<SpeakerSelectorCardProps> = ({
   speakers,
+  people,
   selectedSpeakerId,
   onSelectSpeaker,
   isNewSpeaker,
   onNewSpeakerChange,
+  loadPeople,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  errorMessage,
 }) => {
   const { t } = useI18n();
 
-  const selectOptions = speakers.map((sp) => ({
-    value: sp.id,
-    label: `${sp.display_name} (${sp.gid})`,
-  }));
+  const combinedPeople: Individual[] = useMemo(() => {
+    if (people && people.length > 0) return people;
+    return (speakers || []).map((sp) => ({
+      id: sp.id,
+      gid: sp.gid,
+      display_name: sp.display_name,
+      given_name: sp.display_name.split(' ')[0] || sp.display_name,
+      sex: 'unknown',
+      is_living: true,
+      is_private: false,
+      version: 1,
+    }));
+  }, [people, speakers]);
+
+  const isInvalid = Boolean(errorMessage) && !isNewSpeaker;
 
   return (
     <Card
@@ -50,18 +75,34 @@ export const SpeakerSelectorCard: React.FC<SpeakerSelectorCardProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center pt-1">
-        <div className="min-w-0">
-          <Select
-            value={selectedSpeakerId}
-            onChange={onSelectSpeaker}
-            options={selectOptions}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start pt-1">
+        <div className="min-w-0 space-y-1.5">
+          <PersonPicker
+            value={isNewSpeaker ? null : selectedSpeakerId}
+            people={combinedPeople}
+            loadPeople={loadPeople}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onLoadMore={onLoadMore}
+            onChange={(personId, person) => onSelectSpeaker(personId, person)}
             disabled={isNewSpeaker}
+            invalid={isInvalid}
+            placeholder={t('stories.speaker.searchPlaceholder')}
             ariaLabel={t('stories.speaker.selectAria')}
           />
+          {isInvalid && (
+            <p
+              role="alert"
+              data-testid="speaker-required-error"
+              className="text-xs text-danger flex items-center gap-1.5 pt-0.5"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>{errorMessage}</span>
+            </p>
+          )}
         </div>
 
-        <div>
+        <div className="pt-2.5">
           <Checkbox
             checked={isNewSpeaker}
             onCheckedChange={(checked) => onNewSpeakerChange(checked)}

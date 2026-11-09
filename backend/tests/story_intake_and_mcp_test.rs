@@ -349,6 +349,25 @@ async fn test_russian_story_reconciliation_atomic_commit_and_one_click_undo() {
     assert_eq!(draft["speaker_person_id"], ivan_id);
     let draft_id = draft["id"].as_str().unwrap().to_string();
 
+    // 2b. Verify that passing both speaker_person_id AND speaker_id does not cause Serde duplicate field error
+    let (both_keys_status, draft_both) = post_json(
+        &app,
+        "/api/v1/ai/parse-story",
+        &editor_auth,
+        json!({
+            "raw_text": "Story with both speaker keys.",
+            "speaker_id": ivan_id,
+            "speaker_person_id": ivan_id
+        }),
+    )
+    .await;
+    assert_eq!(
+        both_keys_status,
+        StatusCode::CREATED,
+        "draft_both: {draft_both}"
+    );
+    assert_eq!(draft_both["speaker_person_id"], ivan_id);
+
     // 3. Verify GET on /reconcile is disallowed (POST-only mutation route) and POST relationship-centric reconciliation matches speaker (100%) and mother (>= 90%)
     let (get_rec_status, _) = get_json(
         &app,

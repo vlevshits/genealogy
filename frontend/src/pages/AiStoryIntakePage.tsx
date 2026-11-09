@@ -25,6 +25,8 @@ import {
   storyApi,
   StoryDraftDto,
 } from '../api/client';
+import { PeopleDirectoryItemDto } from '../api/openapi-types-domain';
+import { Individual } from '../types/person';
 import {
   getExtractionEngine,
   setExtractionEngine,
@@ -40,6 +42,38 @@ export interface AiStoryIntakePageProps {
   userRole?: 'admin' | 'editor' | 'viewer';
   onNavigate?: (path: string) => void;
 }
+
+const toIndividualFromDirectory = (item: PeopleDirectoryItemDto): Individual => ({
+  id: item.id,
+  gid: item.gid,
+  display_name: item.display_name,
+  surname: item.surname,
+  given_name: item.given_name,
+  patronymic: item.patronymic,
+  birth_surname: item.birth_surname,
+  sex:
+    item.sex === 'M' || item.sex === 'male'
+      ? 'male'
+      : item.sex === 'F' || item.sex === 'female'
+        ? 'female'
+        : 'unknown',
+  is_living: item.is_living,
+  is_private: false,
+  avatar_url: item.avatar_url,
+  birth_place: item.birth_place,
+  version: 1,
+});
+
+const toIndividualFromSpeakerOption = (sp: SpeakerOption): Individual => ({
+  id: sp.id,
+  gid: sp.gid,
+  display_name: sp.display_name,
+  given_name: sp.display_name.split(' ')[0] || sp.display_name,
+  sex: 'unknown',
+  is_living: true,
+  is_private: false,
+  version: 1,
+});
 
 const DEFAULT_SPEAKERS_RU: SpeakerOption[] = [
   { id: 'node-root', gid: 'I0001', display_name: 'Анна Сергеевна Волкова' },
@@ -72,10 +106,17 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   const [speakers, setSpeakers] = useState<SpeakerOption[]>(
     initialSpeakers ?? defaultSpeakers
   );
+  const [people, setPeople] = useState<Individual[]>(() =>
+    (initialSpeakers ?? defaultSpeakers).map(toIndividualFromSpeakerOption)
+  );
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>(
     user?.person_id || user?.home_person_id || defaultSpeakers[0].id
   );
   const [isNewSpeaker, setIsNewSpeaker] = useState<boolean>(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [currentSearchQuery, setCurrentSearchQuery] = useState<string>('');
+  const [speakerError, setSpeakerError] = useState<string | null>(null);
 
   const [narrativeText, setNarrativeText] = useState<string>(
     initialDraft?.raw_text ?? ''
@@ -100,11 +141,13 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           s.id === 'node-mother-1' ||
           s.id === 'node-deceased-1'
       );
-      return isDefaultList
-        ? locale === 'ru'
-          ? DEFAULT_SPEAKERS_RU
-          : DEFAULT_SPEAKERS_EN
-        : prev;
+      if (isDefaultList) {
+        const nextDefaults =
+          locale === 'ru' ? DEFAULT_SPEAKERS_RU : DEFAULT_SPEAKERS_EN;
+        setPeople(nextDefaults.map(toIndividualFromSpeakerOption));
+        return nextDefaults;
+      }
+      return prev;
     });
   }, [locale, initialSpeakers]);
 
@@ -168,6 +211,8 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
     fetchPeopleDirectory({ limit: 30 })
       .then((res) => {
         if (!cancelled && Array.isArray(res.items) && res.items.length > 0) {
+          const mapped = res.items.map(toIndividualFromDirectory);
+          setPeople(mapped);
           setSpeakers(
             res.items.map((item) => ({
               id: item.id,
@@ -175,13 +220,79 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
               display_name: item.display_name,
             }))
           );
+          setNextCursor(res.next_cursor);
+
+          setSelectedSpeakerId((prev) => {
+            if (prev === 'node-root') {
+              if (user?.person_id && res.items.some((p) => p.id === user.person_id)) {
+                return user.person_id;
+              }
+              if (user?.home_person_id && res.items.some((p) => p.id === user.home_person_id)) {
+                return user.home_person_id;
+              }
+              return '';
+            }
+            return prev;
+          });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       cancelled = true;
     };
-  }, [canEdit, initialSpeakers]);
+  }, [canEdit, initialSpeakers, user?.person_id, user?.home_person_id]);
+
+  const loadPeopleForSpeaker = useCallback(
+    async (query: string, signal: AbortSignal): Promise<Individual[]> => {
+      setCurrentSearchQuery(query);
+      try {
+        const res = await fetchPeopleDirectory({
+          q: query.trim() || undefined,
+          limit: 30,
+        });
+        if (signal.aborted) return [];
+        setNextCursor(res.next_cursor);
+        const mapped = res.items.map(toIndividualFromDirectory);
+        setPeople((prev) => {
+          const ids = new Set(mapped.map((p) => p.id));
+          return [...mapped, ...prev.filter((p) => !ids.has(p.id))];
+        });
+        return mapped;
+      } catch {
+        return [];
+      }
+    },
+    []
+  );
+
+  const handleLoadMoreSpeakers = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetchPeopleDirectory({
+        q: currentSearchQuery.trim() || undefined,
+        cursor: nextCursor,
+        limit: 30,
+      });
+      setNextCursor(res.next_cursor);
+      const mapped = res.items.map(toIndividualFromDirectory);
+      setPeople((prev) => {
+        const ids = new Set(mapped.map((p) => p.id));
+        const combined = [...prev];
+        for (const p of mapped) {
+          if (!ids.has(p.id)) {
+            combined.push(p);
+            ids.add(p.id);
+          }
+        }
+        return combined;
+      });
+    } catch {
+      // Ignore load more errors
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, currentSearchQuery]);
 
   const syncResolutionsFromDraft = (draft: StoryDraftDto) => {
     const next: Record<string, ReconciliationResolutionState> = {};
@@ -253,15 +364,28 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   };
 
   const handleExtractSubtree = async () => {
-    if (!narrativeText.trim() || extracting) return;
+    const trimmedText = narrativeText.trim();
+    if (!trimmedText || extracting) return;
+
+    if (!isNewSpeaker && (!selectedSpeakerId || !selectedSpeakerId.trim())) {
+      const msg = t('stories.speaker.requiredError');
+      setSpeakerError(msg);
+      addToast({
+        type: 'error',
+        title: t('stories.speaker.requiredErrorTitle') || t('common.errorLoading'),
+        description: msg,
+      });
+      return;
+    }
+
     setExtracting(true);
+    setSpeakerError(null);
 
     try {
       const draft = await storyApi.parseStory({
-        speaker_id: isNewSpeaker ? null : selectedSpeakerId,
-        speaker_person_id: isNewSpeaker ? null : selectedSpeakerId,
+        speaker_person_id: isNewSpeaker ? null : selectedSpeakerId.trim(),
         is_new_speaker: isNewSpeaker,
-        raw_text: narrativeText.trim(),
+        raw_text: trimmedText,
         language: language === 'auto' ? undefined : language,
         engine,
       });
@@ -443,11 +567,10 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${
-              currentStage >= 2
+            className={`flex items-center gap-2 ${currentStage >= 2
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-            }`}
+              }`}
           >
             <Badge
               variant={
@@ -472,11 +595,10 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
           <span className="text-tertiary">──</span>
 
           <div
-            className={`flex items-center gap-2 ${
-              currentStage === 3
+            className={`flex items-center gap-2 ${currentStage === 3
                 ? 'font-semibold text-primary'
                 : 'text-secondary'
-            }`}
+              }`}
           >
             <Badge
               variant={currentStage === 3 ? 'success' : 'neutral'}
@@ -499,10 +621,22 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
       {/* Section 1: Speaker Context Selector */}
       <SpeakerSelectorCard
         speakers={speakers}
+        people={people}
         selectedSpeakerId={selectedSpeakerId}
-        onSelectSpeaker={setSelectedSpeakerId}
+        onSelectSpeaker={(id) => {
+          setSelectedSpeakerId(id || '');
+          setSpeakerError(null);
+        }}
         isNewSpeaker={isNewSpeaker}
-        onNewSpeakerChange={setIsNewSpeaker}
+        onNewSpeakerChange={(isNew) => {
+          setIsNewSpeaker(isNew);
+          setSpeakerError(null);
+        }}
+        loadPeople={loadPeopleForSpeaker}
+        hasMore={Boolean(nextCursor)}
+        loadingMore={loadingMore}
+        onLoadMore={() => void handleLoadMoreSpeakers()}
+        errorMessage={speakerError}
       />
 
       {/* Section 2: Multimodal Story Input Panel */}

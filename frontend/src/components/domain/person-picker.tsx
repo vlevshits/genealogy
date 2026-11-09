@@ -14,8 +14,12 @@ export interface PersonPickerProps {
   loadPeople?: (query: string, signal: AbortSignal) => Promise<Individual[]>;
   placeholder?: string;
   disabled?: boolean;
+  invalid?: boolean;
   className?: string;
   ariaLabel?: string;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export const PersonPicker: React.FC<PersonPickerProps> = ({
@@ -27,19 +31,30 @@ export const PersonPicker: React.FC<PersonPickerProps> = ({
   loadPeople,
   placeholder,
   disabled = false,
+  invalid = false,
   className,
   ariaLabel,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }) => {
   const { t } = useI18n();
 
-  const toOption = (p: Individual): ComboboxOption<Individual> => ({
-    value: p.id,
-    label: [p.surname, p.given_name, p.patronymic, p.birth_surname, p.gid]
+  const toOption = (p: Individual): ComboboxOption<Individual> => {
+    const rawLabel = (p as { display_name?: string }).display_name;
+    const constructedName = [p.surname, p.given_name, p.patronymic, p.birth_surname]
       .filter(Boolean)
-      .join(' '),
-    description: p.birth_place ?? undefined,
-    data: p,
-  });
+      .join(' ');
+    const name = rawLabel || constructedName || p.id;
+    const gidLabel = p.gid ? `(${p.gid})` : '';
+    const label = gidLabel ? `${name} ${gidLabel}`.trim() : name;
+    return {
+      value: p.id,
+      label,
+      description: p.birth_place ?? undefined,
+      data: p,
+    };
+  };
 
   const filteredPool = people.filter((p) => !excludeIds.includes(p.id));
   const staticOptions = filteredPool.map(toOption);
@@ -64,8 +79,12 @@ export const PersonPicker: React.FC<PersonPickerProps> = ({
       onCreate={onCreatePerson}
       placeholder={placeholder || t('nav.searchTrigger')}
       disabled={disabled}
+      invalid={invalid}
       className={className}
       ariaLabel={ariaLabel}
+      hasMore={hasMore}
+      loadingMore={loadingMore}
+      onLoadMore={onLoadMore}
       renderOption={(opt, isSelected) =>
         opt.data ? <PersonListItem person={opt.data} selected={isSelected} /> : opt.label
       }

@@ -315,10 +315,7 @@ pub async fn parse_ai_story_handler(
             let speaker_context = {
                 let store = state.privacy_store.read().await;
                 let resolved_id = req
-                    .speaker_person_id
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
+                    .effective_speaker_id()
                     .and_then(|id_or_gid| store.resolve_person_id(id_or_gid));
                 resolved_id
                     .as_ref()

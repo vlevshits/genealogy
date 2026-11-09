@@ -29,6 +29,9 @@ export interface ComboboxProps<T = unknown> {
   invalid?: boolean;
   ariaLabel?: string;
   className?: string;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   ref?: React.Ref<HTMLInputElement>;
 }
 
@@ -49,6 +52,9 @@ export function Combobox<T = unknown>({
   invalid = false,
   ariaLabel,
   className,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
   ref,
 }: ComboboxProps<T>) {
   const { t } = useI18n();
@@ -124,9 +130,15 @@ export function Combobox<T = unknown>({
   };
 
   const displayedOptions: ComboboxOption<T>[] = loadOptions
-    ? query.trim() === '' && recent.length > 0 && asyncItems.length === 0
-      ? recent
-      : asyncItems
+    ? query.trim() === ''
+      ? recent.length > 0
+        ? recent
+        : options
+      : asyncItems.length > 0
+        ? asyncItems
+        : options.filter((o) =>
+            matchesCrossScript(`${o.label} ${o.description ?? ''}`, query)
+          )
     : query.trim() === '' && recent.length > 0
       ? recent
       : options.filter((o) =>
@@ -143,7 +155,11 @@ export function Combobox<T = unknown>({
   const handleClear = () => {
     if (value === undefined) setInternalVal(null);
     setQuery('');
+    setAsyncItems([]);
     onChange?.(null, undefined);
+    if (loadOptions && minChars === 0) {
+      runAsyncFetch('');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -196,8 +212,9 @@ export function Combobox<T = unknown>({
           disabled={disabled}
           value={query}
           placeholder={placeholder || t('common.search')}
-          onFocus={() => {
+          onFocus={(e) => {
             setOpen(true);
+            e.currentTarget.select();
             if (loadOptions) runAsyncFetch(query);
           }}
           onChange={(e) => {
@@ -238,6 +255,17 @@ export function Combobox<T = unknown>({
         <div
           role="listbox"
           aria-label={ariaLabel || placeholder || t('common.search')}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            if (
+              hasMore &&
+              !loading &&
+              !loadingMore &&
+              el.scrollHeight - el.scrollTop <= el.clientHeight + 48
+            ) {
+              onLoadMore?.();
+            }
+          }}
           className="absolute z-40 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-lg"
         >
           {query.trim() === '' && recent.length > 0 && (
@@ -306,6 +334,13 @@ export function Combobox<T = unknown>({
                 </div>
               );
             })}
+
+          {loadingMore && (
+            <div className="flex items-center justify-center gap-2 py-2.5 text-xs text-secondary">
+              <Spinner size="sm" />
+              <span>{t('common.loading')}</span>
+            </div>
+          )}
 
           {onCreate && query.trim().length > 0 && (
             <button

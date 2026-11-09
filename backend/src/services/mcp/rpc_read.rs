@@ -537,6 +537,7 @@ pub(crate) fn execute_mcp_tool(
                     title,
                     raw_text,
                     speaker_person_id,
+                    speaker_id: None,
                     is_new_speaker: None,
                     language: None,
                     audio_media_id: None,

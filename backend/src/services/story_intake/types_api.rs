@@ -28,8 +28,10 @@ pub struct ParseStoryRequest {
     #[serde(default)]
     pub title: Option<String>,
     pub raw_text: String,
-    #[serde(default, alias = "speaker_id")]
+    #[serde(default)]
     pub speaker_person_id: Option<String>,
+    #[serde(default)]
+    pub speaker_id: Option<String>,
     #[serde(default)]
     pub is_new_speaker: Option<bool>,
     #[serde(default)]
@@ -40,6 +42,16 @@ pub struct ParseStoryRequest {
     pub engine: Option<String>,
     #[serde(default)]
     pub extracted_data: Option<DraftExtractedDataDto>,
+}
+
+impl ParseStoryRequest {
+    pub fn effective_speaker_id(&self) -> Option<&str> {
+        self.speaker_person_id
+            .as_deref()
+            .or(self.speaker_id.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -63,8 +75,10 @@ pub struct UpdateStoryDraftRequest {
     pub title: Option<String>,
     #[serde(default)]
     pub raw_text: Option<String>,
-    #[serde(default, alias = "speaker_id")]
+    #[serde(default)]
     pub speaker_person_id: Option<String>,
+    #[serde(default)]
+    pub speaker_id: Option<String>,
     #[serde(default)]
     pub is_new_speaker: Option<bool>,
     #[serde(default)]
@@ -203,16 +217,11 @@ pub fn parse_story_into_draft(
         ));
     }
 
-    let resolved_speaker_id = req
-        .speaker_person_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|id_or_gid| {
-            store
-                .resolve_person_id(id_or_gid)
-                .unwrap_or_else(|| id_or_gid.to_string())
-        });
+    let resolved_speaker_id = req.effective_speaker_id().map(|id_or_gid| {
+        store
+            .resolve_person_id(id_or_gid)
+            .unwrap_or_else(|| id_or_gid.to_string())
+    });
 
     let anchored_speaker = resolved_speaker_id
         .as_ref()
@@ -325,7 +334,11 @@ pub fn update_story_draft(
     if let Some(raw_text) = req.raw_text {
         draft.raw_text = raw_text;
     }
-    if let Some(speaker_id) = req.speaker_person_id {
+    let speaker_update = req
+        .speaker_person_id
+        .as_deref()
+        .or(req.speaker_id.as_deref());
+    if let Some(speaker_id) = speaker_update {
         let trimmed = speaker_id.trim();
         if trimmed.is_empty() {
             draft.speaker_person_id = None;
