@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Check, ChevronDown, X } from 'lucide-react';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ControlSize } from '../../types/common';
@@ -144,126 +143,54 @@ export function Select<T extends string = string>({
       </button>
 
       {open ? (
-        <>
-          {/* Mobile bottom-sheet backdrop (< 768px) */}
-          <div
-            className="fixed inset-0 z-40 bg-primary/30 backdrop-blur-xs md:hidden"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            role="listbox"
-            aria-label={resolvedAriaLabel || placeholder}
-            className={cn(
-              'z-50 overflow-y-auto border border-border bg-surface p-1.5 shadow-lg',
-              'fixed inset-x-0 bottom-0 max-h-[70vh] rounded-t-2xl md:absolute md:inset-x-auto md:bottom-auto md:mt-1.5 md:w-full md:max-h-64 md:rounded-xl'
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-border px-3 py-2 md:hidden">
-              <span className="text-xs font-semibold text-secondary">
-                {placeholder || resolvedAriaLabel}
-              </span>
-              <button
-                type="button"
-                aria-label={t('common.close')}
-                onClick={() => setOpen(false)}
-                className="rounded p-1 text-secondary"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {options.map((opt, idx) => {
+        <div
+          role="listbox"
+          aria-label={resolvedAriaLabel || placeholder}
+          className={cn(
+            'absolute top-full left-0 mt-1.5 z-50 w-full min-w-[180px] max-h-64 overflow-y-auto rounded-xl border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur-md'
+          )}
+        >
+          {options.map((opt, idx) => {
+            const isSelected = opt.value === currentValue;
+            return (
               <div
-                role="listbox"
-                aria-label={resolvedAriaLabel || placeholder}
+                key={opt.value}
+                role="option"
+                aria-selected={isSelected}
+                aria-disabled={opt.disabled}
+                onClick={() => handleSelect(opt)}
+                onMouseEnter={() => setActiveIndex(idx)}
                 className={cn(
-                  'absolute top-full left-0 mt-1.5 z-50 w-full min-w-[180px] max-h-64 overflow-y-auto rounded-xl border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur-md'
+                  'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm cursor-pointer transition-colors',
+                  isSelected
+                    ? 'bg-brand/10 text-brand font-medium'
+                    : idx === activeIndex
+                      ? 'bg-surface-muted text-primary'
+                      : 'text-primary hover:bg-surface-muted',
+                  opt.disabled && 'opacity-40 pointer-events-none'
                 )}
               >
-                {options.map((opt, idx) => {
-                  const isSelected = opt.value === currentValue;
-                  return (
-                    <div
-                      role="listbox"
-                      aria-label={resolvedAriaLabel || placeholder}
-                      key={opt.value}
-                      role="option"
-                      aria-selected={isSelected}
-                      aria-disabled={opt.disabled}
-                      onClick={() => handleSelect(opt)}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      className={cn(
-                        'absolute top-full left-0 mt-1.5 z-50 w-full min-w-[180px] max-h-64 overflow-y-auto rounded-xl border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur-md'
-                  'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm cursor-pointer transition-colors',
-                        isSelected
-                          ? 'bg-brand/10 text-brand font-medium'
-                          : idx === activeIndex
-                            ? 'bg-surface-muted text-primary'
-                            : 'text-primary hover:bg-surface-muted',
-                        opt.disabled && 'opacity-40 pointer-events-none'
-                      )}
-                    >
-                      {options.map((opt, idx) => {
-                        const isSelected = opt.value === currentValue;
-                        return (
-                          <div
-                            key={opt.value}
-                            role="option"
-                            aria-selected={isSelected}
-                            aria-disabled={opt.disabled}
-                            onClick={() => handleSelect(opt)}
-                            onMouseEnter={() => setActiveIndex(idx)}
-                            className={cn(
-                              'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm cursor-pointer transition-colors',
-                              isSelected
-                                ? 'bg-brand/10 text-brand font-medium'
-                                : idx === activeIndex
-                                  ? 'bg-surface-muted text-primary'
-                                  : 'text-primary hover:bg-surface-muted',
-                              opt.disabled && 'opacity-40 pointer-events-none'
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {opt.icon}
-                              <div className="truncate">
-                                <div>{opt.label}</div>
-                                {opt.description && (
-                                  <div className="text-[11px] text-secondary truncate">
-                                    {opt.description}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 min-w-0">
-                                {opt.icon}
-                                <div className="truncate">
-                                  <div>{opt.label}</div>
-                                  {opt.description && (
-                                    <div className="text-[11px] text-secondary truncate">
-                                      {opt.description}
-                                    </div>
-                      {isSelected && <Check className="h-4 w-4 shrink-0 text-brand" />}
-                                </div>
-                                );
-                })}
+                <div className="flex items-center gap-2 min-w-0">
+                  {opt.icon}
+                  <div className="truncate">
+                    <div>{opt.label}</div>
+                    {opt.description && (
+                      <div className="text-[11px] text-secondary truncate">
+                        {opt.description}
+                      </div>
                     )}
-                              </div>
-                            </div>
-                            {isSelected && <Check className="h-4 w-4 shrink-0 text-brand" />}
-                          </div>
-        </>
-                  ) : (
-                <span className="sr-only" aria-hidden="true">
-                  {options.map((o) => o.label).join(' ')}
-                </span>
-                );
-          })}
+                  </div>
+                </div>
+                {isSelected && <Check className="h-4 w-4 shrink-0 text-brand" />}
               </div>
-      ) : (
-            <span className="sr-only" aria-hidden="true">
-              {options.map((o) => o.label).join(' ')}
-            </span>
-      )}
-          </div>
-          );
+            );
+          })}
         </div>
-      );
+      ) : (
+        <span className="sr-only" aria-hidden="true">
+          {options.map((o) => o.label).join(' ')}
+        </span>
+      )}
+    </div>
+  );
 }
