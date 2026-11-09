@@ -83,10 +83,10 @@ This document records the architectural, design, and structural decisions made a
 - **Consequences:** Superseded because requiring relatives to manage API keys in the browser hurt usability and exposed keys in client storage. Replaced by server-only `GEMINI_API_KEY` in ADR-011.
 
 ### ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY
-- **Status:** Accepted
+- **Status:** Accepted (silent regex fallback superseded by [ADR-014](#adr-014-enforce-pure-llm-extraction-via-gemini-38-flash-and-drop-local-regex-fallback))
 - **Context:** While client-side BYOK (ADR-010) avoided handling API keys on the server, requiring every family member to obtain and enter a Google AI Studio API key hindered usability, failed in mobile browsers without local storage setup, and prevented server-side transcription of uploaded audio files. Self-hosters prefer configuring `GEMINI_API_KEY` once in `.env` with zero client-side key exposure.
-- **Decision:** Execute Gemini 3.8 Flash entity extraction and speech transcription exclusively on the backend (`backend/src/services/story_intake/gemini.rs`), configured centrally via `GEMINI_API_KEY` and `GEMINI_MODEL` (defaults to `"gemini-3.8-flash"`), sending credentials via the `x-goog-api-key` HTTP header. Expose `ai_enabled: bool` in `GET /api/v1/system/info`. Purge any legacy client-side API key (`genealogy_gemini_api_key`) in `frontend/src/api/gemini-story-extractor.ts` and retain the built-in offline NLP engine as an automatic fallback.
-- **Consequences:** Zero-configuration experience for family members using the web UI; server-side audio transcription accepts `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`; API key is kept strictly on the server in `.env` without client leakage or URL query-string exposure; instances without an API key gracefully fall back to the built-in offline NLP engine.
+- **Decision:** Execute Gemini 3.8 Flash entity extraction and speech transcription exclusively on the backend (`backend/src/services/story_intake/gemini.rs`), configured centrally via `GEMINI_API_KEY` and `GEMINI_MODEL` (defaults to `"gemini-3.8-flash"`), sending credentials via the `x-goog-api-key` HTTP header. Expose `ai_enabled: bool` in `GET /api/v1/system/info`. Purge any legacy client-side API key (`genealogy_gemini_api_key`) in `frontend/src/api/gemini-story-extractor.ts`.
+- **Consequences:** Zero-configuration experience for family members using the web UI; server-side audio transcription accepts `.webm`, `.mp3`, `.wav`, `.m4a`, `.ogg`; API key is kept strictly on the server in `.env` without client leakage or URL query-string exposure.
 
 ### ADR-012: On-Demand GitHub Releases and Native LXC / Bare-Metal Deployment Pipeline
 - **Status:** Accepted
@@ -108,5 +108,14 @@ This document records the architectural, design, and structural decisions made a
   4. In `frontend/src/api/core.ts` and `frontend/src/lib/auth-context.tsx`, defensively sanitize token strings (`"null"`, `"undefined"`, `""` normalized to `null`) and purge tokens upon encountering 401 / `not_authenticated` / `session_expired` responses.
 - **Consequences:** Eliminates 502 Bad Gateway socket drops during edge-case panics, prevents client lockouts from poisoned cookies/tokens, and guarantees frictionless public browsing even when users retain expired credentials.
 
-_Last curated: 2026-11-09 (CatchPanicLayer 500 handling, dead cookie eviction on 401, PublicOrAuth fallback, defensive token sanitization)_
+### ADR-014: Enforce Pure LLM Extraction via Gemini 3.8 Flash and Drop Local Regex Fallback
+- **Status:** Accepted (amends [ADR-011](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key))
+- **Context:** The legacy built-in NLP engine relied on brittle heuristic regular expressions (`backend/src/services/story_intake/nlp_clauses.rs`, `nlp_entities.rs`). On complex or colloquial family oral narratives, regex extraction routinely misattributed kinship relations (e.g. maternal vs. paternal ancestors) or produced mangled subtree graphs. Furthermore, silently falling back to the local regex parser when `GEMINI_API_KEY` was missing or failing masked configuration issues, confusing self-hosters who believed AI extraction was malfunctioning rather than unconfigured.
+- **Decision:**
+  1. Remove the "Built-in Offline" engine toggle from the intake UI (`frontend/src/components/stories/StoryInputPanel.tsx`), standardizing the UI exclusively on server-side Gemini 3.8 Flash.
+  2. In `backend/src/routes/rbac/ai_stories.rs` (`parse_ai_story_handler`), enforce that if `extracted_data` is omitted and `gemini_api_key` is not configured, the endpoint returns an explicit `AppError::ValidationFailed` (`gemini_api_key: missing`) when `app_env != "test"`. (The built-in regex extractor is preserved strictly in test environments so CI integration tests run deterministically without external API dependencies).
+  3. In `frontend/src/pages/AiStoryIntakePage.tsx`, query `ai_enabled` via `GET /api/v1/system/info`. When false, present a clear warning banner (`geminiRequiredBanner`) instructing administrators to set `GEMINI_API_KEY` in their `.env` file, and guard extraction actions with an informative error toast.
+- **Consequences:** Eliminates confusing, low-quality regex subtree artifacts in production; provides clear, actionable feedback to administrators when Gemini credentials are unconfigured; streamlines the intake UI by removing redundant engine toggles; preserves fast, offline execution for automated integration test suites.
+
+_Last curated: 2026-11-09 (ADR-014: Pure LLM Gemini extraction enforced, local regex fallback removed from production, explicit GEMINI_API_KEY validation)_
 
