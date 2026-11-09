@@ -61,9 +61,9 @@ For users running on **Proxmox VE**, automated deployment and integration with t
 
 1. **Host-Level Deployment (Proxmox Node Shell):**
    ```bash
-   bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/install-pve.sh)"
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/genealogy.sh)"
    ```
-   Provisions an unprivileged Debian 12 LXC container (2 vCPU, 1 GB RAM, 8 GB disk, Nesting enabled), installs PostgreSQL, registers the container `update` alias, and binds to port 80.
+   Launches the standard Community-Scripts Whiptail wizard, provisions an unprivileged Debian 12 LXC container (2 vCPU, 1 GB RAM, 8 GB disk, Nesting enabled), installs PostgreSQL, registers the container `update` alias, and binds to port 80.
 
 2. **Upstream Helper-Scripts Files (`scripts/proxmox/`):**
    - `ct/genealogy.sh`: Community Scripts host container wrapper.

@@ -109,10 +109,10 @@ Sign in with hardware or platform passkeys (Touch ID, Face ID, Windows Hello, Yu
 
 ### Option 1: Proxmox VE LXC (1-Click Community Script)
 
-For **Proxmox VE (PVE)** users, a dedicated helper script provisions an unprivileged Debian 12 LXC container (2 vCPU, 1 GB RAM, 8 GB disk), configures PostgreSQL, and starts the service listening directly on port 80:
+For **Proxmox VE (PVE)** users, launch the authentic Community-Scripts wizard (Debian 12, 2 vCPU, 1 GB RAM, 8 GB disk, unprivileged container):
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/install-pve.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/genealogy.sh)"
 ```
 
 - **Update anytime:** Run `update` inside the LXC container console.

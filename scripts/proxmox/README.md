@@ -6,11 +6,13 @@ This directory contains integration scripts for deploying **Genealogy Family Tre
 
 ## 1. Quick Start: Deploy directly on Proxmox VE Host
 
-Run the one-liner directly in your Proxmox VE node's root shell:
+Run the standard Proxmox Community-Scripts one-liner directly in your Proxmox VE node's root shell:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/install-pve.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/genealogy.sh)"
 ```
+
+This launches the authentic **Community-Scripts interactive Whiptail wizard** (Default Install, Advanced Install, User Defaults, etc.).
 
 ### What this does:
 1. Provisions an **unprivileged Debian 12 LXC container** with optimal defaults:
@@ -36,13 +38,19 @@ The files in this directory follow the exact structure required by the [communit
 | `json/genealogy.json` | `json/genealogy.json` | Catalog entry metadata for [community-scripts.github.io/ProxmoxVE](https://community-scripts.github.io/ProxmoxVE). |
 
 ### Contributing to Community Scripts Upstream
-To submit Genealogy to the official Proxmox VE Helper-Scripts repository:
-1. Fork `community-scripts/ProxmoxVE`.
-2. Copy:
+
+> [!IMPORTANT]
+> The Community Scripts project requires all **new** application scripts to be submitted to **[`community-scripts/DevScripts`](https://github.com/community-scripts/DevScripts)** first (the staging repository), **not** directly to `community-scripts/ProxmoxVE`. PRs for new scripts opened against `ProxmoxVE` are automatically closed.
+
+To submit Genealogy:
+1. Fork [community-scripts/DevScripts](https://github.com/community-scripts/DevScripts).
+2. Create a branch: `git checkout -b feat/genealogy`.
+3. Copy the files:
    - `scripts/proxmox/ct/genealogy.sh` → `ct/genealogy.sh`
    - `scripts/proxmox/install/genealogy-install.sh` → `install/genealogy-install.sh`
-   - `scripts/proxmox/json/genealogy.json` → `json/genealogy.json`
-3. Test locally using their contribution guidelines and submit a Pull Request.
+4. Test on your Proxmox VE host pointing to your fork.
+5. Open a Pull Request against `community-scripts/DevScripts` using their New Script template.
+6. Once validated by testers and merged into `DevScripts`, maintainers will graduate it to `community-scripts/ProxmoxVE` and feature it on the website.
 
 ---
 
