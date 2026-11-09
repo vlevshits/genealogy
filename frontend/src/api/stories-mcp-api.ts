@@ -555,9 +555,11 @@ export const storyApi = {
       const match_overrides =
         payload.match_overrides ??
         Object.entries(payload.resolutions ?? {}).map(([draftId, r]) => ({
+          draft_temp_id: draftId,
           draft_person_id: draftId,
           selected_action:
             r.action === 'link_existing' ? 'link_enrich' : r.action,
+          matched_person_id: r.matched_person_id ?? undefined,
           target_person_id: r.matched_person_id ?? undefined,
         }));
       const raw = await apiFetch<Record<string, unknown>>(

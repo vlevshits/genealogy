@@ -63,9 +63,10 @@ pub struct RefineDraftRequest {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct DraftMatchOverrideDto {
+    #[serde(alias = "draft_person_id")]
     pub draft_temp_id: String,
     pub selected_action: String,
-    #[serde(default)]
+    #[serde(default, alias = "target_person_id")]
     pub matched_person_id: Option<String>,
 }
 

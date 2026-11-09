@@ -118,19 +118,21 @@ describe('stories-mcp-api contract & stability (STAB-01..STAB-04)', () => {
     const sentBody = JSON.parse(String(init?.body));
     expect(sentBody.match_overrides).toEqual([
       {
+        draft_temp_id: 'temp-1',
         draft_person_id: 'temp-1',
         selected_action: 'link_enrich',
+        matched_person_id: 'existing-1',
         target_person_id: 'existing-1',
       },
       {
+        draft_temp_id: 'temp-2',
         draft_person_id: 'temp-2',
         selected_action: 'create_new',
-        target_person_id: undefined,
       },
       {
+        draft_temp_id: 'temp-3',
         draft_person_id: 'temp-3',
         selected_action: 'create_new',
-        target_person_id: undefined,
       },
     ]);
 

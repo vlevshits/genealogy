@@ -38,6 +38,14 @@ export function getLocalizedErrorMessage(
       if (err.code === 'passkey_verification_failed') {
         return t('errors.passkey_verification_failed');
       }
+      if (
+        err.code === 'validation_failed' &&
+        err.message &&
+        err.message.trim() &&
+        err.message !== 'Validation failed'
+      ) {
+        return err.message;
+      }
       const fromCode = tryTranslateErrorCode(err.code, t);
       if (fromCode) return fromCode;
     }
