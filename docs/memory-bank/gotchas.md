@@ -20,6 +20,7 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - [GOT-012: API Client Offline Fallback Guards Must Rethrow ApiError When status > 0](#got-012-api-client-offline-fallback-guards-must-rethrow-apierror-when-status--0)
 - [GOT-013: Stale or Invalid Session Cookies Blocking Anonymous Access on Public Instances](#got-013-stale-or-invalid-session-cookies-blocking-anonymous-access-on-public-instances)
 - [GOT-014: Serialized "null" or "undefined" Tokens in Browser Storage Causing Permanent 401 Loops](#got-014-serialized-null-or-undefined-tokens-in-browser-storage-causing-permanent-401-loops)
+- [GOT-015: Story Intake Commit Deserialization Failure on draft_person_id vs draft_temp_id](#got-015-story-intake-commit-deserialization-failure-on-draft_person_id-vs-draft_temp_id)
 
 ---
 
@@ -107,4 +108,10 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Root Cause:** If client code or an external caller passed `null` or `undefined` as a serialized string or improperly initialized storage, `localStorage.getItem(SESSION_TOKEN_STORAGE_KEY)` returned `"null"` or `"undefined"`. Because non-empty strings are truthy, `getAuthToken()` returned this literal string, prompting `apiFetch` to send `Authorization: Bearer null` on all subsequent requests, which the backend rejected with 401.
 - **Rule:** Sanitize token reads and writes defensively (`cleanToken`) by normalizing `"null"`, `"undefined"`, empty strings, and pure whitespace to `null` and evicting them from storage immediately. In `apiFetch`, automatically purge stored tokens via `setAuthToken(null)` whenever a 401 or `not_authenticated` / `session_expired` error code is received.
 
-_Last curated: 2026-11-09 (GOT-013 PublicOrAuth fallback on stale cookies, GOT-014 defensive token sanitization and 401 purge)_
+### GOT-015: Story Intake Commit Deserialization Failure on draft_person_id vs draft_temp_id
+- **File / Area:** `backend/src/services/story_intake/types_api.rs:65-71`, `frontend/src/api/stories-mcp-api.ts:555-565`, `frontend/src/lib/error-formatter.ts:41-48`
+- **Symptom:** Committing an AI story draft (`POST /api/v1/ai/drafts/{id}/commit`) fails with `400 Bad Request` (`validation_failed`) reporting `match_overrides[0]: missing field draft_temp_id`, preventing candidate entities from being committed to the family tree.
+- **Root Cause:** Naming discrepancy between client/MCP callers sending `draft_person_id` (and `target_person_id`) and the backend Rust struct `DraftMatchOverrideDto` expecting `draft_temp_id` and `matched_person_id`. Additionally, `getLocalizedErrorMessage` previously masked specific validation details behind the generic "Validation failed" string, hiding the exact missing field name.
+- **Rule:** Use `#[serde(alias = "...")]` on Rust DTO structs to support alternative parameter naming aliases across client, MCP, and external callers. On the frontend, provide both aliases (`draft_temp_id` + `draft_person_id`, `matched_person_id` + `target_person_id`) in client commit payloads for backward compatibility, and preserve specific backend error messages for `validation_failed` in `error-formatter.ts`.
+
+_Last curated: 2026-11-09 (GOT-015 Story intake commit deserialization aliases & error formatting)_

@@ -20,6 +20,7 @@ Every failing request returns the `ErrorResponse` envelope defined in [`backend/
 ```
 - **Rule:** Never return plain text or raw database errors. Use `AppError` variants (`AppError::NotFound`, `AppError::Forbidden`, `AppError::Conflict`, etc.).
 - The `code` string is a stable identifier corresponding to a frontend localization key under `errors.*` (e.g. `errors.record_not_found`).
+- When accepting DTO inputs that may arrive under alternative or legacy property names from client/MCP callers, use `#[serde(alias = "...")]` on Rust structs (`GOT-015`) to maintain backward and forward compatibility.
 
 ### 1.2 Authentication & Request Context
 The middleware `request_context_middleware` in [`backend/src/services/security/context.rs`](../../backend/src/services/security/context.rs) inspects incoming requests and populates `RequestContext`:
@@ -90,7 +91,7 @@ let person = if let Ok(uuid) = Uuid::parse_str(&id_or_gid) {
 All network calls go through [`frontend/src/api/client.ts`](../../frontend/src/api/client.ts):
 - Requests automatically attach `X-Requested-With: genealogy` and send session cookies (`credentials: 'same-origin'`).
 - Failed calls reject with an `ApiError` instance containing `status`, `code`, and `details`.
-- Use [`frontend/src/lib/error-formatter.ts`](../../frontend/src/lib/error-formatter.ts) to translate errors:
+- Use [`frontend/src/lib/error-formatter.ts`](../../frontend/src/lib/error-formatter.ts) to translate errors (`getLocalizedErrorMessage` maps error codes to localized strings while preserving explicit backend validation error details for `validation_failed`, `GOT-015`):
 ```tsx
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
@@ -149,4 +150,4 @@ Vitest tests in `frontend/tests/components/` use React Testing Library to verify
 - Test keyboard navigation (Enter, Tab, Escape).
 - Test role-based visibility (Editor vs Viewer).
 
-_Last curated: 2026-11-04 (modular paths & Milestone 3.2)_
+_Last curated: 2026-11-09 (Serde alias DTO compatibility GOT-015 & validation error formatting)_

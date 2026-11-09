@@ -19,6 +19,7 @@ This glossary defines domain and technical terminology used across specification
 | **Descendant** | Потомок | A person descended directly from a specified ancestor. | `descendant`, `descendants` | `backend/src/services/genealogy/mod.rs` |
 | **Draft Clarification** | Уточняющие вопросы | Interactive Q&A bar and chips generating proactive follow-up questions to refine staged draft subtrees. | `DraftClarificationBar`, `derivedQuestions` | `frontend/src/components/stories/DraftClarificationBar.tsx` |
 | **Draft Extracted Data** | Извлечённые данные черновика | Pre-extracted entity graph (draft persons, unions, links, events) staged for database tree reconciliation. | `ParseStoryRequest.extracted_data`, `DraftExtractedDataDto` | `backend/src/services/story_intake/types_api.rs` |
+| **Draft Match Override** | Переопределение сопоставления черновика | Client override specifying whether a staged story draft entity links to an existing person or creates a new one (accepts aliases `draft_temp_id`/`draft_person_id` and `matched_person_id`/`target_person_id`). | `DraftMatchOverrideDto`, `match_overrides` | `backend/src/services/story_intake/types_api.rs` |
 | **Duplicate Candidate** | Подозрение на дубликат | Pair of individuals identified by linkage engine as potentially the same person. | `DuplicateCandidate`, `DuplicatePair` | `backend/src/services/quality/mod.rs` |
 | **Editor** | Редактор | Authenticated role permitted to create and modify people, events, and media. | `UserRole::Editor`, `"editor"` | `backend/src/services/rbac.rs` |
 | **Event** | Событие | Milestone in a person's life (birth, baptism, marriage, death, burial). | `Event`, `LifeEvent`, `EventType` | `backend/src/models/mod.rs` |
@@ -59,4 +60,4 @@ This glossary defines domain and technical terminology used across specification
 | **Tree Snapshot** | Снимок древа | Point-in-time backup state of all genealogical records allowing 1-click restore. | `tree_snapshots`, `rollback_to_snapshot` | `backend/src/services/history/mod.rs` |
 | **Viewer** | Наблюдатель | Read-only authenticated family member permitted to view living relatives in the web UI (masked when accessed via MCP token). | `UserRole::Viewer`, `"viewer"` | `backend/src/services/rbac.rs` |
 
-_Last curated: 2026-11-09 (Pure LLM story extraction enforcement ADR-014, Draft Clarification, Gemini API key validation)_
+_Last curated: 2026-11-09 (Draft Match Override aliases, Pure LLM story extraction ADR-014, Draft Clarification)_

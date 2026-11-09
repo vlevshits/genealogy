@@ -14,11 +14,12 @@ Multimodal family story intake ("Tell Me About My Family") and a protected Model
 | Story Routes | `backend/src/routes/rbac/ai_stories.rs` | `POST /api/v1/ai/parse-story` (validates `GEMINI_API_KEY` in non-test envs, returns `ValidationFailed` if unset), `POST /api/v1/ai/transcribe`, `GET/PATCH/DELETE /api/v1/ai/drafts/{id}`, `POST /api/v1/ai/drafts/{id}/reconcile`, `POST /api/v1/ai/drafts/{id}/commit`, `GET/PUT /api/v1/admin/ai-settings` |
 | MCP Routes | `backend/src/routes/rbac/mcp.rs` | `GET/POST /api/v1/mcp/tokens`, `DELETE /api/v1/mcp/tokens/{id}`, `POST /api/v1/mcp`, `GET /api/v1/mcp/sse`, `GET /api/v1/mcp/tools` |
 | Route Re-export | `backend/src/routes/rbac/ai_mcp.rs` | Re-exports `ai_stories::*` and `mcp::*` |
-| Story Service | `backend/src/services/story_intake/` | Modular package: `gemini.rs`, `types_api.rs`, `extraction.rs`, `nlp_clauses.rs`, `nlp_entities.rs`, `reconciliation.rs`, `commit.rs` |
+| Story Service | `backend/src/services/story_intake/` | Modular package: `gemini.rs`, `types_api.rs` (`DraftMatchOverrideDto` with serde aliases `draft_person_id` / `target_person_id`), `extraction.rs`, `nlp_clauses.rs`, `nlp_entities.rs`, `reconciliation.rs`, `commit.rs` |
 | Gemini Service | `backend/src/services/story_intake/gemini.rs` | `transcribe_audio_with_gemini`, `extract_story_with_gemini` (uses `x-goog-api-key` header; truncates upstream error logs to 200 chars) |
 | MCP Service | `backend/src/services/mcp/` | Modular package: `catalog.rs`, `rpc_read.rs` (`redact_person_for_mcp`, `redact_family_for_mcp`), `tools_mutation.rs`, `types_tokens.rs` |
 | Engine Storage | `frontend/src/api/gemini-story-extractor.ts` | `getExtractionEngine`, `setExtractionEngine` (`'gemini' \| 'builtin'`), purges legacy `genealogy_gemini_api_key` |
-| Story API Client | `frontend/src/api/stories-mcp-api.ts` | `storyApi` (`transcribeAudio`, `parseStory`, `refineDraft`, `reconcileDraft`, `commitDraft`), `mcpApi` (`listTokens`, `createToken`, `revokeToken`), `normalizeStoryDraft` |
+| Story API Client | `frontend/src/api/stories-mcp-api.ts` | `storyApi` (`transcribeAudio`, `parseStory`, `refineDraft`, `reconcileDraft`, `commitDraft` with dual alias `match_overrides`), `mcpApi` (`listTokens`, `createToken`, `revokeToken`), `normalizeStoryDraft` |
+| Error Formatter | `frontend/src/lib/error-formatter.ts` | `getLocalizedErrorMessage` preserves specific backend message on `validation_failed` |
 | Intake Page | `frontend/src/pages/AiStoryIntakePage.tsx` | Pure Gemini 3.8 Flash intake, `gemini-not-configured-banner` when unconfigured, derived proactive clarification questions (`derivedQuestions`), audio recorder, draft tree preview, commit |
 | Story Components | `frontend/src/components/stories/` | `AudioRecorderWidget.tsx`, `StoryInputPanel.tsx` (server AI badge + config banner; local engine toggle dropped), `SpeakerSelectorCard.tsx`, `DraftSubtreeCanvas.tsx`, `ReconciliationMatrixCard.tsx` (interpolated action labels), `DraftClarificationBar.tsx` (question chips + title count) |
 | Settings UI | `frontend/src/components/settings/McpTokensPanel.tsx` | Scoped PAT token generator and revocation confirmation dialog |
@@ -53,6 +54,7 @@ Multimodal family story intake ("Tell Me About My Family") and a protected Model
 - **Draft Sandbox Isolation:** Extracted records are strictly held in `story_intake_drafts` and never touch canonical `persons` or `families` tables until user review and explicit commit.
 - **Full Role & Action i18n Translation:** All kinship roles (`self`, `partner`, `paternal_grandmother`, etc.) and reconciliation card actions interpolate properly with zero unreplaced raw `{place}` or `{name}` tokens.
 - **CSRF-Protected Reconciliation:** `/api/v1/ai/drafts/{id}/reconcile` accepts `POST` only and is guarded by CSRF middleware.
+- **Commit Payload Compatibility & Deserialization Resilience:** `DraftMatchOverrideDto` accepts either `draft_temp_id` or `draft_person_id`, and `matched_person_id` or `target_person_id`, ensuring backward-compatible draft commitment across web UI, MCP tools, and external callers. `error-formatter.ts` surfaces explicit validation failure messages to operators rather than generic fallback strings.
 - **MCP Living-Person & Event Redaction:** `Viewer`-tier MCP tokens map to `CallerAccess::AnonymousPublic` via `mcp_privacy_access`. `redact_person_for_mcp`, `redact_family_for_mcp`, and `redact_event_for_tree_view` filter out private records and mask living persons, their marriage details, and their timeline events across `search_individuals`, `get_individual`, `get_family_immediate`, `get_ancestors_descendants`, and `list_events_timeline`.
 - **MCP PAT Scoping:** External agent tokens (`personal_access_tokens`) carry explicit RBAC scopes (`read:tree`, `write:draft`, `write:direct`, `admin:maintenance`) and authenticate via `Authorization: Bearer <pat>`.
 
@@ -61,6 +63,7 @@ Multimodal family story intake ("Tell Me About My Family") and a protected Model
 - [ADR-011](../decisions.md#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key): Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via `GEMINI_API_KEY` (supersedes [ADR-010](../decisions.md#adr-010-client-side-external-llm-extraction-with-server-side-tree-reconciliation)).
 
 ## 6. Gotchas & Known Limitations
+- [GOT-015](../gotchas.md#got-015-story-intake-commit-deserialization-failure-on-draft_person_id-vs-draft_temp_id): `DraftMatchOverrideDto` commit payload deserialization requires serde aliases (`draft_person_id`, `target_person_id`) to prevent 400 validation failures.
 - [GOT-012](../gotchas.md#got-012-api-client-offline-fallback-guards-must-rethrow-apierror-when-status--0): Offline fallback guards in `stories-mcp-api.ts` must rethrow `ApiError` when `err.status > 0` so HTTP 4xx/5xx responses are not masked by demo data.
 - [GOT-011](../gotchas.md#got-011-microphone-mediastream-track--speechrecognition-cleanup-on-unmount): `AudioRecorderWidget.tsx` must stop all `MediaStream` tracks and abort `SpeechRecognition` on unmount.
 - [GOT-010](../gotchas.md#got-010-server-side-audio-transcription-requires-gemini_api_key-in-env): Audio uploads to `POST /api/v1/ai/transcribe` require `GEMINI_API_KEY` in `.env` unless in-browser speech recognition transcript is provided.
@@ -69,5 +72,5 @@ Multimodal family story intake ("Tell Me About My Family") and a protected Model
 ## 7. Extension Points
 - Future LLM/STT providers (local Whisper, Ollama, Anthropic Claude) can implement the transcription and extraction trait interfaces in `backend/src/services/story_intake/`.
 
-_Last curated: 2026-11-09 (Pure LLM extraction enforcement, explicit GEMINI_API_KEY validation, UI placeholder cleanup & interactive clarification chips)_
+_Last curated: 2026-11-09 (Story intake commit deserialization aliases GOT-015, validation error preservation & live container verification)_
 
