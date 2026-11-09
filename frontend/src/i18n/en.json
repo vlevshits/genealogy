@@ -711,7 +711,12 @@
       "notConnectedHint": "Verify that marriage unions and parent-child links are established for both branches."
     },
     "toolbar": {
+      "optionsBtn": "Tree options",
+      "viewSettings": "View settings",
       "modeSwitcherAria": "Select tree projection mode",
+      "orientationAria": "Select layout orientation",
+      "orientationVertical": "Vertical",
+      "orientationHorizontal": "Horizontal",
       "allNodesCount": "Individuals: {count}",
       "generationsAria": "Select number of generations",
       "generationsCount": "{count} generations",

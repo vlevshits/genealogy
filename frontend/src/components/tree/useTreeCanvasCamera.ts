@@ -112,18 +112,22 @@ export function useTreeCanvasCamera(params: {
   const centerOnNode = useCallback(
     (nodeId: string | null, animate = true) => {
       const target =
-        layout.nodes.find((pn) => pn.id === nodeId) ??
+        (nodeId ? layout.nodes.find((pn) => pn.id === nodeId) : null) ??
         layout.nodes.find((pn) => pn.isFocal) ??
+        (focalId ? layout.nodes.find((pn) => pn.id === focalId) : null) ??
         layout.nodes[0];
       if (!target) return;
+      const targetZoom = isMobile ? 0.85 : undefined;
+      const nodeW = target.width || CARD_WIDTH;
+      const nodeH = target.height || CARD_HEIGHT;
       centerOnWorldPoint(
-        target.x + CARD_WIDTH / 2,
-        target.y + CARD_HEIGHT / 2,
-        undefined,
+        target.x + nodeW / 2,
+        target.y + nodeH / 2,
+        targetZoom,
         animate
       );
     },
-    [layout.nodes, centerOnWorldPoint]
+    [layout.nodes, centerOnWorldPoint, isMobile, focalId]
   );
 
   const frameHighlightedNodes = useCallback(
@@ -193,9 +197,7 @@ export function useTreeCanvasCamera(params: {
       layout.nodes.find((pn) => pn.isFocal) ??
       layout.nodes[0];
 
-    if (isMobile) {
-      fitToScreen(false);
-    } else if (focalNode) {
+    if (focalNode) {
       centerOnNode(focalNode.id, false);
     } else {
       fitToScreen(false);

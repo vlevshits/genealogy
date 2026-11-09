@@ -312,6 +312,8 @@ pub(crate) fn render_connector_scaled(
 
     layer.set_outline_color(to_printpdf_color(&outline_color));
     layer.set_outline_thickness(pt(base_thickness * scale));
+    layer.set_line_cap_style(LineCapStyle::Round);
+    layer.set_line_join_style(LineJoinStyle::Round);
 
     if conn.is_dashed {
         layer.set_line_dash_pattern(LineDashPattern {

@@ -126,6 +126,19 @@ describe('Phase 1.6 Interactive Tree Canvas, Layout Engines, Public Masking & Dr
     const descChild = descLayout.nodes.find((n) => n.id === 'node-living-1')!;
     expect(descRoot.y).toBe(0);
     expect(descChild.y).toBeGreaterThan(descRoot.y);
+
+    // Vertical Ancestors (Pedigree) layout: focal at Y = 0, parents above at Y < 0
+    const pedVertical = computePedigreeLayout(sample, 4, 'vertical');
+    expect(pedVertical.orientation).toBe('vertical');
+    assertNoOverlappingNodes(pedVertical.nodes);
+    const vFocal = pedVertical.nodes.find((n) => n.id === 'node-living-1')!;
+    const vFather = pedVertical.nodes.find((n) => n.id === 'node-deceased-1')!;
+    const vMother = pedVertical.nodes.find((n) => n.id === 'node-deceased-2')!;
+    expect(vFocal.y).toBe(0);
+    expect(vFather.y).toBeLessThan(vFocal.y);
+    expect(vMother.y).toBe(vFather.y);
+    expect(vFather.x).toBeLessThan(vMother.x);
+    expect(pedVertical.edges.some((e) => e.kind === 'spouse')).toBe(true);
   });
 
   it('renders TreeCanvas in EN and RU with floating mode switcher, depth selector, zoom pill, mini-map, and parent placeholders for Editors/Admins', () => {

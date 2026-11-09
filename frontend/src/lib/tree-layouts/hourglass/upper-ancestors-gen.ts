@@ -412,11 +412,11 @@ export function placeHourglassUpperAncestorsGen(
         primaryDropY = spouseY;
       } else if (fPlacedX !== null && fId) {
         primarySourceId = fId;
-        primaryDropX = fPlacedX + CARD_WIDTH / 2 + 12;
+        primaryDropX = fPlacedX + CARD_WIDTH / 2;
         primaryDropY = rowY + CARD_HEIGHT;
       } else {
         primarySourceId = mId!;
-        primaryDropX = mPlacedX! + CARD_WIDTH / 2 - 12;
+        primaryDropX = mPlacedX! + CARD_WIDTH / 2;
         primaryDropY = rowY + CARD_HEIGHT;
       }
 

@@ -327,18 +327,22 @@ pub(crate) fn layout_all_nodes(
                 continue;
             }
 
-            let union_x = match (p1_pos, p2_pos) {
-                (Some((x1, _)), Some((x2, _))) => (x1.min(*x2) + CARD_WIDTH_MM + x1.max(*x2)) / 2.0,
-                (Some((x1, _)), None) => x1 + CARD_WIDTH_MM / 2.0,
-                (None, Some((x2, _))) => x2 + CARD_WIDTH_MM / 2.0,
+            let (union_x, parent_y_start) = match (p1_pos, p2_pos) {
+                (Some((x1, y1)), Some((x2, y2))) => (
+                    (x1.min(*x2) + CARD_WIDTH_MM + x1.max(*x2)) / 2.0,
+                    // Both parents present: drop stem starts on the marital connector line
+                    y1.min(*y2) + CARD_HEIGHT_MM / 2.0,
+                ),
+                (Some((x1, y1)), None) => (x1 + CARD_WIDTH_MM / 2.0, y1 + CARD_HEIGHT_MM),
+                (None, Some((x2, y2))) => (x2 + CARD_WIDTH_MM / 2.0, y2 + CARD_HEIGHT_MM),
                 (None, None) => continue,
             };
 
-            let parent_y = p1_pos
+            let parent_y_bottom = p1_pos
                 .or(p2_pos)
                 .map(|(_, y)| *y + CARD_HEIGHT_MM)
                 .unwrap_or(0.0);
-            let bus_y = parent_y + (VERTICAL_GAP_MM * 1.5) / 2.0;
+            let bus_y = parent_y_bottom + (VERTICAL_GAP_MM * 1.5) / 2.0;
 
             let mut ch_mid_xs = Vec::new();
             for ch in &fam.children {
@@ -355,7 +359,7 @@ pub(crate) fn layout_all_nodes(
 
             if !ch_mid_xs.is_empty() {
                 all_connectors.push(RenderConnector {
-                    points: vec![(union_x, parent_y), (union_x, bus_y)],
+                    points: vec![(union_x, parent_y_start), (union_x, bus_y)],
                     is_dashed: false,
                     color: None,
                 });

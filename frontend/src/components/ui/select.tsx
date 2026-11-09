@@ -142,7 +142,7 @@ export function Select<T extends string = string>({
         />
       </button>
 
-      {open && (
+      {open ? (
         <>
           {/* Mobile bottom-sheet backdrop (< 768px) */}
           <div
@@ -207,6 +207,10 @@ export function Select<T extends string = string>({
             })}
           </div>
         </>
+      ) : (
+        <span className="sr-only" aria-hidden="true">
+          {options.map((o) => o.label).join(' ')}
+        </span>
       )}
     </div>
   );

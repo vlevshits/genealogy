@@ -303,6 +303,8 @@ export const TreeCanvasWorldStage: React.FC<TreeCanvasWorldStageProps> = ({
                     fill="none"
                     stroke="transparent"
                     strokeWidth={isMobile ? 20 : 14}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     style={{ pointerEvents: 'stroke' }}
                     className="cursor-pointer focus:outline-hidden focus-visible:outline-hidden focus-visible:stroke-brand/50 transition-colors"
                     role="button"
@@ -328,6 +330,8 @@ export const TreeCanvasWorldStage: React.FC<TreeCanvasWorldStageProps> = ({
                     fill="none"
                     shapeRendering="geometricPrecision"
                     strokeWidth={visualStrokeWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     strokeDasharray={traceDasharray}
                     style={
                       isSelected

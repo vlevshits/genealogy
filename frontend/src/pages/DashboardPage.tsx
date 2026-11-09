@@ -4,6 +4,7 @@ import {
   Badge,
   BrandLogoIcon,
   Button,
+  Spinner,
   useToast,
 } from '../components/ui';
 import {
@@ -220,6 +221,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const canEdit = effectiveTier === 'admin' || effectiveTier === 'editor';
 
   const [scope, setScope] = useState<'all' | 'close'>('all');
+  const [initialLoading, setInitialLoading] = useState<boolean>(() => {
+    if (initialDashboard) return false;
+    return Boolean(user);
+  });
   const [dashboard, setDashboard] = useState<DashboardPayloadDto>(
     () => initialDashboard ?? buildCleanDashboardPayload()
   );
@@ -242,7 +247,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const loadDashboard = useCallback(
     (targetScope: 'all' | 'close') => {
       if (initialDashboard) return;
-      if (!isAuthenticated && !setupStatus?.enable_public_access) return;
+      if (!isAuthenticated && !setupStatus?.enable_public_access) {
+        setInitialLoading(false);
+        return;
+      }
       dashboardApi
         .getDashboard(targetScope)
         .then((res) => {
@@ -258,7 +266,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               res.resolved_home_person_id ?? prev.resolved_home_person_id,
           }));
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          setInitialLoading(false);
+        });
     },
     [initialDashboard, isAuthenticated, setupStatus?.enable_public_access]
   );
@@ -384,60 +395,72 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </section>
 
-      {/* Live Dashboard Widgets (2-Widget Grid in Public Anonymous, 2x2 Grid for Authenticated) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <AnniversariesWidget
-          items={dashboard.anniversaries}
-          scope={scope}
-          onScopeChange={setScope}
-          accessTier={
-            effectiveTier as
-              | 'public_anonymous'
-              | 'viewer'
-              | 'editor'
-              | 'admin'
-          }
-          onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
-        />
-
-        {effectiveTier !== 'public_anonymous' && (
-          <RecentActivityWidget
-            transactions={dashboard.recent_activity}
-            isAdmin={isAdmin}
-            onUndoTransaction={handleUndoTx}
-            onOpenHistory={() => navigateTo('/history')}
+      {/* Live Dashboard Widgets / Loading State */}
+      {initialLoading ? (
+        <div
+          data-testid="dashboard-loading-state"
+          className="flex flex-col items-center justify-center min-h-[320px] rounded-3xl border border-border bg-surface p-12 text-center shadow-xs"
+        >
+          <Spinner size="lg" className="text-brand mb-4" />
+          <p className="text-sm font-medium text-secondary">
+            {t('common.loading')}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <AnniversariesWidget
+            items={dashboard.anniversaries}
+            scope={scope}
+            onScopeChange={setScope}
+            accessTier={
+              effectiveTier as
+                | 'public_anonymous'
+                | 'viewer'
+                | 'editor'
+                | 'admin'
+            }
             onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
           />
-        )}
 
-        <TreeGlanceWidget
-          stats={dashboard.stats}
-          isAdmin={isAdmin}
-          onOpenQuality={isAdmin ? () => navigateTo('/quality') : undefined}
-          onOpenPeople={
-            effectiveTier !== 'public_anonymous'
-              ? () => navigateTo('/people')
-              : undefined
-          }
-          onOpenPlaces={
-            effectiveTier !== 'public_anonymous'
-              ? () => navigateTo('/places')
-              : undefined
-          }
-        />
+          {effectiveTier !== 'public_anonymous' && (
+            <RecentActivityWidget
+              transactions={dashboard.recent_activity}
+              isAdmin={isAdmin}
+              onUndoTransaction={handleUndoTx}
+              onOpenHistory={() => navigateTo('/history')}
+              onSelectPerson={(personId) => navigateTo(`/persons/${personId}`)}
+            />
+          )}
 
-        {effectiveTier !== 'public_anonymous' && (
-          <LatestPhotosWidget
-            photos={dashboard.latest_photos}
-            onPreviewPhoto={(asset) => setPreviewPhoto(asset)}
-            onOpenMediaArchive={
+          <TreeGlanceWidget
+            stats={dashboard.stats}
+            isAdmin={isAdmin}
+            onOpenQuality={isAdmin ? () => navigateTo('/quality') : undefined}
+            onOpenPeople={
               effectiveTier !== 'public_anonymous'
-                ? () => navigateTo('/media')
+                ? () => navigateTo('/people')
+                : undefined
+            }
+            onOpenPlaces={
+              effectiveTier !== 'public_anonymous'
+                ? () => navigateTo('/places')
                 : undefined
             }
           />
-        )}
-      </div>
+
+          {effectiveTier !== 'public_anonymous' && (
+            <LatestPhotosWidget
+              photos={dashboard.latest_photos}
+              onPreviewPhoto={(asset) => setPreviewPhoto(asset)}
+              onOpenMediaArchive={
+                effectiveTier !== 'public_anonymous'
+                  ? () => navigateTo('/media')
+                  : undefined
+              }
+            />
+          )}
+        </div>
+      )}
 
       <QuickAddRelativeDialog
         open={quickAddOpen}

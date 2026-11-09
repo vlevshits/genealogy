@@ -7,7 +7,8 @@ import { computeAllNodesLayout } from './all-nodes-layout';
 import { computeDescendantsLayout } from './descendants-layout';
 import { computeHourglassLayout } from './hourglass-layout';
 import { computePedigreeLayout } from './pedigree-layout';
-import { TreeLayoutResult } from './types';
+import { TreeLayoutOrientation, TreeLayoutResult } from './types';
+import { transformLayoutToHorizontal } from './horizontal-transform';
 
 export * from './types';
 export * from './curve-routing';
@@ -15,25 +16,35 @@ export * from './pedigree-layout';
 export * from './descendants-layout';
 export * from './hourglass-layout';
 export * from './all-nodes-layout';
+export * from './horizontal-transform';
 
 export function computeTreeLayout(
   data: TreeViewResponse,
-  options?: { mode?: TreeProjectionMode; generations?: number; collateral?: boolean }
+  options?: {
+    mode?: TreeProjectionMode;
+    generations?: number;
+    collateral?: boolean;
+    orientation?: TreeLayoutOrientation;
+  }
 ): TreeLayoutResult {
   const mode = (options?.mode ?? data.mode ?? 'hourglass') as TreeProjectionMode;
   const generations = options?.generations ?? data.generations ?? 4;
   const collateral = options?.collateral ?? data.collateral ?? true;
+  const orientation = options?.orientation ?? 'vertical';
 
   if (mode === 'all') {
     return computeAllNodesLayout(data);
   }
   if (mode === 'pedigree') {
-    return computePedigreeLayout(data, generations);
+    const res = computePedigreeLayout(data, generations, 'vertical');
+    return orientation === 'horizontal' ? transformLayoutToHorizontal(res) : res;
   }
   if (mode === 'descendant') {
-    return computeDescendantsLayout(data, generations);
+    const res = computeDescendantsLayout(data, generations);
+    return orientation === 'horizontal' ? transformLayoutToHorizontal(res) : res;
   }
-  return computeHourglassLayout(data, generations, collateral);
+  const hgRes = computeHourglassLayout(data, generations, collateral);
+  return orientation === 'horizontal' ? transformLayoutToHorizontal(hgRes) : hgRes;
 }
 
 export function buildDefaultTreeViewData(

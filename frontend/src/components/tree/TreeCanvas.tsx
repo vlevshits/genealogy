@@ -23,6 +23,7 @@ import {
   buildTreeGraphIndex,
   computeTreeLayout,
   PositionedEdge,
+  TreeLayoutOrientation,
 } from "../../lib/tree-layouts";
 import { TreeToolbar } from "./TreeToolbar";
 import { TreeMiniMap } from "./TreeMiniMap";
@@ -110,9 +111,56 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     }
   }, []);
 
-  const [generations, setGenerations] = useState<number>(
-    initialTreeView?.generations ?? 4
-  );
+  const [generations, setGenerations] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const genParam = searchParams.get('generations');
+      if (genParam) {
+        const parsed = parseInt(genParam, 10);
+        if (!isNaN(parsed) && parsed >= 1 && parsed <= 10) {
+          return parsed;
+        }
+      }
+    }
+    return initialTreeView?.generations ?? 4;
+  });
+
+  const handleGenerationsChange = useCallback((nextGen: number) => {
+    setGenerations(nextGen);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('generations', String(nextGen));
+        window.history.replaceState(null, '', url.toString());
+      } catch {
+        // Fallback for jsdom / tests
+      }
+    }
+  }, []);
+
+  const [orientation, setOrientation] = useState<TreeLayoutOrientation>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlOri = searchParams.get('orientation');
+      if (urlOri === 'vertical' || urlOri === 'horizontal') {
+        return urlOri;
+      }
+    }
+    return 'vertical';
+  });
+
+  const handleOrientationChange = useCallback((nextOri: TreeLayoutOrientation) => {
+    setOrientation(nextOri);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('orientation', nextOri);
+        window.history.replaceState(null, '', url.toString());
+      } catch {
+        // Fallback for jsdom / tests
+      }
+    }
+  }, []);
   const [focalId, setFocalId] = useState<string | null>(
     focusPersonId ?? initialTreeView?.focal_id ?? null
   );
@@ -235,8 +283,14 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   );
 
   const layout = useMemo(
-    () => computeTreeLayout(effectiveViewData, { mode, generations, collateral }),
-    [effectiveViewData, mode, generations, collateral]
+    () =>
+      computeTreeLayout(effectiveViewData, {
+        mode,
+        generations,
+        collateral,
+        orientation,
+      }),
+    [effectiveViewData, mode, generations, collateral, orientation]
   );
 
   const graphIndex = useMemo(
@@ -412,9 +466,11 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
           mode={mode}
           onModeChange={handleModeChange}
           generations={generations}
-          onGenerationsChange={(nextGen) => setGenerations(nextGen)}
+          onGenerationsChange={handleGenerationsChange}
           collateral={collateral}
           onCollateralChange={handleCollateralChange}
+          orientation={orientation}
+          onOrientationChange={handleOrientationChange}
           totalVisible={layout.nodes.length}
           zoom={zoom}
           onZoomIn={() =>
@@ -425,7 +481,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
           }
           onZoomReset={() => setZoom(1)}
           onCenterFocal={() =>
-            centerOnNode(resolvedHomePersonId ?? layout.focalId)
+            centerOnNode(focalId ?? layout.focalId ?? resolvedHomePersonId)
           }
           onFitToScreen={fitToScreen}
           onOpenKinshipFinder={() => setKinshipDialogOpen(true)}

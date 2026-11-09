@@ -57,6 +57,7 @@ export interface SetupRequest {
   email: string;
   password?: string;
   passkey?: PasskeyRegistrationInput;
+  emergency_token?: string;
 }
 
 export interface SetupCompleteResponse {

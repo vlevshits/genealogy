@@ -556,7 +556,8 @@ export const App: React.FC<AppProps> = ({ initialOnboardingStatus = null }) => {
 
   // 5. Tree route (/tree) — renders interactive full-viewport TreeCanvas (02-tree-view-page.md, 04-tree-visualizations.md)
   if (path.startsWith('/tree')) {
-    const focusParam = new URLSearchParams(search).get('focus');
+    const searchParams = new URLSearchParams(search);
+    const focusParam = searchParams.get('focus') || searchParams.get('focal');
     return (
       <AppShell
         currentPath={path}

@@ -711,7 +711,12 @@
       "notConnectedHint": "Проверьте, установлены ли брачные союзы и связи родителей с детьми для обеих ветвей."
     },
     "toolbar": {
+      "optionsBtn": "Параметры дерева",
+      "viewSettings": "Настройки вида",
       "modeSwitcherAria": "Выбрать режим отображения древа",
+      "orientationAria": "Выбрать ориентацию отображения",
+      "orientationVertical": "Вертикальная",
+      "orientationHorizontal": "Горизонтальная",
       "allNodesCount": "Персон: {count}",
       "generationsAria": "Выбрать глубину поколений",
       "generationsCount": "Поколений: {count}",

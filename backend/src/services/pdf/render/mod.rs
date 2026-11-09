@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 pub(crate) use printpdf::{
-    Color, ColorBits, ColorSpace, Image, ImageTransform, ImageXObject, Line, LineDashPattern, Mm,
-    PdfDocument, Point, Polygon, Px, Rgb,
+    Color, ColorBits, ColorSpace, Image, ImageTransform, ImageXObject, Line, LineCapStyle,
+    LineDashPattern, LineJoinStyle, Mm, PdfDocument, Point, Polygon, Px, Rgb,
 };
 
 pub(crate) use super::layout::{CanvasLayout, RenderConnector, RenderPersonCard, BANNER_HEIGHT_MM};

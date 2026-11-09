@@ -51,6 +51,7 @@ export interface PositionedEdge {
   midX: number;
   midY: number;
   yBus?: number;
+  xBus?: number;
   pathD: string;
   isDirectLineage?: boolean;
 }
@@ -66,6 +67,7 @@ export function createPositionedEdge(edge: {
   targetX: number;
   targetY: number;
   yBus?: number;
+  xBus?: number;
   pathD: string;
   isDirectLineage?: boolean;
   midX?: number;
@@ -82,6 +84,14 @@ export function createPositionedEdge(edge: {
       } else {
         midX = Math.round((edge.sourceX + edge.targetX) / 2);
         midY = Math.round(edge.yBus);
+      }
+    } else if (edge.xBus !== undefined) {
+      if (Math.abs(edge.sourceY - edge.targetY) < 1) {
+        midX = Math.round((edge.sourceX + edge.targetX) / 2);
+        midY = Math.round(edge.sourceY);
+      } else {
+        midX = Math.round(edge.xBus);
+        midY = Math.round((edge.sourceY + edge.targetY) / 2);
       }
     } else {
       midX = Math.round((edge.sourceX + edge.targetX) / 2);
@@ -118,8 +128,11 @@ export interface LayoutComponentHeader {
   isShelf?: boolean;
 }
 
+export type TreeLayoutOrientation = 'vertical' | 'horizontal';
+
 export interface TreeLayoutResult {
   mode: TreeProjectionMode;
+  orientation?: TreeLayoutOrientation;
   focalId: string | null;
   nodes: PositionedNode[];
   placeholders: PlaceholderSlot[];

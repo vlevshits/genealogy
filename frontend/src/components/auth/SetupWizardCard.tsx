@@ -74,6 +74,9 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
         );
       }
 
+      const searchParams = new URLSearchParams(window.location.search);
+      const emergencyToken = searchParams.get('emergency_token') || undefined;
+
       const res = await submitInitialSetup({
         tree_title: treeTitle.trim(),
         first_name: firstName.trim(),
@@ -81,6 +84,7 @@ export const SetupWizardCard: React.FC<SetupWizardCardProps> = ({
         email: email.trim(),
         password: password.trim().length >= 10 ? password : undefined,
         passkey: passkeyPayload,
+        emergency_token: emergencyToken,
       });
 
       establishSession(res.user, res.session_token, false);

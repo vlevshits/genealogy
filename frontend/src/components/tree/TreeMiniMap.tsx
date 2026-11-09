@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Map as MapIcon, Minimize2 } from 'lucide-react';
 import { Button, IconButton } from '../ui';
 import { LayoutBounds, PositionedNode } from '../../lib/tree-layouts';
@@ -28,6 +28,12 @@ export const TreeMiniMap: React.FC<TreeMiniMapProps> = ({
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<boolean>(defaultCollapsed);
 
+  useEffect(() => {
+    if (defaultCollapsed) {
+      setCollapsed(true);
+    }
+  }, [defaultCollapsed]);
+
   const pad = 120;
   const worldMinX = bounds.minX - pad;
   const worldMinY = bounds.minY - pad;
@@ -56,14 +62,23 @@ export const TreeMiniMap: React.FC<TreeMiniMapProps> = ({
     return (
       <div
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-3 sm:right-6 z-20"
+        className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-3 sm:right-6 z-20 flex h-11 items-center"
       >
+        <IconButton
+          size="md"
+          label={t('tree.miniMap.openBtn')}
+          variant="secondary"
+          className="md:hidden h-11 w-11 rounded-xl border border-border bg-surface/90 shadow-sm backdrop-blur-md"
+          onClick={() => setCollapsed(false)}
+        >
+          <MapIcon className="h-4 w-4" />
+        </IconButton>
         <Button
           size="md"
           variant="secondary"
           leftIcon={<MapIcon className="h-4 w-4" />}
           onClick={() => setCollapsed(false)}
-          className="rounded-xl border border-border bg-surface/90 shadow-sm backdrop-blur-md"
+          className="hidden md:inline-flex h-11 items-center rounded-xl border border-border bg-surface/90 shadow-sm backdrop-blur-md"
         >
           {t('tree.miniMap.openBtn')}
         </Button>

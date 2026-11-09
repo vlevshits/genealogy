@@ -64,10 +64,37 @@ export const PrintExportPage: React.FC<PrintExportPageProps> = ({
   const effectiveRole = userRole ?? user?.role ?? 'admin';
   const isAdmin = effectiveRole === 'admin';
 
-  const [config, setConfig] = useState<PdfExportRequest>(() => ({
-    ...DEFAULT_CONFIG,
-    ...initialConfig,
-  }));
+  const [config, setConfig] = useState<PdfExportRequest>(() => {
+    const base: PdfExportRequest = {
+      ...DEFAULT_CONFIG,
+      ...initialConfig,
+    };
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlFocal = sp.get('focal') || sp.get('focus');
+      if (urlFocal) base.focal_person_id = urlFocal;
+      const urlMode = sp.get('mode');
+      if (urlMode) {
+        const modeMap: Record<string, PdfExportRequest['view_mode']> = {
+          hourglass: 'hourglass',
+          pedigree: 'pedigree',
+          ancestors: 'pedigree',
+          descendant: 'descendants',
+          descendants: 'descendants',
+          all: 'all_nodes',
+          all_nodes: 'all_nodes',
+          fan: 'fan',
+        };
+        if (modeMap[urlMode]) base.view_mode = modeMap[urlMode];
+      }
+      const urlGen = sp.get('generations');
+      if (urlGen) {
+        const p = parseInt(urlGen, 10);
+        if (!isNaN(p) && p >= 1 && p <= 10) base.generations = p;
+      }
+    }
+    return base;
+  });
   const [previewInfo, setPreviewInfo] = useState<PdfExportPreviewInfo | null>(
     initialPreview
   );
@@ -82,8 +109,10 @@ export const PrintExportPage: React.FC<PrintExportPageProps> = ({
   // Load initial candidates for focal person
   useEffect(() => {
     let active = true;
+    const targetFocalId = config.focal_person_id;
+
     fetchPeopleDirectory({ limit: 15 })
-      .then((res) => {
+      .then(async (res) => {
         if (!active) return;
         const mapped: Individual[] = res.items.map((item) => ({
           id: item.id,
@@ -103,7 +132,47 @@ export const PrintExportPage: React.FC<PrintExportPageProps> = ({
         }));
         setPeople(mapped);
 
-        if (mapped.length > 0 && !config.focal_person_id) {
+        if (targetFocalId) {
+          const matched = mapped.find(
+            (p) => p.id === targetFocalId || p.gid === targetFocalId
+          );
+          if (matched) {
+            setFocalPerson(matched);
+            setConfig((prev) => ({ ...prev, focal_person_id: matched.id }));
+          } else {
+            // Fetch specific person if not in the initial 15
+            try {
+              const specRes = await fetchPeopleDirectory({
+                q: targetFocalId,
+                limit: 1,
+              });
+              if (active && specRes.items.length > 0) {
+                const sp = specRes.items[0];
+                const ind: Individual = {
+                  id: sp.id,
+                  gid: sp.gid,
+                  surname: sp.surname,
+                  given_name: sp.given_name,
+                  patronymic: sp.patronymic,
+                  sex:
+                    sp.sex === 'M' || sp.sex === 'male'
+                      ? 'male'
+                      : sp.sex === 'F' || sp.sex === 'female'
+                      ? 'female'
+                      : 'unknown',
+                  is_living: sp.is_living,
+                  is_private: false,
+                  version: 1,
+                };
+                setPeople((prev) => [ind, ...prev]);
+                setFocalPerson(ind);
+                setConfig((prev) => ({ ...prev, focal_person_id: ind.id }));
+              }
+            } catch {
+              // Ignore
+            }
+          }
+        } else if (mapped.length > 0) {
           const first = mapped[0];
           setConfig((prev) => ({ ...prev, focal_person_id: first.id }));
           setFocalPerson(first);

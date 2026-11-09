@@ -252,7 +252,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
         isFocal: false,
         isDirectLineage: true,
       });
-      const singlePatGfStemX = gfX + CARD_WIDTH / 2 + 12;
+      const singlePatGfStemX = gfX + CARD_WIDTH / 2;
 
       edges.push(
         createPositionedEdge({
@@ -316,7 +316,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
         isFocal: false,
         isDirectLineage: true,
       });
-      const singlePatGmStemX = gmX + CARD_WIDTH / 2 - 12;
+      const singlePatGmStemX = gmX + CARD_WIDTH / 2;
 
       edges.push(
         createPositionedEdge({
@@ -562,7 +562,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
         isFocal: false,
         isDirectLineage: true,
       });
-      const singleMatGfStemX = gfX + CARD_WIDTH / 2 + 12;
+      const singleMatGfStemX = gfX + CARD_WIDTH / 2;
 
       edges.push(
         createPositionedEdge({
@@ -626,7 +626,7 @@ export function placeHourglassGrandparentsGen(input: GrandparentsPlacementInput)
         isFocal: false,
         isDirectLineage: true,
       });
-      const singleMatGmStemX = gmX + CARD_WIDTH / 2 - 12;
+      const singleMatGmStemX = gmX + CARD_WIDTH / 2;
 
       edges.push(
         createPositionedEdge({
