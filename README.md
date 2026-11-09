@@ -107,7 +107,35 @@ Sign in with hardware or platform passkeys (Touch ID, Face ID, Windows Hello, Yu
 
 ## Installation & Deployment Guide
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Proxmox VE LXC (1-Click Community Script)
+
+For **Proxmox VE (PVE)** users, a dedicated helper script provisions an unprivileged Debian 12 LXC container (2 vCPU, 1 GB RAM, 8 GB disk), configures PostgreSQL, and starts the service listening directly on port 80:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/install-pve.sh)"
+```
+
+- **Update anytime:** Run `update` inside the LXC container console.
+- **Maintenance-Safe:** 100% immune to Proxmox VE [`clean-lxcs`](https://community-scripts.github.io/ProxmoxVE/scripts?id=clean-lxcs) maintenance cleanup routines (data, PostgreSQL, and configs are strictly isolated from `/tmp`).
+- **Community Scripts PR:** Includes upstream-ready files under `scripts/proxmox/` for submission to [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE).
+
+---
+
+### Option 2: Bare-Metal Linux / Standard LXC (Debian & Ubuntu)
+
+On any fresh Debian 11/12 or Ubuntu 22.04/24.04 system, run the unified installer as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/install.sh | sudo bash
+```
+
+- Installs binaries to `/opt/genealogy/`, static web files to `/var/www/genealogy/`, and configures PostgreSQL.
+- Binds directly to port 80 (Axum native serving with zero reverse proxy overhead).
+- To update in the future, simply run `update` or `sudo /opt/genealogy/scripts/install.sh`.
+
+---
+
+### Option 3: Docker Compose
 
 The production stack runs as **3 containers** (`frontend` Nginx reverse proxy + static SPA, `backend` Rust API + background worker, and `postgres` PostgreSQL 16) on an isolated bridge network with persistent volumes for database, media, and backups.
 

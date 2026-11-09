@@ -175,6 +175,16 @@ if [ "$IS_UPDATE" -eq 1 ]; then
         install -m 755 "${TMP_DIR}/extracted/scripts/install.sh" "${INSTALL_DIR}/scripts/install.sh"
     fi
 
+    # Register/refresh container update command (Community Scripts standard)
+    cat > /usr/local/bin/update << 'EOF'
+#!/usr/bin/env bash
+exec /opt/genealogy/scripts/install.sh "$@"
+EOF
+    chmod 755 /usr/local/bin/update
+    if [ ! -e /usr/bin/update ]; then
+        ln -sf /usr/local/bin/update /usr/bin/update 2>/dev/null || true
+    fi
+
     if [ -d "${TMP_DIR}/extracted/frontend" ]; then
         log_info "Updating frontend static assets..."
         mkdir -p "${WEB_DIR}"
@@ -231,6 +241,11 @@ apt-get install -y -qq curl tar gzip ca-certificates jq openssl
 log_info "Installing and configuring PostgreSQL..."
 apt-get install -y -qq postgresql postgresql-contrib
 systemctl enable --now postgresql
+
+# Mark packages as manual to safeguard against aggressive cleanup routines (e.g. clean-lxcs autoremove)
+if command -v apt-mark >/dev/null 2>&1; then
+    apt-mark manual curl tar gzip ca-certificates jq openssl postgresql postgresql-contrib >/dev/null 2>&1 || true
+fi
 
 log_info "Configuring local PostgreSQL database and role 'genealogy'..."
 PG_PASS="$(openssl rand -hex 16)"
@@ -318,6 +333,16 @@ fi
 
 if [ -f "${TMP_DIR}/extracted/scripts/install.sh" ]; then
     install -m 755 "${TMP_DIR}/extracted/scripts/install.sh" "${INSTALL_DIR}/scripts/install.sh"
+fi
+
+# Register convenient container update command (Community Scripts standard)
+cat > /usr/local/bin/update << 'EOF'
+#!/usr/bin/env bash
+exec /opt/genealogy/scripts/install.sh "$@"
+EOF
+chmod 755 /usr/local/bin/update
+if [ ! -e /usr/bin/update ]; then
+    ln -sf /usr/local/bin/update /usr/bin/update 2>/dev/null || true
 fi
 
 if [ -d "${TMP_DIR}/extracted/frontend" ]; then
@@ -464,5 +489,6 @@ echo " Optional Emergency CLI (only needed if locked out in the future):"
 echo "   sudo genealogy-cli create-admin-link your-email@example.com"
 echo ""
 echo " To update to the latest release in the future, simply run:"
-echo "   sudo ${INSTALL_DIR}/scripts/install.sh"
+echo "   update"
+echo "   (or: sudo ${INSTALL_DIR}/scripts/install.sh)"
 echo "=================================================================="

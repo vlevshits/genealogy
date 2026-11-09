@@ -40,8 +40,10 @@ curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/in
 ### 2.2 Updating an Existing Installation
 When updating an already-installed LXC instance, simply rerun:
 ```bash
-sudo /opt/genealogy/scripts/install.sh
+update
 # or:
+sudo /opt/genealogy/scripts/install.sh
+# or explicit target release:
 VERSION=v0.2.0 sudo /opt/genealogy/scripts/install.sh
 ```
 The updater automatically:
@@ -53,6 +55,26 @@ The updater automatically:
 - Preserves `/etc/genealogy/genealogy.env`, database, and media uploads intact.
 - Starts `genealogy.service` — the backend automatically applies any new SQLx migrations under an advisory lock.
 - Verifies backend healthcheck on the configured port.
+
+### 2.3 Proxmox VE & Community Scripts (`clean-lxcs`) Compatibility
+For users running on **Proxmox VE**, automated deployment and integration with the [Proxmox VE Community Scripts](https://community-scripts.github.io/ProxmoxVE/) ecosystem is supported:
+
+1. **Host-Level Deployment (Proxmox Node Shell):**
+   ```bash
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/vlevshits/genealogy/main/scripts/proxmox/install-pve.sh)"
+   ```
+   Provisions an unprivileged Debian 12 LXC container (2 vCPU, 1 GB RAM, 8 GB disk, Nesting enabled), installs PostgreSQL, registers the container `update` alias, and binds to port 80.
+
+2. **Upstream Helper-Scripts Files (`scripts/proxmox/`):**
+   - `ct/genealogy.sh`: Community Scripts host container wrapper.
+   - `install/genealogy-install.sh`: In-container provisioning script.
+   - `json/genealogy.json`: Metadata catalog entry for `community-scripts.github.io/ProxmoxVE`.
+
+3. **`clean-lxcs` Hardening Guarantees:**
+   Containers running Genealogy are fully resilient to the Community Scripts [`clean-lxcs`](https://community-scripts.github.io/ProxmoxVE/scripts?id=clean-lxcs) maintenance routine:
+   - Core packages (`postgresql`, `postgresql-contrib`, `curl`, `jq`, `openssl`, `ca-certificates`) are flagged `apt-mark manual` to prevent accidental removal by `apt-get autoremove`.
+   - Zero temporary directory dependencies: Database, media (`/var/lib/genealogy/media`), backups, and configs (`/etc/genealogy`) reside in permanent paths; `/tmp` is wiped cleanly after install.
+   - Sockets and logs use systemd runtime standards (`/var/run/postgresql`, `journalctl`), preventing broken state after `/var/log` or `/tmp` purges.
 
 ---
 

@@ -1,0 +1,21 @@
+{
+  "name": "Genealogy",
+  "slug": "genealogy",
+  "type": "lxc",
+  "category": "Personal",
+  "description": "Private, invite-only self-hosted family tree archive with living-person privacy protection, Slavic patronymics, and zero-proxy native port 80 web serving.",
+  "logo": "https://raw.githubusercontent.com/vlevshits/genealogy/main/frontend/public/icons/icon-192.png",
+  "interface_port": 80,
+  "documentation": "https://github.com/vlevshits/genealogy",
+  "website": "https://github.com/vlevshits/genealogy",
+  "install_method": "script",
+  "default_settings": {
+    "cpu": 2,
+    "ram": 1024,
+    "disk": 8,
+    "os": "debian",
+    "version": "12",
+    "unprivileged": 1
+  }
+}
+
