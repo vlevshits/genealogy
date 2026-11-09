@@ -18,6 +18,8 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - [GOT-010: Server-Side Audio Transcription Requires GEMINI_API_KEY in .env](#got-010-server-side-audio-transcription-requires-gemini_api_key-in-env)
 - [GOT-011: Microphone MediaStream Track & SpeechRecognition Cleanup on Unmount](#got-011-microphone-mediastream-track--speechrecognition-cleanup-on-unmount)
 - [GOT-012: API Client Offline Fallback Guards Must Rethrow ApiError When status > 0](#got-012-api-client-offline-fallback-guards-must-rethrow-apierror-when-status--0)
+- [GOT-013: Stale or Invalid Session Cookies Blocking Anonymous Access on Public Instances](#got-013-stale-or-invalid-session-cookies-blocking-anonymous-access-on-public-instances)
+- [GOT-014: Serialized "null" or "undefined" Tokens in Browser Storage Causing Permanent 401 Loops](#got-014-serialized-null-or-undefined-tokens-in-browser-storage-causing-permanent-401-loops)
 
 ---
 
@@ -93,4 +95,16 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Root Cause:** Offline workbench `catch (err)` blocks returned local fallback objects for all errors instead of distinguishing network-unreachable/offline errors from real HTTP error responses.
 - **Rule:** In API client wrappers that support offline workbench fallbacks, always check `if (err instanceof ApiError && err.status > 0) throw err;` at the top of the `catch` block so genuine HTTP 4xx/5xx responses propagate to the UI and error boundary.
 
-_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
+### GOT-013: Stale or Invalid Session Cookies Blocking Anonymous Access on Public Instances
+- **File / Area:** `backend/src/services/rbac.rs:205-240`
+- **Symptom:** Anonymous visitors to a public family tree (`enable_public_access = true`) receive `401 Unauthorized` instead of being granted public tree viewing rights.
+- **Root Cause:** When the visitor's browser held an expired, invalidated, or deactivated session cookie from a previous session, `PublicOrAuth` previously executed `AuthService::authenticate_session(state, &token).await?`, which short-circuited with `AppError::NotAuthenticated` (or `AppError::SessionExpired`) before checking `settings.enable_public_access`.
+- **Rule:** In `FromRequestParts` for `PublicOrAuth`, handle `AuthService::authenticate_session` errors and deactivated user states gracefully: if the token is invalid, expired, or deactivated, check `settings.enable_public_access`. If public access is enabled, log at debug level and yield `PublicOrAuth::AnonymousPublic` rather than rejecting with 401.
+
+### GOT-014: Serialized "null" or "undefined" Tokens in Browser Storage Causing Permanent 401 Loops
+- **File / Area:** `frontend/src/api/core.ts:150-205`, `frontend/src/lib/auth-context.tsx:90-105`
+- **Symptom:** User experiences perpetual 401 Unauthorized errors across all API endpoints after logging out or having a session expire, persisting even across browser restarts or page reloads.
+- **Root Cause:** If client code or an external caller passed `null` or `undefined` as a serialized string or improperly initialized storage, `localStorage.getItem(SESSION_TOKEN_STORAGE_KEY)` returned `"null"` or `"undefined"`. Because non-empty strings are truthy, `getAuthToken()` returned this literal string, prompting `apiFetch` to send `Authorization: Bearer null` on all subsequent requests, which the backend rejected with 401.
+- **Rule:** Sanitize token reads and writes defensively (`cleanToken`) by normalizing `"null"`, `"undefined"`, empty strings, and pure whitespace to `null` and evicting them from storage immediately. In `apiFetch`, automatically purge stored tokens via `setAuthToken(null)` whenever a 401 or `not_authenticated` / `session_expired` error code is received.
+
+_Last curated: 2026-11-09 (GOT-013 PublicOrAuth fallback on stale cookies, GOT-014 defensive token sanitization and 401 purge)_

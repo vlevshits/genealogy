@@ -18,6 +18,7 @@ This document records the architectural, design, and structural decisions made a
 - [~~ADR-010: Client-Side External LLM Extraction with Server-Side Tree Reconciliation~~](#adr-010-client-side-external-llm-extraction-with-server-side-tree-reconciliation)
 - [ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key)
 - [ADR-012: On-Demand GitHub Releases and Native LXC / Bare-Metal Deployment Pipeline](#adr-012-on-demand-github-releases-and-native-lxc--bare-metal-deployment-pipeline)
+- [ADR-013: Panics Caught Gracefully via CatchPanicLayer & Dead Cookie Eviction on 401](#adr-013-panics-caught-gracefully-via-catchpaniclayer--dead-cookie-eviction-on-401)
 
 ---
 
@@ -97,5 +98,15 @@ This document records the architectural, design, and structural decisions made a
   4. Release automation skill (`.agents/skills/genealogy-release/SKILL.md`) for operator release preparation.
 - **Consequences:** Provides a high-performance native deployment path with ~30–50MB RAM idle usage, completely eliminates intermediate Nginx/proxy configuration complexity, preserves database and media files across in-place atomic updates, guarantees automatic schema migration execution on service start, and prevents untagged/unstable builds from reaching production instances.
 
-_Last curated: 2026-11-08 (Zero-proxy LXC port 80 direct binding, CAP_NET_BIND_SERVICE, automated PostgreSQL setup)_
+### ADR-013: Panics Caught Gracefully via CatchPanicLayer & Dead Cookie Eviction on 401
+- **Status:** Accepted
+- **Context:** Uncaught handler panics in Axum drop underlying TCP sockets abruptly, causing upstream reverse proxies (or browser HTTP engines) to emit generic 502 Bad Gateway errors without diagnostic logs or JSON error bodies. Concurrently, clients with expired or corrupted session cookies faced endless 401 loops because 401 responses never evicted dead cookies, and public-mode trees rejected visitors bearing stale cookies instead of granting public read access.
+- **Decision:**
+  1. Register `tower_http::catch_panic::CatchPanicLayer::custom(handle_panic)` as the outermost middleware in `backend/src/routes/mod.rs` to intercept panics, capture backtraces in structured tracing logs, and serialize a standard 500 `internal_error` JSON response envelope.
+  2. In `backend/src/routes/auth/passkeys_sessions.rs` (`get_current_user`), return a direct `axum::response::Response` on `NotAuthenticated` and `SessionExpired` to attach an eviction `Set-Cookie: session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax` (including `; Secure` when behind an HTTPS proxy or configured with HTTPS).
+  3. In `backend/src/services/rbac.rs` (`PublicOrAuth`), treat invalid, expired, or deactivated sessions as a graceful fallback to `AnonymousPublic` if `enable_public_access = true`, returning 401 only when public access is strictly disabled.
+  4. In `frontend/src/api/core.ts` and `frontend/src/lib/auth-context.tsx`, defensively sanitize token strings (`"null"`, `"undefined"`, `""` normalized to `null`) and purge tokens upon encountering 401 / `not_authenticated` / `session_expired` responses.
+- **Consequences:** Eliminates 502 Bad Gateway socket drops during edge-case panics, prevents client lockouts from poisoned cookies/tokens, and guarantees frictionless public browsing even when users retain expired credentials.
+
+_Last curated: 2026-11-09 (CatchPanicLayer 500 handling, dead cookie eviction on 401, PublicOrAuth fallback, defensive token sanitization)_
 

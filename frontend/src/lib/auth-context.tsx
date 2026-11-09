@@ -91,9 +91,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           const me = await fetchCurrentUser();
           setUser(me);
         } catch {
+          setAuthToken(null);
           setUser(null);
         }
       } else {
+        setAuthToken(null);
         setUser(null);
       }
     } catch {

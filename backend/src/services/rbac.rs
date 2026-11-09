@@ -202,18 +202,43 @@ impl FromRequestParts<AppState> for PublicOrAuth {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        let settings = state.resolve_instance_settings().await;
+
         if let Some(token) = extract_session_token(&parts.headers) {
-            let (user, session) = AuthService::authenticate_session(state, &token).await?;
-            if !user.is_active {
-                return Err(AppError::NotAuthenticated);
+            match AuthService::authenticate_session(state, &token).await {
+                Ok((user, session)) => {
+                    if user.is_active {
+                        return Ok(PublicOrAuth::Authenticated(Box::new(AuthenticatedUser {
+                            user,
+                            session,
+                        })));
+                    }
+                    tracing::debug!(
+                        user_id = %user.id,
+                        enable_public_access = settings.enable_public_access,
+                        "Deactivated user session ignored in PublicOrAuth extractor"
+                    );
+                    if settings.enable_public_access {
+                        return Ok(PublicOrAuth::AnonymousPublic);
+                    } else {
+                        return Err(AppError::NotAuthenticated);
+                    }
+                }
+                Err(err) => {
+                    tracing::debug!(
+                        error = %err,
+                        enable_public_access = settings.enable_public_access,
+                        "Stale or invalid session token ignored in PublicOrAuth extractor"
+                    );
+                    if settings.enable_public_access {
+                        return Ok(PublicOrAuth::AnonymousPublic);
+                    } else {
+                        return Err(AppError::NotAuthenticated);
+                    }
+                }
             }
-            return Ok(PublicOrAuth::Authenticated(Box::new(AuthenticatedUser {
-                user,
-                session,
-            })));
         }
 
-        let settings = state.resolve_instance_settings().await;
         if settings.enable_public_access {
             Ok(PublicOrAuth::AnonymousPublic)
         } else {

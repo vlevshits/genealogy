@@ -12,7 +12,10 @@ This glossary defines domain and technical terminology used across specification
 | **Ancestor** | Предок | A person from whom an individual is directly descended. | `ancestor`, `ancestors` | `backend/src/services/genealogy/mod.rs` |
 | **Anniversary** | Годовщина | Recurring annual milestone (birthday, wedding, death anniversary). | `Anniversary`, `get_anniversaries` | `backend/src/services/dashboard.rs` |
 | **Anti-Collinear Clearance** | Устранение коллинеарности | Offset algorithm preventing overlapping connection lines in tree views. | `applyAntiCollinearClearance` | `frontend/src/lib/tree-layouts/hourglass-layout.ts` |
+| **CatchPanicLayer** | Слой перехвата паник | Tower HTTP middleware catching unexpected handler panics and mapping them to standardized 500 JSON error responses instead of abruptly terminating TCP sockets. | `CatchPanicLayer`, `handle_panic` | `backend/src/routes/mod.rs` |
 | **Change Log** | Журнал изменений | Transaction-level audit trail tracking all record modifications for rollback. | `change_log`, `AuditEntry` | `backend/src/services/history/mod.rs` |
+| **Dead Cookie Eviction** | Вытеснение недействительной cookie | Proactively clearing invalid or expired session cookies by attaching `Max-Age=0` in 401 responses to prevent client request corruption. | `header::SET_COOKIE`, `session=; Max-Age=0` | `backend/src/routes/auth/passkeys_sessions.rs` |
+| **Defensive Token Sanitization** | Защитная очистка токена | Automatic purging and normalization of literal string representations (`"null"`, `"undefined"`, `""`, whitespace) in client token storage to prevent 401 request loops. | `cleanToken`, `getAuthToken`, `setAuthToken` | `frontend/src/api/core.ts` |
 | **Descendant** | Потомок | A person descended directly from a specified ancestor. | `descendant`, `descendants` | `backend/src/services/genealogy/mod.rs` |
 | **Draft Extracted Data** | Извлечённые данные черновика | Pre-extracted entity graph (draft persons, unions, links, events) staged for database tree reconciliation. | `ParseStoryRequest.extracted_data`, `DraftExtractedDataDto` | `backend/src/services/story_intake/types_api.rs` |
 | **Duplicate Candidate** | Подозрение на дубликат | Pair of individuals identified by linkage engine as potentially the same person. | `DuplicateCandidate`, `DuplicatePair` | `backend/src/services/quality/mod.rs` |
@@ -47,6 +50,7 @@ This glossary defines domain and technical terminology used across specification
 | **Place Hierarchy** | Иерархия мест | Historical administrative tree (e.g. Village → Parish → District → Province). | `places`, `parent_place_id` | `backend/src/routes/rbac/places.rs` |
 | **Print Studio** | Студия печати | UI workspace configuring single-sheet posters or tiled multi-page PDF exports. | `PrintExportPage`, `PrintConfig` | `frontend/src/pages/PrintExportPage.tsx` |
 | **Privacy-404** | Приватная ошибка 404 | Returning 404 instead of 403 on private records to prevent existence enumeration. | `AppError::NotFound` | `backend/src/services/privacy/mod.rs` |
+| **PublicOrAuth Fallback** | Откат PublicOrAuth к анонимному доступу | Gracefully falling back to `AnonymousPublic` instead of rejecting with 401 when public access is enabled and a caller supplies an expired, invalid, or deactivated session. | `PublicOrAuth::AnonymousPublic` | `backend/src/services/rbac.rs` |
 | **Recovery Code** | Код восстановления | Emergency alphanumeric code allowing account recovery when 2FA/passkey is lost. | `recovery_codes`, `verify_code` | `backend/src/services/auth/mod.rs` |
 | **Redaction** | Скрытие данных | Replacing private details of living persons and their events/families with generic placeholders or filtering them out. | `redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`, `redact_family_for_mcp` | `backend/src/services/privacy/masking.rs` |
 | **Story Extraction Engine** | Движок извлечения историй | Extraction method selector between server-side cloud LLM (Gemini 3.8 Flash) and offline local rules parser. | `StoryExtractionEngine`, `'gemini' \| 'builtin'` | `frontend/src/api/gemini-story-extractor.ts` |
@@ -54,4 +58,4 @@ This glossary defines domain and technical terminology used across specification
 | **Tree Snapshot** | Снимок древа | Point-in-time backup state of all genealogical records allowing 1-click restore. | `tree_snapshots`, `rollback_to_snapshot` | `backend/src/services/history/mod.rs` |
 | **Viewer** | Наблюдатель | Read-only authenticated family member permitted to view living relatives in the web UI (masked when accessed via MCP token). | `UserRole::Viewer`, `"viewer"` | `backend/src/services/rbac.rs` |
 
-_Last curated: 2026-11-08 (LXC single-script install/update, on-demand release pipeline & release skill)_
+_Last curated: 2026-11-09 (CatchPanicLayer, Dead Cookie Eviction, Defensive Token Sanitization, PublicOrAuth Fallback)_

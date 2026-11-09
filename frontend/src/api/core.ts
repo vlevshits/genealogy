@@ -147,11 +147,22 @@ function isNonTreeMutatingEndpoint(endpoint: string): boolean {
 
 let inMemoryAuthToken: string | null = null;
 
-export function getAuthToken(): string | null {
-  if (inMemoryAuthToken) return inMemoryAuthToken;
+function cleanToken(token: string | null | undefined): string | null {
+  if (typeof token !== 'string') return null;
+  const trimmed = token.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
+    return null;
+  }
+  return trimmed;
+}
+
+function getStorage(): Storage | null {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage.getItem(SESSION_TOKEN_STORAGE_KEY);
+      return window.localStorage;
+    }
+    if (typeof localStorage !== 'undefined') {
+      return localStorage;
     }
   } catch {
     // Ignore storage access errors
@@ -159,18 +170,55 @@ export function getAuthToken(): string | null {
   return null;
 }
 
-export function setAuthToken(token: string | null): void {
-  inMemoryAuthToken = token;
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      if (token) {
-        window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, token);
-      } else {
-        window.localStorage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+export function getAuthToken(): string | null {
+  if (inMemoryAuthToken !== null) {
+    const cleaned = cleanToken(inMemoryAuthToken);
+    if (!cleaned) {
+      inMemoryAuthToken = null;
+      try {
+        getStorage()?.removeItem(SESSION_TOKEN_STORAGE_KEY);
+      } catch {
+        // Ignore storage access errors
       }
+      return null;
     }
-  } catch {
-    // Ignore storage access errors
+    return cleaned;
+  }
+
+  const storage = getStorage();
+  if (storage) {
+    try {
+      const stored = storage.getItem(SESSION_TOKEN_STORAGE_KEY);
+      if (stored !== null) {
+        const cleaned = cleanToken(stored);
+        if (!cleaned) {
+          storage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+          return null;
+        }
+        inMemoryAuthToken = cleaned;
+        return cleaned;
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+  return null;
+}
+
+export function setAuthToken(token: string | null): void {
+  const cleaned = cleanToken(token);
+  inMemoryAuthToken = cleaned;
+  const storage = getStorage();
+  if (storage) {
+    try {
+      if (cleaned) {
+        storage.setItem(SESSION_TOKEN_STORAGE_KEY, cleaned);
+      } else {
+        storage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
   }
 }
 
@@ -221,6 +269,13 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
           message: response.statusText || 'Unknown network error',
         },
       };
+    }
+    if (
+      response.status === 401 ||
+      errData.error?.code === 'not_authenticated' ||
+      errData.error?.code === 'session_expired'
+    ) {
+      setAuthToken(null);
     }
     throw new ApiError(response.status, errData.error);
   }

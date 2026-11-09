@@ -10,13 +10,39 @@ use super::*;
     ),
     tag = "Auth"
 )]
-pub async fn get_current_user(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<UserDto>, AppError> {
-    let (user, _) = require_authenticated(&state, &headers).await?;
-    let dto = AuthService::build_user_dto(&state, &user).await;
-    Ok(Json(dto))
+pub async fn get_current_user(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    match require_authenticated(&state, &headers).await {
+        Ok((user, _)) => {
+            let dto = AuthService::build_user_dto(&state, &user).await;
+            Json(dto).into_response()
+        }
+        Err(err @ (AppError::NotAuthenticated | AppError::SessionExpired)) => {
+            let is_configured_https = state
+                .config
+                .app_origin
+                .split([',', ';'])
+                .any(|o| o.trim().starts_with("https://"));
+            let is_forwarded_https = headers
+                .get("x-forwarded-proto")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.split(',').next())
+                .is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"));
+            let secure_flag = if is_forwarded_https || is_configured_https {
+                "; Secure"
+            } else {
+                ""
+            };
+            let clear_cookie =
+                format!("session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{secure_flag}");
+
+            let mut resp = err.into_response();
+            if let Ok(cookie_val) = header::HeaderValue::from_str(&clear_cookie) {
+                resp.headers_mut().insert(header::SET_COOKIE, cookie_val);
+            }
+            resp
+        }
+        Err(err) => err.into_response(),
+    }
 }
 
 #[utoipa::path(

@@ -10,13 +10,13 @@ Provides role-based access control (Admin, Editor, Viewer, Public/Anonymous) and
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/20261026000004_rbac_and_privacy.sql` | `user_roles`, `privacy_settings`, `living_override` |
 | Route handlers | `backend/src/routes/rbac/mod.rs` | Modular handler package containing RBAC guards for all domain actions |
-| Service (RBAC) | `backend/src/services/rbac.rs` | `can_edit_tree`, `can_view_person`, `can_manage_users`, role hierarchies |
+| Service (RBAC) | `backend/src/services/rbac.rs` | `can_edit_tree`, `can_view_person`, `can_manage_users`, role hierarchies, `PublicOrAuth` extractor with graceful fallback |
 | Service (Privacy) | `backend/src/services/privacy/masking.rs` | `redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`, `redact_media_for_caller` |
 | Service (MCP Redaction) | `backend/src/services/mcp/rpc_read.rs` | `mcp_privacy_access`, `redact_person_for_mcp`, `redact_family_for_mcp` |
 | Middleware | `backend/src/services/security/mod.rs` | `request_context_middleware` sets user role in request extensions |
 | Frontend components| `frontend/src/components/domain/` | `RoleBadge.tsx`, role-based button hiding |
 | Frontend guards | `frontend/src/components/ui/` | `AccessDeniedCard.tsx`, public navigation segregation in `AppShell` |
-| Tests | `backend/tests/rbac_test.rs` | Permissions matrix, living-person redaction, 404 on hidden records |
+| Tests | `backend/tests/rbac_test.rs`, `backend/tests/session_panic_test.rs` | Permissions matrix, living-person redaction, 404 on hidden records, `PublicOrAuth` fallback on stale tokens |
 
 ## 3. Key Flows
 1. **Living Person Evaluation:**
@@ -30,11 +30,14 @@ Provides role-based access control (Admin, Editor, Viewer, Public/Anonymous) and
 ## 4. Invariants & Business Rules
 - **Privacy-404 Invariant (`ADR-005`):** Never return 403 Forbidden for living person URLs when unauthenticated, as this confirms the person exists in the database.
 - **Zero Edit Controls for Public:** Public visitors must never see disabled or active edit buttons, merge dialogs, or delete buttons.
+- **Graceful Public Fallback (`ADR-013`):** When `enable_public_access = true`, callers bearing expired, invalid, or deactivated session tokens/cookies gracefully receive `PublicOrAuth::AnonymousPublic` rather than a blocking 401.
 
 ## 5. Decisions
 - **`ADR-009`: Strict Unauthenticated Segregation:** Clean slate navigation prevents public visitors from seeing administration or editing chrome.
+- **`ADR-013`: Public Fallback on Stale Session:** `PublicOrAuth` falls back to `AnonymousPublic` instead of hard failing with 401 when public access is enabled.
 
 ## 6. Gotchas & Known Limitations
 - `GOT-006`: Inaccurate living status when ancestral birth dates are completely absent.
+- `GOT-013`: Expired or corrupted session cookies blocking anonymous access on public trees.
 
-_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
+_Last curated: 2026-11-09 (PublicOrAuth graceful fallback on stale cookies, session resilience)_

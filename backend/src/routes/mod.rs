@@ -14,6 +14,7 @@ use axum::{
     Router,
 };
 use tower_http::{
+    catch_panic::CatchPanicLayer,
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -373,7 +374,38 @@ pub fn create_router(state: AppState) -> Router {
         ))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
+        .layer(CatchPanicLayer::custom(handle_panic))
         .with_state(state)
+}
+
+pub fn handle_panic(err: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    let details = if let Some(s) = err.downcast_ref::<String>() {
+        s.as_str()
+    } else if let Some(s) = err.downcast_ref::<&'static str>() {
+        *s
+    } else {
+        "Unknown panic"
+    };
+
+    let backtrace = std::backtrace::Backtrace::capture();
+    tracing::error!(panic = %details, backtrace = %backtrace, "Panicked while processing request");
+
+    let body = crate::error::ErrorResponse {
+        error: crate::error::ErrorDetail {
+            code: "internal_error".to_string(),
+            message: "An internal server error occurred".to_string(),
+            details: None,
+            field_errors: None,
+        },
+    };
+
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        axum::Json(body),
+    )
+        .into_response()
 }
 
 async fn serve_static_no_cache(

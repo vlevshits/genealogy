@@ -20,8 +20,8 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `models/mod.rs` | ~15 | Module declarations and exports. |
 | `models/gendate.rs` | 517 | Genealogical date parser/serializer (`GenDate`): exact, approximate, before/after, ranges, dual years. |
 | `routes/` | | **HTTP Handlers & Adapters** |
-| `routes/mod.rs` | ~795 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), middleware assembly, native static SPA fallback (`ServeDir` / `ServeFile`). |
-| `routes/auth/` | ~600 | Modular authentication routes: passkey registration/login, magic links, passwords, sessions, recovery codes. |
+| `routes/mod.rs` | 428 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), panic handling layer (`CatchPanicLayer`, `handle_panic`), middleware assembly, native static SPA fallback (`ServeDir` / `ServeFile`). |
+| `routes/auth/` | ~600 | Modular authentication routes: passkey registration/login, magic links, passwords, sessions (with dead cookie eviction on 401 in `passkeys_sessions.rs`), recovery codes. |
 | `routes/rbac/` | ~4,000 | Modular domain routes: tree view (`tree_view.rs`), person/family/event CRUD (`person_profile.rs`, `person_mutations.rs`, `person_delete_families.rs`, `events.rs`, `quick_add.rs`), places (`places.rs`), media (`media_list_create.rs`, `media_tags_links.rs`, `notes_media_files.rs`), search/directory (`search.rs`, `people_directory.rs`), history & quality (`history_quality.rs`), GEDCOM/PDF (`gedcom_pdf.rs`), dashboard/kinship (`dashboard_kinship.rs`), onboarding (`onboarding_tree.rs`), AI story intake (`ai_stories.rs`), and MCP (`mcp.rs`). |
 | `routes/system.rs` | 383 | Health check, system information (`ai_enabled` flag), and database readiness endpoints. |
 | `routes/health.rs` | ~40 | Minimal liveness and readiness ping handler. |
@@ -39,7 +39,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `services/pdf/` | ~1,500 | Modularized printable tree PDF engine: layout planning (`layout/`), vector rendering (`render/`), and themes. |
 | `services/privacy/` | ~800 | Modularized living-person determination (110-year rule), masking, privacy-404 generation. |
 | `services/quality/` | ~1,800 | Modularized validation checks, duplicate detection scoring, place hierarchy repair. |
-| `services/rbac.rs` | ~300 | Role verification, permission policy checks (Admin, Editor, Viewer, Public). |
+| `services/rbac.rs` | 248 | Role verification, permission policy checks (Admin, Editor, Viewer, Public), `PublicOrAuth` extractor with graceful fallback. |
 | `services/scheduler.rs` | ~200 | Periodic background task runner (daily snapshot, automated backup, cleanup). |
 | `services/security/` | ~500 | Modularized rate limiter, CSRF/Origin enforcement, RequestContext middleware. |
 | `services/story_intake/` | ~1,600 | Modularized multimodal story intake: `gemini.rs` (server-side transcription & entity extraction), `extraction.rs`, `nlp_clauses.rs`, `nlp_entities.rs`, `reconciliation.rs`, `commit.rs`, `types_api.rs`. |
@@ -79,6 +79,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `printable_pdf_tests.rs` | PDF export layout calculation, multi-page cut marks, SVG vector rendering. |
 | `rbac_test.rs` | Role-based authorization, privacy redactions, unauthenticated 404 segregation. |
 | `search_directory_test.rs` | Cyrillic & Latin search, omnibox suggestions, surname index sorting. |
+| `session_panic_test.rs` | Panic interception via `CatchPanicLayer`, 401 dead cookie eviction, and `PublicOrAuth` graceful fallback. |
 | `story_intake_and_mcp_test.rs` | Multimodal story intake, pre-extracted graph ingestion, draft reconciliation, MCP server JSON-RPC. |
 | `tree_view_test.rs` | Ancestor/descendant graph traversal, relationship calculations. |
 
@@ -90,7 +91,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 
 | Directory | Responsibility |
 | :--- | :--- |
-| `api/` | Modular typed API clients: `core.ts` (`apiFetch`, `ApiError`), `client.ts` (re-export facade), `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `delight-types.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (extraction engine selector), `openapi-types.ts`, and `openapi-types-domain.ts`. |
+| `api/` | Modular typed API clients: `core.ts` (`apiFetch` with auto-purge on 401, defensive token sanitization, `ApiError`), `client.ts` (re-export facade), `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `delight-types.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (extraction engine selector), `openapi-types.ts`, and `openapi-types-domain.ts`. |
 | `components/ui/` | Reusable Design System primitives: `Button`, `IconButton`, `TextInput`, `Select`, `Modal`, `Card`, `Badge`, `Spinner`, `Tabs`, `ThemeToggle`, `LanguageToggle`. |
 | `components/domain/` | Domain-specific widgets: `GenDateInput`, `PlacePicker`, `RoleBadge`, `GenderIcon`. |
 | `components/auth/` | Auth UI: `LoginCard`, `MagicLinkVerifyCard`, `RecoveryCodesCard`, `RegisterInviteCard`. |
@@ -109,6 +110,13 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts`, `tree-layouts/` (`hourglass/`, `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts`). |
 | `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `AiStoryIntakePage`, `PrintExportPage`, `DevUiWorkbench`, etc.). |
 | `types/` | Domain data types (`person.ts`, `place.ts`, `event.ts`, `gendate.ts`). |
+
+### 2.2 Key Frontend Unit & Integration Tests (`frontend/tests/`)
+
+| Test Suite | Coverage Scope |
+| :--- | :--- |
+| `api/auth-token-resilience.test.ts` | Defensive token sanitization (`cleanToken`), 401 auto-purge in `apiFetch`, and `AuthProvider` token cleanup. |
+| `i18n/parity.test.ts` | Bilingual key parity between `en.json` and `ru.json`, and emoji/icon prohibition. |
 
 ---
 
@@ -150,4 +158,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-08 (Zero-proxy LXC port 80 direct binding, CAP_NET_BIND_SERVICE, automated PostgreSQL setup)_
+_Last curated: 2026-11-09 (CatchPanicLayer, dead cookie eviction on 401, PublicOrAuth fallback, defensive token sanitization)_

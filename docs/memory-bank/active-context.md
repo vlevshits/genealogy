@@ -28,6 +28,12 @@ Current operational status, recent milestones, and immediate roadmap priorities.
 8. **MCP Privacy Redaction & PAT Hardening (`backend/src/services/privacy/masking.rs`, `backend/src/services/mcp/rpc_read.rs`, `backend/src/routes/rbac/mcp.rs`):** Added `redact_event_for_tree_view` and `redact_family_for_mcp` so `list_events_timeline`, `get_family_immediate`, and `get_ancestors_descendants` enforce living-person and private-record redaction for `Viewer` and public MCP callers.
 9. **100% Compliance with the 800-Line Ceiling & Bundle Splitting:** Decomposed all backend (`backend/src/` max 795 lines) and frontend (`frontend/src/` max 744 lines) modules, and configured Rollup `manualChunks` in `frontend/vite.config.ts` (`vendor`, `vendor-icons`, `i18n-locales`, `domain-tree`, `domain-print`, `domain-stories`, `domain-quality`).
 10. **Frontend Resilience & UX Polish (`UX-119`–`UX-126`):** Added `MediaStream` track and `SpeechRecognition` unmount cleanup in `AudioRecorderWidget.tsx` (`GOT-011`), rethrew HTTP `ApiError` (`status > 0`) in `stories-mcp-api.ts` (`GOT-012`), preserved `AbortError` in `frontend/src/api/core.ts`, and aligned Tailwind v4 `@theme` surface/border tokens in `frontend/src/index.css`.
+11. **Session Resilience, 502 Bad Gateway Prevention & Token Sanitization (`01-authentication-passkeys`, `02-rbac-access-control`, `ADR-013`):**
+    - Mounted `CatchPanicLayer::custom(handle_panic)` in `backend/src/routes/mod.rs` to capture unexpected panics, log backtraces, and return structured 500 `internal_error` responses instead of dropping TCP connections (which triggered reverse proxy 502 Bad Gateway errors).
+    - Hardened `get_current_user` (`backend/src/routes/auth/passkeys_sessions.rs`) on 401 to attach dead cookie eviction (`Set-Cookie: session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`, with `; Secure` on HTTPS).
+    - Fixed `PublicOrAuth` extractor in `backend/src/services/rbac.rs` to gracefully fall back to `AnonymousPublic` when `enable_public_access = true` instead of failing with 401 on expired, corrupted, or deactivated sessions (`GOT-013`).
+    - Implemented defensive token sanitization (`cleanToken`) and automatic 401 purge in `frontend/src/api/core.ts` and `frontend/src/lib/auth-context.tsx`, preventing literal `"null"` / `"undefined"` strings in `localStorage` from triggering infinite 401 loops (`GOT-014`).
+    - Added automated test coverage in `backend/tests/session_panic_test.rs` and `frontend/tests/api/auth-token-resilience.test.ts`.
 
 ---
 
@@ -49,4 +55,4 @@ Current operational status, recent milestones, and immediate roadmap priorities.
 - **Server-Only AI Credentials:** `GEMINI_API_KEY` is configured exclusively on the server in `.env` (or admin instance settings); no API keys are entered, stored, or exposed in the browser. When unconfigured, the system falls back to the built-in offline NLP parser.
 - **MCP Security & Privacy Scoping:** Personal Access Tokens (PAT) for external AI agents adhere strictly to RBAC scope restrictions (`read:tree`, `write:draft`, `write:direct`, `admin:maintenance`) and apply `AnonymousPublic` living-person redaction to `Viewer`-tier MCP tokens.
 
-_Last curated: 2026-11-08 (Zero-proxy LXC port 80 direct binding, CAP_NET_BIND_SERVICE, automated PostgreSQL setup)_
+_Last curated: 2026-11-09 (CatchPanicLayer, dead cookie eviction on 401, PublicOrAuth fallback, defensive token sanitization)_
