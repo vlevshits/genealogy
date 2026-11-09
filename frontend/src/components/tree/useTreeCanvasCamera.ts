@@ -117,7 +117,7 @@ export function useTreeCanvasCamera(params: {
         (focalId ? layout.nodes.find((pn) => pn.id === focalId) : null) ??
         layout.nodes[0];
       if (!target) return;
-      const targetZoom = isMobile ? 0.85 : undefined;
+      const targetZoom = isMobile ? Math.max(zoom, 0.75) : undefined;
       const nodeW = target.width || CARD_WIDTH;
       const nodeH = target.height || CARD_HEIGHT;
       centerOnWorldPoint(
@@ -127,7 +127,7 @@ export function useTreeCanvasCamera(params: {
         animate
       );
     },
-    [layout.nodes, centerOnWorldPoint, isMobile, focalId]
+    [layout.nodes, centerOnWorldPoint, isMobile, focalId, zoom]
   );
 
   const frameHighlightedNodes = useCallback(
@@ -183,31 +183,47 @@ export function useTreeCanvasCamera(params: {
     [layout.bounds, viewport.width, viewport.height, centerOnWorldPoint]
   );
 
-  // UX-040: Dynamic initial centering on focal node or fitToScreen
+  // UX-040: Dynamic initial centering on focal node or fitToScreen, plus recentering on focalId change
   const hasInitialCenteredRef = useRef<boolean>(false);
+  const prevFocalIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (hasInitialCenteredRef.current) return;
     if (layout.nodes.length === 0) return;
     if (viewport.width <= 0 || viewport.height <= 0) return;
 
-    hasInitialCenteredRef.current = true;
-    const focalNode =
-      layout.nodes.find((pn) => pn.id === focalId) ??
-      layout.nodes.find((pn) => pn.isFocal) ??
-      layout.nodes[0];
+    const currentFocal = focalId ?? layout.focalId;
 
-    if (focalNode) {
-      centerOnNode(focalNode.id, false);
-    } else {
-      fitToScreen(false);
+    if (!hasInitialCenteredRef.current) {
+      hasInitialCenteredRef.current = true;
+      prevFocalIdRef.current = currentFocal;
+      const focalNode =
+        (currentFocal ? layout.nodes.find((pn) => pn.id === currentFocal) : null) ??
+        layout.nodes.find((pn) => pn.isFocal) ??
+        layout.nodes[0];
+
+      if (focalNode) {
+        centerOnNode(focalNode.id, false);
+      } else {
+        fitToScreen(false);
+      }
+      return;
+    }
+
+    if (currentFocal && currentFocal !== prevFocalIdRef.current) {
+      prevFocalIdRef.current = currentFocal;
+      const focalNode =
+        layout.nodes.find((pn) => pn.id === currentFocal) ??
+        layout.nodes.find((pn) => pn.isFocal);
+      if (focalNode) {
+        centerOnNode(focalNode.id, true);
+      }
     }
   }, [
     layout.nodes,
+    layout.focalId,
     viewport.width,
     viewport.height,
     focalId,
-    isMobile,
     centerOnNode,
     fitToScreen,
   ]);

@@ -139,7 +139,10 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
       {/* Top Floating Bar: Single unified bar on mobile (< 640px), split floating bar on desktop (>= 640px) */}
       <div className="pointer-events-none absolute top-3 inset-x-3 sm:top-4 sm:inset-x-6 z-20 flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap sm:items-center sm:justify-between gap-2">
         {/* Mobile View (< 640px): Full-width streamlined toolbar with right-aligned icons */}
-        <div className="relative flex sm:hidden pointer-events-auto w-full items-center">
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="relative flex sm:hidden pointer-events-auto w-full items-center"
+        >
           <div className="flex h-11 w-full items-center justify-between gap-1.5 rounded-xl border border-border bg-surface/90 p-1 shadow-sm backdrop-blur-md">
             {/* Mode Selector: uses all remaining width on the left */}
             <div className="flex-1 min-w-0">
@@ -158,6 +161,7 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
               <div className="relative">
                 <IconButton
                   ref={optionsButtonRef}
+                  size="sm"
                   label={t('tree.toolbar.optionsBtn')}
                   variant={hasCustomOptions || mobileOptionsOpen ? 'secondary' : 'ghost'}
                   onClick={() => setMobileOptionsOpen(!mobileOptionsOpen)}
@@ -173,13 +177,14 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
                   />
                 </IconButton>
                 {hasCustomOptions && !mobileOptionsOpen && (
-                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-brand" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-brand ring-2 ring-surface pointer-events-none" />
                 )}
               </div>
 
               {/* Kinship Finder */}
               {onOpenKinshipFinder && (
                 <IconButton
+                  size="sm"
                   label={t('tree.kinship.openBtn')}
                   variant="ghost"
                   onClick={onOpenKinshipFinder}
@@ -190,6 +195,7 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
 
               {/* Center Home */}
               <IconButton
+                size="sm"
                 label={t('tree.toolbar.centerHomeAria')}
                 variant="ghost"
                 onClick={onCenterFocal}
@@ -199,6 +205,7 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
 
               {/* Fit Screen */}
               <IconButton
+                size="sm"
                 label={t('tree.toolbar.fitScreenAria')}
                 variant="ghost"
                 onClick={onFitToScreen}

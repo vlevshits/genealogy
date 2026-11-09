@@ -536,7 +536,14 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
           onSelectPerson={setSelectedPersonId}
           onFocusNode={(id) => {
             setFocalId(id);
-            centerOnNode(id);
+            centerOnNode(id, true);
+            if (typeof window !== "undefined") {
+              try {
+                const url = new URL(window.location.href);
+                url.searchParams.set("focal", id);
+                window.history.replaceState(null, "", url.toString());
+              } catch {}
+            }
           }}
           onQuickAdd={(anchor, relation) =>
             setQuickAddState({ anchor, relation })
@@ -625,7 +632,14 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
         onSelectPersonId={setSelectedPersonId}
         onMakeFocal={(p) => {
           setFocalId(p.id);
-          centerOnNode(p.id);
+          centerOnNode(p.id, true);
+          if (typeof window !== "undefined") {
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.set("focal", p.id);
+              window.history.replaceState(null, "", url.toString());
+            } catch {}
+          }
         }}
         onSetHomePerson={(p) => void handleSetHomePerson(p)}
         onSelectRelative={(rel) => {
