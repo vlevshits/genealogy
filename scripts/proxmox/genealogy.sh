@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (c) 2024-2026 Vladimir Levshits
+# Copyright (c) 2024-2026 Valentin Levshits
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/vlevshits/genealogy
 
