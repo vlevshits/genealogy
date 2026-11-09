@@ -292,7 +292,7 @@ pub async fn parse_ai_story_handler(
         ));
     }
 
-    if req.extracted_data.is_none() && req.engine.as_deref() != Some("builtin") {
+    if req.extracted_data.is_none() {
         let gemini_key = {
             let key_from_config = state
                 .config
@@ -342,23 +342,23 @@ pub async fn parse_ai_story_handler(
                     })
             };
 
-            match crate::services::story_intake::extract_story_with_gemini(
+            let gemini_extracted = crate::services::story_intake::extract_story_with_gemini(
                 &key,
                 &state.config.gemini_model,
                 &req.raw_text,
                 speaker_context.as_ref(),
             )
-            .await
-            {
-                Ok(gemini_extracted) => {
-                    req.extracted_data = Some(gemini_extracted);
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        "Gemini extraction failed, falling back to built-in NLP engine: {err}"
-                    );
-                }
-            }
+            .await?;
+
+            req.extracted_data = Some(gemini_extracted);
+        } else if state.config.app_env != "test" {
+            return Err(AppError::ValidationFailed(
+                "Google Gemini API key is not configured on the server. Please set GEMINI_API_KEY in your server environment (.env) to extract family trees from stories.".to_string(),
+                Some(HashMap::from([(
+                    "gemini_api_key".to_string(),
+                    "missing".to_string(),
+                )])),
+            ));
         }
     }
 

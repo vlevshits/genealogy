@@ -2152,7 +2152,8 @@
       "geminiDescription": "Облачный ИИ с глубоким анализом родственных связей",
       "builtin": "Встроенный офлайн",
       "builtinDescription": "Локальный парсер на правилах, без внешних запросов",
-      "modelBadge": "Gemini 3.8 Flash (Серверный ИИ)"
+      "modelBadge": "Gemini 3.8 Flash (Серверный ИИ)",
+      "geminiRequiredBanner": "Ключ Google Gemini API не настроен на сервере. Укажите GEMINI_API_KEY в файле .env сервера для извлечения древа."
     },
     "gemini": {
       "extractionError": "Ошибка извлечения Gemini: {error}",
@@ -2167,10 +2168,12 @@
     },
     "roles": {
       "speaker": "Рассказчик",
+      "self": "Рассказчик (я)",
       "father": "Отец",
       "mother": "Мать",
       "parent": "Родитель",
       "spouse": "Супруг(а)",
+      "partner": "Партнёр",
       "child": "Ребёнок",
       "son": "Сын",
       "daughter": "Дочь",
@@ -2179,6 +2182,10 @@
       "sibling": "Брат / Сестра",
       "grandfather": "Дедушка",
       "grandmother": "Бабушка",
+      "paternal_grandfather": "Дедушка по отцу",
+      "maternal_grandfather": "Дедушка по матери",
+      "paternal_grandmother": "Бабушка по отцу",
+      "maternal_grandmother": "Бабушка по матери",
       "grandparent": "Дедушка / Бабушка",
       "relative": "Родственник"
     },
@@ -2191,7 +2198,8 @@
       "patronymicLabel": "Отчество"
     },
     "clarification": {
-      "title": "Уточняющие вопросы ({count})",
+      "title": "Уточняющие вопросы",
+      "titleWithCount": "Уточняющие вопросы ({count})",
       "subtitle": "Ответьте на вопрос ниже или добавьте деталь для уточнения ветви.",
       "placeholder": "Ответьте или уточните (напр., «Дедушка Иван — по отцу, родился в 1894 году»)…",
       "sendBtn": "Обновить черновик"
@@ -2202,9 +2210,10 @@
       "summaryLinked": "Связано: {count}",
       "summaryNew": "Новых: {count}",
       "actionAria": "Выберите действие сверки для {name}",
-      "actionLink": "Дополнить профиль: {name} ({gid}, {score}%)",
+      "actionLink": "Дополнить профиль",
       "actionCreate": "Создать как новую персону",
       "enrichBirthPlace": "Добавить место рождения ({place})",
+      "enrichBirthPlaceNoVal": "Добавить место рождения",
       "enrichNotes": "Добавить отрывок рассказа в заметки",
       "matchScoreBadge": "Совпадение {score}%",
       "netNewBadge": "Новая персона",

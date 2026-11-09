@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Cpu,
+  AlertTriangle,
   FileAudio,
   FileText,
   Mic,
@@ -33,6 +33,7 @@ export interface StoryInputPanelProps {
   onTranscribeBlob: (blob: Blob | File, speechTranscript?: string) => void;
   engine?: StoryExtractionEngine;
   onEngineChange?: (engine: StoryExtractionEngine) => void;
+  aiConfigured?: boolean;
 }
 
 export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
@@ -44,8 +45,7 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
   transcribing = false,
   onExtractSubtree,
   onTranscribeBlob,
-  engine = 'gemini',
-  onEngineChange,
+  aiConfigured = true,
 }) => {
   const { t } = useI18n();
   const safeText = narrativeText ?? '';
@@ -189,35 +189,26 @@ export const StoryInputPanel: React.FC<StoryInputPanelProps> = ({
         data-testid="story-engine-selector-bar"
         className="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-surface-muted border border-border"
       >
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Sparkles className="h-4 w-4 text-brand" />
           <span className="text-xs font-medium text-secondary whitespace-nowrap">
             {t('stories.engine.label')}:
           </span>
-          <SegmentedControl<StoryExtractionEngine>
-            size="sm"
-            ariaLabel={t('stories.engine.label')}
-            value={engine}
-            onChange={(val) => onEngineChange?.(val)}
-            options={[
-              {
-                value: 'gemini',
-                label: t('stories.engine.gemini'),
-                icon: <Sparkles className="h-3.5 w-3.5 text-brand" />,
-              },
-              {
-                value: 'builtin',
-                label: t('stories.engine.builtin'),
-                icon: <Cpu className="h-3.5 w-3.5" />,
-              },
-            ]}
-          />
-          {engine === 'gemini' && (
-            <Badge variant="brand" size="sm" className="font-mono text-[11px]">
-              {t('stories.engine.modelBadge')}
-            </Badge>
-          )}
+          <Badge variant="brand" size="sm" className="font-mono text-[11px]">
+            {t('stories.engine.modelBadge')}
+          </Badge>
         </div>
       </div>
+
+      {!aiConfigured && (
+        <div
+          data-testid="gemini-not-configured-banner"
+          className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>{t('stories.engine.geminiRequiredBanner')}</span>
+        </div>
+      )}
 
       {/* Bottom Action Bar: Language Selector + Extract Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-border">

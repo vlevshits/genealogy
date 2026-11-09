@@ -137,7 +137,9 @@ export const ReconciliationMatrixCard: React.FC<
               <div className="lg:col-span-4 flex flex-col gap-2">
                 <SegmentedControl<'link_existing' | 'create_new'>
                   size="sm"
-                  ariaLabel={t('stories.reconcile.actionAria')}
+                  ariaLabel={t('stories.reconcile.actionAria', {
+                    name: `${person.given_name} ${person.surname || ''}`.trim(),
+                  })}
                   value={currentRes.action}
                   onChange={(nextAction) =>
                     onResolutionChange(person.temp_id, {
@@ -164,7 +166,13 @@ export const ReconciliationMatrixCard: React.FC<
                     <Checkbox
                       checked={currentRes.enrich_fields.includes('birth_place')}
                       onCheckedChange={() => toggleEnrichField('birth_place')}
-                      label={t('stories.reconcile.enrichBirthPlace')}
+                      label={
+                        person.birth_place
+                          ? t('stories.reconcile.enrichBirthPlace', {
+                              place: person.birth_place,
+                            })
+                          : t('stories.reconcile.enrichBirthPlaceNoVal')
+                      }
                     />
                     <Checkbox
                       checked={currentRes.enrich_fields.includes('notes')}

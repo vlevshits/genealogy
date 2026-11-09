@@ -2152,7 +2152,8 @@
       "geminiDescription": "Cloud AI with deep genealogical reasoning",
       "builtin": "Built-in Offline",
       "builtinDescription": "Privacy-first pattern parser, no external API",
-      "modelBadge": "Gemini 3.8 Flash (Server AI)"
+      "modelBadge": "Gemini 3.8 Flash (Server AI)",
+      "geminiRequiredBanner": "Google Gemini API key is not configured on the server. Please set GEMINI_API_KEY in your server environment (.env) to build family trees from stories."
     },
     "gemini": {
       "extractionError": "Gemini extraction failed: {error}",
@@ -2167,10 +2168,12 @@
     },
     "roles": {
       "speaker": "Speaker (Anchor)",
+      "self": "Self (Narrator)",
       "father": "Father",
       "mother": "Mother",
       "parent": "Parent",
       "spouse": "Spouse",
+      "partner": "Partner",
       "child": "Child",
       "son": "Son",
       "daughter": "Daughter",
@@ -2179,6 +2182,10 @@
       "sibling": "Sibling",
       "grandfather": "Grandfather",
       "grandmother": "Grandmother",
+      "paternal_grandfather": "Paternal Grandfather",
+      "maternal_grandfather": "Maternal Grandfather",
+      "paternal_grandmother": "Paternal Grandmother",
+      "maternal_grandmother": "Maternal Grandmother",
       "grandparent": "Grandparent",
       "relative": "Relative"
     },
@@ -2191,7 +2198,8 @@
       "patronymicLabel": "Patronymic"
     },
     "clarification": {
-      "title": "Clarifying Questions ({count})",
+      "title": "Clarifying Questions",
+      "titleWithCount": "Clarifying Questions ({count})",
       "subtitle": "Answer any question below or add a detail to refine the draft subtree.",
       "placeholder": "Reply or add detail (e.g., 'Grandfather Ivan was paternal, born in 1894')…",
       "sendBtn": "Update Draft"
@@ -2202,9 +2210,10 @@
       "summaryLinked": "Linked: {count}",
       "summaryNew": "New: {count}",
       "actionAria": "Select reconciliation action for {name}",
-      "actionLink": "Enrich Existing: {name} ({gid}, {score}%)",
+      "actionLink": "Enrich Existing",
       "actionCreate": "Create as New Person",
       "enrichBirthPlace": "Add birth place ({place})",
+      "enrichBirthPlaceNoVal": "Add birth place",
       "enrichNotes": "Append story excerpt to notes",
       "matchScoreBadge": "{score}% Match",
       "netNewBadge": "New Person",

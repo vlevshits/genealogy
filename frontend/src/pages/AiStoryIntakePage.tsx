@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, GitMerge, Sparkles } from 'lucide-react';
 import {
   AccessDeniedCard,
@@ -25,13 +25,9 @@ import {
   storyApi,
   StoryDraftDto,
 } from '../api/client';
+import { fetchSystemInfo } from '../api/core';
 import { PeopleDirectoryItemDto } from '../api/openapi-types-domain';
 import { Individual } from '../types/person';
-import {
-  getExtractionEngine,
-  setExtractionEngine,
-  StoryExtractionEngine,
-} from '../api/gemini-story-extractor';
 import { useAuth } from '../lib/auth-context';
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
@@ -128,9 +124,21 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
   const [committing, setCommitting] = useState<boolean>(false);
   const [isCommitted, setIsCommitted] = useState<boolean>(false);
 
-  const [engine, setEngine] = useState<StoryExtractionEngine>(() =>
-    getExtractionEngine()
-  );
+  const [aiEnabled, setAiEnabled] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSystemInfo()
+      .then((info) => {
+        if (!cancelled && typeof info.ai_enabled === 'boolean') {
+          setAiEnabled(info.ai_enabled);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (initialSpeakers) return;
@@ -160,11 +168,6 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
       }
     }
   }, []);
-
-  const handleEngineChange = (nextEngine: StoryExtractionEngine) => {
-    setEngine(nextEngine);
-    setExtractionEngine(nextEngine);
-  };
 
   const [activeDraft, setActiveDraft] = useState<StoryDraftDto | null>(
     initialDraft
@@ -378,6 +381,15 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
       return;
     }
 
+    if (!aiEnabled) {
+      addToast({
+        type: 'error',
+        title: t('common.errorLoading'),
+        description: t('stories.engine.geminiRequiredBanner'),
+      });
+      return;
+    }
+
     setExtracting(true);
     setSpeakerError(null);
 
@@ -387,7 +399,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
         is_new_speaker: isNewSpeaker,
         raw_text: trimmedText,
         language: language === 'auto' ? undefined : language,
-        engine,
+        engine: 'gemini',
       });
 
       setIsCommitted(false);
@@ -409,6 +421,39 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
       setExtracting(false);
     }
   };
+
+  const derivedQuestions = useMemo(() => {
+    if (!activeDraft?.extracted_data?.draft_people) return [];
+    const qList: string[] = [];
+    const isRu = locale === 'ru';
+    for (const p of activeDraft.extracted_data.draft_people) {
+      const name =
+        [p.given_name, p.surname].filter(Boolean).join(' ') ||
+        (isRu ? 'Родственник' : 'Relative');
+      if (p.role_to_speaker !== 'self') {
+        if (!p.birth_date) {
+          qList.push(
+            isRu
+              ? `В каком году родился(лась) ${name}?`
+              : `When was ${name} born?`
+          );
+        }
+        if (
+          p.sex === 'F' &&
+          (p.role_to_speaker === 'mother' ||
+            p.role_to_speaker === 'grandmother') &&
+          !p.maiden_name
+        ) {
+          qList.push(
+            isRu
+              ? `Какая девичья фамилия у ${name}?`
+              : `What was ${name}'s maiden surname?`
+          );
+        }
+      }
+    }
+    return qList.slice(0, 4);
+  }, [activeDraft, locale]);
 
   const handleSubmitClarification = async (clarificationText: string) => {
     if (!activeDraft || refining) return;
@@ -647,12 +692,11 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
         onLanguageChange={setLanguage}
         extracting={extracting}
         transcribing={transcribing}
+        aiConfigured={aiEnabled}
         onExtractSubtree={() => void handleExtractSubtree()}
         onTranscribeBlob={(blob, speechTranscript) =>
           void handleTranscribeAudio(blob, speechTranscript)
         }
-        engine={engine}
-        onEngineChange={handleEngineChange}
       />
 
       {/* Loading Shimmer while Extracting */}
@@ -698,6 +742,7 @@ export const AiStoryIntakePage: React.FC<AiStoryIntakePageProps> = ({
 
           <DraftClarificationBar
             refining={refining}
+            questions={derivedQuestions}
             onSubmitClarification={(text) =>
               void handleSubmitClarification(text)
             }

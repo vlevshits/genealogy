@@ -101,7 +101,6 @@ describe('StoryInputPanel component rendering', () => {
     );
 
     expect(htmlEn).toContain('Gemini 3.8 Flash');
-    expect(htmlEn).toContain('Built-in Offline');
     expect(htmlEn).toContain('Gemini 3.8 Flash (Server AI)');
     // Security assertion: NO API key input, button, or link is rendered to users
     expect(htmlEn).not.toContain('Custom API Key');
@@ -123,7 +122,6 @@ describe('StoryInputPanel component rendering', () => {
     );
 
     expect(htmlRu).toContain('Gemini 3.8 Flash');
-    expect(htmlRu).toContain('Встроенный офлайн');
     expect(htmlRu).toContain('Gemini 3.8 Flash (Серверный ИИ)');
     expect(htmlRu).not.toContain('Свой ключ');
     expect(htmlRu).not.toContain('Google AI Studio');
