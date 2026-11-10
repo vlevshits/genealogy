@@ -129,10 +129,12 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
     };
   }, [mobileOptionsOpen]);
 
+  const hasConfigurableOptions = mode !== 'all' && mode !== 'fan';
   const hasCustomOptions =
-    (mode !== 'fan' && mode !== 'all' && orientation === 'horizontal') ||
-    (mode === 'hourglass' && !collateral) ||
-    (mode !== 'all' && generations !== 4);
+    hasConfigurableOptions &&
+    (orientation === 'horizontal' ||
+      (mode === 'hourglass' && !collateral) ||
+      generations !== 4);
 
   return (
     <>
@@ -157,29 +159,31 @@ export const TreeToolbar: React.FC<TreeToolbarProps> = ({
 
             {/* Right-aligned action and option icons */}
             <div className="flex items-center gap-1 shrink-0">
-              {/* Collapsible View Options Button */}
-              <div className="relative">
-                <IconButton
-                  ref={optionsButtonRef}
-                  size="sm"
-                  label={t('tree.toolbar.optionsBtn')}
-                  variant={hasCustomOptions || mobileOptionsOpen ? 'secondary' : 'ghost'}
-                  onClick={() => setMobileOptionsOpen(!mobileOptionsOpen)}
-                  aria-expanded={mobileOptionsOpen}
-                >
-                  <SlidersHorizontal
-                    className={cn(
-                      'h-4 w-4',
-                      hasCustomOptions || mobileOptionsOpen
-                        ? 'text-brand'
-                        : 'text-secondary'
-                    )}
-                  />
-                </IconButton>
-                {hasCustomOptions && !mobileOptionsOpen && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-brand ring-2 ring-surface pointer-events-none" />
-                )}
-              </div>
+              {/* Collapsible View Options Button (only for modes with configurable options) */}
+              {hasConfigurableOptions && (
+                <div className="relative">
+                  <IconButton
+                    ref={optionsButtonRef}
+                    size="sm"
+                    label={t('tree.toolbar.optionsBtn')}
+                    variant={hasCustomOptions || mobileOptionsOpen ? 'secondary' : 'ghost'}
+                    onClick={() => setMobileOptionsOpen(!mobileOptionsOpen)}
+                    aria-expanded={mobileOptionsOpen}
+                  >
+                    <SlidersHorizontal
+                      className={cn(
+                        'h-4 w-4',
+                        hasCustomOptions || mobileOptionsOpen
+                          ? 'text-brand'
+                          : 'text-secondary'
+                      )}
+                    />
+                  </IconButton>
+                  {hasCustomOptions && !mobileOptionsOpen && (
+                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-brand ring-2 ring-surface pointer-events-none" />
+                  )}
+                </div>
+              )}
 
               {/* Kinship Finder */}
               {onOpenKinshipFinder && (

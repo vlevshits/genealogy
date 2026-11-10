@@ -216,6 +216,11 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   const [kinshipInitialB, setKinshipInitialB] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+      try {
+        window.scrollTo(0, 0);
+      } catch {}
+    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setSelectedEdge(null);
@@ -442,7 +447,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-4rem)] w-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 h-[calc(100dvh-4rem-env(safe-area-inset-top,0px))] max-h-full w-full overflow-hidden">
       {treeView.access_tier === 'public_anonymous' && (
         <div className="px-4 sm:px-6 py-2 shrink-0">
           <PublicGuestBanner onSignIn={onSignIn} />
@@ -459,7 +464,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onClick={() => setSelectedEdge(null)}
-        className="relative flex-1 w-full overflow-hidden bg-canvas select-none touch-none cursor-grab active:cursor-grabbing"
+        className="relative flex-1 min-h-0 w-full overflow-hidden bg-canvas select-none touch-none cursor-grab active:cursor-grabbing"
       >
         {/* Floating Mode, Depth & Zoom Toolbars */}
         <TreeToolbar

@@ -16,9 +16,21 @@ export function useTreeCanvasCamera(params: {
   const { layout, focalId, isMobileViewport } = params;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [viewport, setViewport] = useState<{ width: number; height: number }>({
-    width: 1200,
-    height: 720,
+  const [viewport, setViewport] = useState<{ width: number; height: number }>(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.innerWidth > 0 &&
+      window.innerHeight > 0
+    ) {
+      return {
+        width: window.innerWidth,
+        height: Math.max(300, window.innerHeight - 64),
+      };
+    }
+    return {
+      width: 1200,
+      height: 720,
+    };
   });
   const [pan, setPan] = useState<{ x: number; y: number }>({
     x: 0,
@@ -51,22 +63,51 @@ export function useTreeCanvasCamera(params: {
   useEffect(() => {
     if (isMobileViewport !== undefined) {
       setIsMobile(isMobileViewport);
-      return;
     }
     if (typeof window === "undefined") return;
     const updateViewport = () => {
-      setIsMobile(window.innerWidth < 768);
+      if (isMobileViewport === undefined) {
+        setIsMobile(window.innerWidth < 768);
+      }
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
-          setViewport({ width: rect.width, height: rect.height });
+          setViewport((prev) =>
+            Math.abs(prev.width - rect.width) > 0.5 ||
+            Math.abs(prev.height - rect.height) > 0.5
+              ? { width: rect.width, height: rect.height }
+              : prev
+          );
+          return;
         }
+      }
+      if (window.innerWidth > 0 && window.innerHeight > 0) {
+        const fallbackH = Math.max(300, window.innerHeight - 64);
+        setViewport((prev) =>
+          Math.abs(prev.width - window.innerWidth) > 0.5 ||
+          Math.abs(prev.height - fallbackH) > 0.5
+            ? { width: window.innerWidth, height: fallbackH }
+            : prev
+        );
       }
     };
     updateViewport();
     window.addEventListener("resize", updateViewport);
-    return () => window.removeEventListener("resize", updateViewport);
-  }, [isMobileViewport]);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", updateViewport);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+      ro = new ResizeObserver(() => updateViewport());
+      ro.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      vv?.removeEventListener("resize", updateViewport);
+      ro?.disconnect();
+    };
+  }, [isMobileViewport, layout.nodes.length]);
 
   const currentLod: 0 | 1 | 2 = zoom >= 0.5 ? 0 : zoom >= 0.25 ? 1 : 2;
 
@@ -94,19 +135,24 @@ export function useTreeCanvasCamera(params: {
   const centerOnWorldPoint = useCallback(
     (worldX: number, worldY: number, nextZoom?: number, animate = true) => {
       const targetZoom = nextZoom ?? zoom;
+      const rect = containerRef.current?.getBoundingClientRect();
+      const effW = rect && rect.width > 0 ? rect.width : viewport.width;
+      const effH = rect && rect.height > 0 ? rect.height : viewport.height;
+      // On mobile, account for bottom nav bar (~56px) vs top toolbar (~56px) so focal card is centered in visible canvas
+      const visibleCenterY = isMobile ? Math.max(150, (effH - 24) / 2) : effH / 2;
       if (animate) {
         setIsAnimatingCamera(true);
       }
       setZoom(targetZoom);
       setPan({
-        x: viewport.width / 2 - worldX * targetZoom,
-        y: viewport.height / 2 - worldY * targetZoom,
+        x: effW / 2 - worldX * targetZoom,
+        y: visibleCenterY - worldY * targetZoom,
       });
       if (animate) {
         setTimeout(() => setIsAnimatingCamera(false), 260);
       }
     },
-    [viewport.width, viewport.height, zoom]
+    [viewport.width, viewport.height, zoom, isMobile]
   );
 
   const centerOnNode = useCallback(
@@ -156,11 +202,15 @@ export function useTreeCanvasCamera(params: {
       const centerX = minX + pathWidth / 2;
       const centerY = minY + pathHeight / 2;
 
+      const rect = containerRef.current?.getBoundingClientRect();
+      const effW = rect && rect.width > 0 ? rect.width : viewport.width;
+      const effH = rect && rect.height > 0 ? rect.height : viewport.height;
+
       // Add comfortable padding around the framed path
       const padX = isMobile ? 60 : 120;
       const padY = isMobile ? 80 : 140;
-      const scaleX = viewport.width / Math.max(300, pathWidth + padX * 2);
-      const scaleY = viewport.height / Math.max(240, pathHeight + padY * 2);
+      const scaleX = effW / Math.max(300, pathWidth + padX * 2);
+      const scaleY = effH / Math.max(240, pathHeight + padY * 2);
       const targetZoom = Math.min(1.0, Math.max(MIN_ZOOM, Math.min(scaleX, scaleY)));
 
       centerOnWorldPoint(centerX, centerY, targetZoom, true);
@@ -172,15 +222,18 @@ export function useTreeCanvasCamera(params: {
   const fitToScreen = useCallback(
     (animate = true) => {
       const b = layout.bounds;
-      const pad = 120;
-      const scaleX = viewport.width / Math.max(300, b.width + pad * 2);
-      const scaleY = viewport.height / Math.max(240, b.height + pad * 2);
+      const pad = isMobile ? 60 : 120;
+      const rect = containerRef.current?.getBoundingClientRect();
+      const effW = rect && rect.width > 0 ? rect.width : viewport.width;
+      const effH = rect && rect.height > 0 ? rect.height : viewport.height;
+      const scaleX = effW / Math.max(300, b.width + pad * 2);
+      const scaleY = effH / Math.max(240, b.height + pad * 2);
       const nextZoom = Math.min(1.15, Math.max(MIN_ZOOM, Math.min(scaleX, scaleY)));
       const centerX = b.minX + b.width / 2;
       const centerY = b.minY + b.height / 2;
       centerOnWorldPoint(centerX, centerY, nextZoom, animate);
     },
-    [layout.bounds, viewport.width, viewport.height, centerOnWorldPoint]
+    [layout.bounds, isMobile, viewport.width, viewport.height, centerOnWorldPoint]
   );
 
   // UX-040: Dynamic initial centering on focal node or fitToScreen, plus recentering on focalId change

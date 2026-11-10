@@ -24,6 +24,7 @@ import { Breadcrumbs, BreadcrumbItem } from './breadcrumbs';
 import { OmniboxDialog } from '../search';
 import { PwaInstallPrompt, PwaOfflineBanner } from '../pwa';
 import { buildLoginUrl } from '../../lib/navigation-utils';
+import { cn } from '../../lib/utils';
 
 export interface AppShellProps {
   currentPath?: string;
@@ -51,6 +52,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   const navigate = (path: string) => {
     setMobileMenuOpen(false);
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo(0, 0);
+    }
     if (onNavigate) {
       onNavigate(path);
     } else if (typeof window !== 'undefined') {
@@ -68,11 +72,21 @@ export const AppShell: React.FC<AppShellProps> = ({
     ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() || 'U'
     : null;
 
+  const isFullViewportRoute =
+    currentPath.startsWith('/tree') || currentPath.startsWith('/export/print');
+
   return (
-    <div className="min-h-screen flex flex-col bg-canvas text-primary pb-20 md:pb-0 transition-colors duration-200">
+    <div
+      className={cn(
+        'flex flex-col bg-canvas text-primary transition-colors duration-200',
+        isFullViewportRoute
+          ? 'fixed inset-0 overflow-hidden'
+          : 'min-h-screen pb-20 md:pb-0'
+      )}
+    >
       {/* Persistent Top Header */}
       <PwaOfflineBanner />
-      <header className="sticky top-0 z-30 w-full border-b border-border bg-surface/90 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
+      <header className="sticky top-0 z-30 shrink-0 w-full border-b border-border bg-surface/90 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 lg:px-8">
           {/* Left: Mobile Hamburger + Brand + Primary Links */}
           <div className="flex items-center gap-2 lg:gap-3 min-w-0 flex-1">
@@ -366,7 +380,14 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       {/* Main Content Viewport */}
       <PwaInstallPrompt instanceTitle={resolvedTitle} />
-      <main className="flex-1 w-full">{children}</main>
+      <main
+        className={cn(
+          'flex-1 w-full',
+          isFullViewportRoute && 'min-h-0 flex flex-col overflow-hidden'
+        )}
+      >
+        {children}
+      </main>
 
       {/* Footer (hidden on full-bleed /tree canvas and /export/print studio) */}
       {!currentPath.startsWith('/tree') && !currentPath.startsWith('/export/print') && (

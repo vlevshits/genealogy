@@ -324,7 +324,7 @@ export const FanChartCanvas: React.FC<FanChartCanvasProps> = ({
   return (
     <div
       data-testid="fan-chart-canvas"
-      className="relative flex flex-col items-center justify-center w-full h-full overflow-hidden p-4 pt-20 pb-20"
+      className="relative flex flex-col items-center justify-center w-full h-full overflow-hidden p-4 pt-18 pb-32 sm:pt-20 sm:pb-20"
     >
       {/* Fan Chart Controls Sub-Bar */}
       <div
