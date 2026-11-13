@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ControlSize } from '../../types/common';
 import { useI18n } from '../../i18n';
+import { useFloatingMenu } from './use-floating-menu';
 
 export interface SelectOption<T extends string = string> {
   value: T;
@@ -50,6 +52,8 @@ export function Select<T extends string = string>({
   const [internalVal, setInternalVal] = useState<T | undefined>(defaultValue);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuStyle = useFloatingMenu(containerRef, open);
 
   const currentValue = value !== undefined ? value : internalVal;
   const selectedOption = options.find((o) => o.value === currentValue);
@@ -57,7 +61,12 @@ export function Select<T extends string = string>({
   useEffect(() => {
     if (!open) return;
     const handleOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -142,12 +151,15 @@ export function Select<T extends string = string>({
         />
       </button>
 
-      {open ? (
+      {open && menuStyle ? (
+        createPortal(
         <div
+          ref={menuRef}
+          style={menuStyle}
           role="listbox"
           aria-label={resolvedAriaLabel || placeholder}
           className={cn(
-            'absolute top-full left-0 mt-1.5 z-50 w-full min-w-[180px] max-h-64 overflow-y-auto rounded-xl border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur-md'
+            'z-[70] overflow-y-auto rounded-xl border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur-md'
           )}
         >
           {options.map((opt, idx) => {
@@ -185,7 +197,9 @@ export function Select<T extends string = string>({
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
+        )
       ) : (
         <span className="sr-only" aria-hidden="true">
           {options.map((o) => o.label).join(' ')}

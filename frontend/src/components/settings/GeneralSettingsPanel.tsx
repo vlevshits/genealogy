@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Divider,
+  Combobox,
   Select,
   Switch,
   TextInput,
@@ -214,27 +215,22 @@ export const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
                 name="default_home_person_id"
                 label={t('settings.profile.selectHomePersonLabel')}
               >
-                <Select
+                <Combobox
                   ariaLabel={t('settings.general.defaultHomePersonLabel')}
-                  value={defaultHomePersonId}
-                  onChange={(val) => setDefaultHomePersonId(val)}
+                  value={defaultHomePersonId || null}
+                  onChange={(val) => setDefaultHomePersonId(val ?? '')}
                   disabled={isLocked}
-                  options={[
-                    {
-                      value: '',
-                      label: t('settings.profile.homePersonNoneOption'),
-                    },
-                    ...people.map((p) => ({
-                      value: p.id,
-                      label: `${[
-                        p.primary_name.given_name,
-                        p.primary_name.patronymic,
-                        p.primary_name.surname,
-                      ]
-                        .filter(Boolean)
-                        .join(' ')} (${p.gid})`,
-                    })),
-                  ]}
+                  placeholder={t('settings.profile.homePersonNoneOption')}
+                  options={people.map((p) => ({
+                    value: p.id,
+                    label: `${[
+                      p.primary_name.given_name,
+                      p.primary_name.patronymic,
+                      p.primary_name.surname,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')} (${p.gid})`,
+                  }))}
                 />
               </FormField>
             )}

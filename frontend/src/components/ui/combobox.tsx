@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, RotateCcw, Search, X } from 'lucide-react';
 import { cn, matchesCrossScript } from '../../lib/utils';
 import { getLocalizedErrorMessage } from '../../lib/error-formatter';
 import { Spinner } from './spinner';
 import { useI18n } from '../../i18n';
+import { useFloatingMenu } from './use-floating-menu';
 
 export interface ComboboxOption<T = unknown> {
   value: string;
@@ -72,6 +74,8 @@ export function Combobox<T = unknown>({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuStyle = useFloatingMenu(containerRef, open);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,7 +93,12 @@ export function Combobox<T = unknown>({
   useEffect(() => {
     if (!open) return;
     const handleOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -129,6 +138,8 @@ export function Combobox<T = unknown>({
     }, 150);
   };
 
+  const filterQuery = selectedOpt && query === selectedOpt.label ? '' : query;
+
   const displayedOptions: ComboboxOption<T>[] = loadOptions
     ? query.trim() === ''
       ? recent.length > 0
@@ -139,10 +150,10 @@ export function Combobox<T = unknown>({
         : options.filter((o) =>
             matchesCrossScript(`${o.label} ${o.description ?? ''}`, query)
           )
-    : query.trim() === '' && recent.length > 0
+    : filterQuery.trim() === '' && recent.length > 0
       ? recent
       : options.filter((o) =>
-          matchesCrossScript(`${o.label} ${o.description ?? ''}`, query)
+          matchesCrossScript(`${o.label} ${o.description ?? ''}`, filterQuery)
         );
 
   const selectOption = (opt: ComboboxOption<T>) => {
@@ -251,8 +262,10 @@ export function Combobox<T = unknown>({
         </div>
       </div>
 
-      {open && (
+      {open && menuStyle && createPortal(
         <div
+          ref={menuRef}
+          style={menuStyle}
           role="listbox"
           aria-label={ariaLabel || placeholder || t('common.search')}
           onScroll={(e) => {
@@ -266,7 +279,7 @@ export function Combobox<T = unknown>({
               onLoadMore?.();
             }
           }}
-          className="absolute z-40 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-lg"
+          className="z-[70] overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-lg"
         >
           {query.trim() === '' && recent.length > 0 && (
             <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
@@ -355,7 +368,8 @@ export function Combobox<T = unknown>({
               <span>{t('common.createOption', { query: query.trim() })}</span>
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

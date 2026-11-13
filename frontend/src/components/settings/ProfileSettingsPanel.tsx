@@ -5,6 +5,7 @@ import {
   Button,
   Divider,
   RoleBadge,
+  Combobox,
   Select,
   Switch,
   TextInput,
@@ -341,13 +342,12 @@ export const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
               name="home_person_id"
               label={t('settings.profile.selectHomePersonLabel')}
             >
-              <Select
+              <Combobox
                 ariaLabel={t('settings.profile.selectHomePersonLabel')}
-                value={homePersonId ?? ''}
-                onChange={(val) =>
-                  void handleSetOrClearHomePerson(val || null)
-                }
-                options={personOptions}
+                value={homePersonId || null}
+                onChange={(val) => void handleSetOrClearHomePerson(val || null)}
+                placeholder={t('settings.profile.homePersonNoneOption')}
+                options={personOptions.filter((o) => o.value !== '')}
               />
             </FormField>
           )}

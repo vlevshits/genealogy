@@ -3,6 +3,7 @@ import { Link2, UserPlus } from 'lucide-react';
 import {
   Alert,
   Button,
+  Combobox,
   Dialog,
   SegmentedControl,
   Select,
@@ -261,11 +262,11 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
             label={t('person.quickAdd.selectExistingLabel')}
             required
           >
-            <Select
+            <Combobox
               ariaLabel={t('person.quickAdd.selectExistingLabel')}
-              value={selectedExistingId}
+              value={selectedExistingId || null}
               placeholder={t('person.quickAdd.selectExistingPlaceholder')}
-              onChange={(val) => setSelectedExistingId(val)}
+              onChange={(val) => setSelectedExistingId(val ?? '')}
               options={candidateOptions}
             />
           </FormField>
