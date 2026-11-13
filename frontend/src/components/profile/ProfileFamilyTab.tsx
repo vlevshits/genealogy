@@ -4,14 +4,16 @@ import {
   ChevronRight,
   Heart,
   MapPin,
+  Unlink,
   UserPlus,
   Users,
 } from 'lucide-react';
-import { Avatar, Badge, Button, Card, EmptyState } from '../ui';
+import { Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, IconButton } from '../ui';
 import {
   ProfileChildSummaryDto,
   ProfileFamiliesDto,
   ProfileRelativeSummaryDto,
+  ProfileSpouseFamilyDto,
   QuickAddRelation,
 } from '../../api/client';
 import { useI18n } from '../../i18n';
@@ -27,6 +29,10 @@ export interface ProfileFamilyTabProps {
   accessTier?: string;
   onSelectRelative: (relativeId: string) => void;
   onQuickAdd: (relation: QuickAddRelation) => void;
+  /** Detach the spouse from the union (profile is kept). */
+  onRemoveSpouse?: (family: ProfileSpouseFamilyDto) => void;
+  /** Detach a child from the union (profile is kept). */
+  onRemoveChild?: (family: ProfileSpouseFamilyDto, childId: string) => void;
 }
 
 export function formatRelativeDisplayName(
@@ -65,13 +71,21 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
   accessTier = 'admin',
   onSelectRelative,
   onQuickAdd,
+  onRemoveSpouse,
+  onRemoveChild,
 }) => {
   const { t } = useI18n();
+  const [pendingRemoval, setPendingRemoval] = React.useState<
+    | { kind: 'spouse'; family: ProfileSpouseFamilyDto }
+    | { kind: 'child'; family: ProfileSpouseFamilyDto; childId: string }
+    | null
+  >(null);
 
   const renderRelativeCard = (
     rel: ProfileRelativeSummaryDto,
     roleBadgeLabel?: string,
-    pedigreeRelation?: string
+    pedigreeRelation?: string,
+    removal?: { label: string; onClick: () => void }
   ) => {
     const { name, isMaskedLiving } = formatRelativeDisplayName(rel, accessTier);
     const lifespanText = isMaskedLiving
@@ -127,6 +141,19 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
           </div>
         </div>
 
+        {removal && (
+          <IconButton
+            size="sm"
+            variant="ghost"
+            label={removal.label}
+            onClick={(e) => {
+              e.stopPropagation();
+              removal.onClick();
+            }}
+          >
+            <Unlink className="h-4 w-4" />
+          </IconButton>
+        )}
         <ChevronRight className="h-4 w-4 text-tertiary shrink-0" />
       </div>
     );
@@ -367,7 +394,15 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                   {sf.spouse ? (
                     renderRelativeCard(
                       sf.spouse,
-                      t('profile.family.spouseRole')
+                      t('profile.family.spouseRole'),
+                      undefined,
+                      canEdit && onRemoveSpouse
+                        ? {
+                            label: t('profile.family.removeSpouseAria'),
+                            onClick: () =>
+                              setPendingRemoval({ kind: 'spouse', family: sf }),
+                          }
+                        : undefined
                     )
                   ) : (
                     <div className="text-xs text-tertiary italic">
@@ -392,7 +427,18 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                               : rel.sex === 'F'
                               ? t('profile.family.daughterRole')
                               : t('profile.family.childRole'),
-                            pedigree
+                            pedigree,
+                            canEdit && onRemoveChild
+                              ? {
+                                  label: t('profile.family.removeChildAria'),
+                                  onClick: () =>
+                                    setPendingRemoval({
+                                      kind: 'child',
+                                      family: sf,
+                                      childId: rel.id,
+                                    }),
+                                }
+                              : undefined
                           );
                         })}
                       </div>
@@ -404,6 +450,32 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemoval(null);
+        }}
+        title={
+          pendingRemoval?.kind === 'child'
+            ? t('profile.family.removeChildTitle')
+            : t('profile.family.removeSpouseTitle')
+        }
+        description={
+          pendingRemoval?.kind === 'child'
+            ? t('profile.family.removeChildDesc')
+            : t('profile.family.removeSpouseDesc')
+        }
+        confirmLabel={t('profile.family.removeConfirm')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={() => {
+          if (pendingRemoval?.kind === 'spouse') {
+            onRemoveSpouse?.(pendingRemoval.family);
+          } else if (pendingRemoval?.kind === 'child') {
+            onRemoveChild?.(pendingRemoval.family, pendingRemoval.childId);
+          }
+          setPendingRemoval(null);
+        }}
+      />
     </div>
   );
 };

@@ -21,6 +21,7 @@ import {
 } from '../components/person';
 import { RecordHistoryDrawer } from '../components/history';
 import { useUndoToast } from '../hooks/useUndoToast';
+import { useFamilyLinkActions } from '../hooks/useFamilyLinkActions';
 import { PublicGuestBanner } from '../components/tree/PublicGuestBanner';
 import { formatTreeCardName } from '../components/tree/PersonNodeCard';
 import {
@@ -151,6 +152,11 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     }
     loadProfile();
   }, [initialProfile, loadProfile]);
+
+  const { removeSpouse, removeChild } = useFamilyLinkActions(
+    profile?.person.id ?? personId,
+    loadProfile
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined' || !profile) return;
@@ -502,6 +508,8 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
           accessTier={resolvedAccessTier}
           onSelectRelative={(relId) => navigateTo(`/persons/${relId}`)}
           onQuickAdd={(relation) => setQuickAddState({ open: true, relation })}
+          onRemoveSpouse={(sf) => void removeSpouse(sf)}
+          onRemoveChild={(sf, childId) => void removeChild(sf, childId)}
         />
       ),
     },

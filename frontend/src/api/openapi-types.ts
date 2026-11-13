@@ -138,8 +138,17 @@ export interface CreateFamilyInput {
   is_private?: boolean;
 }
 
+export interface FamilyChildLinkInput {
+  child_id: string;
+  sort_order: number;
+  rel_to_partner1: string;
+  rel_to_partner2: string;
+}
+
 export interface UpdateFamilyInput extends Partial<CreateFamilyInput> {
   version: number;
+  /** Full replacement of the child links (omit to leave children unchanged). */
+  children?: FamilyChildLinkInput[];
 }
 
 export interface PersonDetailDto {

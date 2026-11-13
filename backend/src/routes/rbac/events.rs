@@ -429,8 +429,51 @@ pub async fn delete_event(
         }
     }
 
+    // Removing a marriage dissolves a childless union so the spouse disappears from
+    // relatives. A union with children is retained to keep their parental links
+    // (the spouse can then be detached explicitly via `PATCH /families/{id}`).
+    let mut dissolved_family = None;
+    if removed_ev.event_type == "marriage" {
+        if let Some(ref fam_id) = removed_ev.family_id {
+            let dissolve = store
+                .families
+                .iter()
+                .find(|f| &f.id == fam_id)
+                .is_some_and(|f| f.children.is_empty());
+            if dissolve {
+                if let Some(pos) = store.families.iter().position(|f| &f.id == fam_id) {
+                    let fam = store.families.remove(pos);
+                    store
+                        .events
+                        .retain(|e| e.family_id.as_deref() != Some(fam.id.as_str()));
+                    dissolved_family = Some(fam);
+                }
+            }
+        }
+    }
+
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+
+    if let Some(fam) = dissolved_family {
+        log_change(
+            &mut store,
+            None,
+            "family.delete",
+            "family",
+            &fam.id,
+            "delete",
+            Some(fam.gid.clone()),
+            format!(
+                "Dissolved childless family union {} (marriage removed)",
+                fam.gid
+            ),
+            serde_json::to_value(&fam).ok(),
+            None,
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        );
+    }
 
     log_change(
         &mut store,
