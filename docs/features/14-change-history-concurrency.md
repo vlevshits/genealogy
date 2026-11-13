@@ -62,7 +62,8 @@ CREATE TABLE tree_snapshots (
 ### 3.3 Restore & Undo
 | Action | Who | Behavior |
 | :--- | :--- | :--- |
-| **Undo toast** | The author | After any save/delete, a 6-second *"Undo"* toast reverts the whole transaction. |
+| **Undo toast (Saves & Deletes)** | The author | After any save or delete, a 6-second *"Undo"* toast reverts the whole transaction. |
+| **Undo toast (Relationship Mutations)** | The author | After unlinking a parent/child/spouse, moving a child (`family.move_child`), changing child relations, reordering children, or changing union type, an immediate 6-second *"Undo"* toast reverts the relationship transaction. |
 | **Restore deleted record** | Editor+ | Re-creates the record and its owned children/links from `before`. If linked records no longer exist, those links are skipped and reported. |
 | **Revert a field change** | Editor+ | Applies `before` values for the changed fields as a **new** change (history is append-only). Blocked with explanation if the field was changed again later. |
 | **Rollback snapshot** | Admin | Restores all genealogy tables from a `tree_snapshot`; listed in *Settings → Backups*; requires typed confirmation. A safety snapshot of the current state is taken first. |
@@ -98,7 +99,7 @@ The dashboard ([16](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/fe
 - [ ] **Complete Logging:** Every create/update/delete through the API produces a `change_log` entry inside the same transaction.
 - [ ] **Readable Feed:** History shows human-readable, localized sentences grouped by user action, not raw rows.
 - [ ] **Restore Deleted Person:** A deleted person can be restored with their events, notes, face tags, and family links.
-- [ ] **Undo Toast:** Every destructive action offers an immediate undo.
+- [ ] **Undo Toast:** Every destructive action and relationship mutation (unlink parent/child/spouse, move child, change relation, reorder) offers an immediate 6-second undo toast.
 - [ ] **No Silent Overwrites:** Two editors saving the same record → the second receives `409` and a resolution dialog.
 - [ ] **Snapshot Rollback:** Admin can roll back a merge/import snapshot; a pre-rollback snapshot is created automatically.
 - [ ] **Retention:** Entries older than `HISTORY_RETENTION_DAYS` and expired snapshots are pruned by the nightly job.

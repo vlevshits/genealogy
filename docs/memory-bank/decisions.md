@@ -117,5 +117,10 @@ This document records the architectural, design, and structural decisions made a
   3. In `frontend/src/pages/AiStoryIntakePage.tsx`, query `ai_enabled` via `GET /api/v1/system/info`. When false, present a clear warning banner (`geminiRequiredBanner`) instructing administrators to set `GEMINI_API_KEY` in their `.env` file, and guard extraction actions with an informative error toast.
 - **Consequences:** Eliminates confusing, low-quality regex subtree artifacts in production; provides clear, actionable feedback to administrators when Gemini credentials are unconfigured; streamlines the intake UI by removing redundant engine toggles; preserves fast, offline execution for automated integration test suites.
 
-_Last curated: 2026-11-09 (ADR-014: Pure LLM Gemini extraction enforced, local regex fallback removed from production, explicit GEMINI_API_KEY validation)_
+### ADR-015: Family Link Editing Via Dedicated Detach/Move Endpoints With Two Dissolve Rules
+- **Status:** Accepted
+- **Context:** Users must fix wrong parent/spouse links without deleting profiles. PATCH/DELETE of whole families was too coarse.
+- **Decision:** `POST /persons/{id}/move-to-family`, `DELETE /families/{id}/children/{child_id}` and `DELETE /families/{id}/partners/{person_id}` (`backend/src/routes/rbac/family_moves.rs`), all undoable via one `tx_id`. A family is dissolved when it has no children and <=1 partner (`is_orphaned_family`); removing a marriage event dissolves any childless union (`is_childless_union`). Single-parent families are allowed.
+- **Consequences:** Profiles are never deleted; see [GOT-016](#got-016-family-edits--partner-slots-undo-logging-order-vec-index-shift-lf-endings). Child relation editor, union type editor and reorder are deferred (P2).
 
+_Last curated: 2026-11-13 (ADR-015 family link editing)_

@@ -142,7 +142,10 @@ CREATE TABLE family_children (
 ```
 - Partners are **role-neutral** (`partner1`/`partner2`), supporting same-sex couples. GEDCOM export maps to `HUSB`/`WIFE` by sex (fallback: partner1 → `HUSB`).
 - A child may belong to several families (birth family + adoptive family).
-- A single parent is a family with one partner.
+- **Single Parent / Unknown Other Parent:** A single parent is a family with one partner (`partner1_id = id`, `partner2_id IS NULL`). The database **never** creates placeholder or dummy person records (e.g. "Unknown Father", "N.N.") to represent an unknown parent.
+- **Divorce Semantics:** Divorce is an event (`event_type = 'divorce'` in `life_events` where `family_id = families.id`), NOT a `relationship_type`. When divorce is recorded, the `families` row and `family_children` links remain intact; the union is marked as ended, preserving parentage and children distribution buses.
+- **Child Relationships:** `rel_to_partner1` and `rel_to_partner2` store per-parent relationship types (`birth`, `adopted`, `foster`, `step`, `unknown`).
+- **Ordering:** `family_children.sort_order` tracks chronological or custom child order. Spouses order chronologically by marriage date by default, with manual override support.
 
 ### 4.3 Life Events
 ```sql
@@ -288,16 +291,20 @@ is_living(person):
 
 Soft warnings (death before birth, mother aged 9, etc.) are defined in [15-data-quality-duplicates.md](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/15-data-quality-duplicates.md).
 
-### 6.2 Delete Behavior
-| Deleting… | Effect | UX |
+### 6.2 Delete & Unlink Behavior
+| Action | Effect | UX |
 | :--- | :--- | :--- |
-| **Person** | Their events, alt names, notes, face tags, media links are removed. Families: their partner slot set to `NULL`; child links removed. A family left with **no partners and no children** is deleted. `users.person_id` → `NULL`. Media files are **never** deleted. | Confirmation shows impact: *"Deletes 6 events, unlinks 2 families and 4 photos"*. Restorable from History. |
-| **Family** | Its events and child links removed. Partners and children remain as persons. | Confirmation lists affected people. |
-| **Event** | Its notes and media links removed. | Inline undo toast (5 s). |
-| **Place** | **Blocked** while referenced; offer *"Merge into another place"* instead. | See [12](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/12-places.md). |
-| **Media asset** | Links + face tags removed; file moved to `media/.trash` for 30 days. | Restorable. |
+| **Delete Person** | Their events, alt names, notes, face tags, media links are removed. Families: their partner slot set to `NULL`; child links removed. A family left with **no partners and no children** is deleted. `users.person_id` → `NULL`. Media files are **never** deleted. | Confirmation shows impact: *"Deletes 6 events, unlinks 2 families and 4 photos"*. Restorable from History. |
+| **Delete Family** | Its events and child links removed. Partners and children remain as persons. | Confirmation lists affected people. |
+| **Delete Event** | Its notes and media links removed. Deleting a marriage event on a childless family dissolves the family; families with children are retained. | Inline undo toast (6 s). |
+| **Unlink Parent** | Removes `(family_id, child_id)` from `family_children`. In couple families, user can unlink one parent (child moves to single-parent family) or both. If family is left with 0 children and $\le 1$ partner, it dissolves. Profiles are **kept**. | Confirmation modal explains remaining links; 6 s Undo toast. |
+| **Unlink Child** | Removes `(family_id, child_id)` from `family_children`. If family is left with 0 children and $\le 1$ partner, it dissolves. Profiles are **kept**. | Confirmation modal; 6 s Undo toast. |
+| **Unlink Spouse** | Partner slot cleared. If the union has children, the family container is **retained** as a single-parent family; if 0 children, the family container dissolves. Profiles are **kept**. | Confirmation modal; 6 s Undo toast. |
+| **Move Child** | Removes child from old family and inserts into target family in a single atomic transaction. Pre-move cycle validation rejects self/descendant loops. | Pre-move confirmation with cycle check; 6 s Undo toast. |
+| **Delete Place** | **Blocked** while referenced; offer *"Merge into another place"* instead. | See [12](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/12-places.md). |
+| **Delete Media asset** | Links + face tags removed; file moved to `media/.trash` for 30 days. | Restorable. |
 
-All deletes write a `change_log` entry with the full pre-delete snapshot so they can be restored.
+All deletes and unlinking mutations write a `change_log` entry with the full pre-mutation snapshot so they can be restored via `POST /api/v1/history/tx/{tx_id}/undo`.
 
 ---
 

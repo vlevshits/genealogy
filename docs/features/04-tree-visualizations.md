@@ -341,6 +341,24 @@ Bottom-up width calculation recursively accounts for all unions and partitioned 
    - Remarriage partners of direct ancestors and collateral half-siblings are pruned, keeping the ancestral cascade strictly confined to biological direct lineage.
    - The focal person's own multiple spouses and direct children remain fully rendered.
 
+#### 2.7.7 Divorce Semantics & Canvas Connector Representation
+When a union has an associated `divorce` event recorded in `life_events` ([07 §4.2](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/07-person-family-management.md#42-divorce-semantics-vs-mistaken-link-unlink-vs-deceased-partner)):
+1. **Connector Styling:**
+   - The warm ochre marriage connector bar (`--color-brand-accent`) displays double diagonal slash hatch marks (`//`) at its midpoint (or renders as a dashed ochre path with `strokeDasharray="6 3"`), providing standard genealogical notation that the union legally ended.
+   - The union anchor dot $(X_{\text{union}}, Y + H_{\text{card}} / 2)$ is preserved on the marriage bar.
+2. **Children Distribution Bus Preservation:**
+   - The vertical drop stem and horizontal children distribution bus descending from the anchor remain 100% intact. Children are biologically tied to the union regardless of divorce; under no circumstances are children detached or hidden.
+3. **Connection HUD Details:**
+   - Clicking the divorced marriage line opens `ConnectionNavPopover` displaying a "Divorced" badge (`Badge variant="neutral"`), the date and place of the divorce, and the duration of the marriage, rather than the standard wedding-only header.
+
+#### 2.7.8 Single-Parent Families & "Unknown Other Parent" Representation
+When an individual has children without a recorded second spouse ([07 §4.7](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/07-person-family-management.md#47-single-parent-families--other-parent-unknown-no-placeholder-people)):
+1. **Vertical Direct Stem Drop:**
+   - A single vertical stem drops directly from the bottom-center of the parent's card ($(X_P + W_{\text{card}} / 2, Y_P + H_{\text{card}})$) down to the dedicated single-parent distribution bus lane at $Y_{\text{bus, single}}$.
+2. **Zero Dummy / Ghost Nodes:**
+   - Absolutely NO dummy "Unknown", "N.N.", or "?" placeholder cards are created or rendered on the canvas.
+   - The single parent's card is not paired with a phantom partner box; the canvas geometry remains clean and compact.
+
 ---
 
 ## 3. Visual Design & Card Anatomy
@@ -378,6 +396,7 @@ All tree connector lines are rendered as crisp vector paths with semantic color 
    - **Color:** Warm Archival Ochre / Amber (`--color-brand-accent` / `--color-fan-3`: Light `#C68A34`, Dark `#D9A04B`).
    - **Stroke Weight:** $2.5\text{px}$ solid line.
    - **Union Anchor Dot:** Midpoint anchor circle ($r = 3\text{px}$, warm ochre fill) at $(X_{\text{union}}, Y + H_{\text{card}} / 2)$ marking the partnership root.
+   - **Divorce Notation:** When a `divorce` event is recorded for the union, the ochre connector displays with diagonal double-slash hatch marks (`//`) at center (or dashed `strokeDasharray="6 3"`), with the union anchor and children distribution bus preserved intact.
    - **Visual Character:** The warm amber tone creates an immediate, welcoming distinction between marital partnerships and genealogical descent lines, eliminating visual ambiguity in crowded clusters.
 2. **Direct Lineage Parent-Child (`kind === 'parent_child' && is_direct_lineage`):**
    - **Color:** Primary Brand Blue (`--color-brand-primary`: Light `#2D5584`, Dark `#4F7EB5`).
@@ -728,5 +747,7 @@ All UI labels respect bilingual parity (English / Russian) with zero icon glyphs
 - [ ] **Multi-Trace Kinship Calculation:** `GET /api/v1/kinship` and local graph calculator discover up to 5 distinct genealogical paths connecting two individuals across multiple marriages, remarriages, and collateral branches, ranking direct biological traces first followed by affinal/step traces.
 - [ ] **Multi-Trace Selection in Kinship Dialog:** When multiple relationship paths exist, `KinshipFinderDialog` renders segmented trace switcher tabs displaying the specific relationship title, degree, common ancestor(s), step-by-step breadcrumb ladder, and a "Highlight All Paths" trigger.
 - [ ] **Multi-Trace Canvas Visualization:** The tree canvas renders multiple kinship traces simultaneously with distinct palette colors (Trace 1: Primary Brand Blue $3.5\text{px}$ solid glow; Trace 2: Warm Archival Ochre $3.0\text{px}$; Trace 3: Regal Violet $3.0\text{px}$) with matching node card rings.
+- [ ] **Divorced Union Representation:** Marriages with a recorded `divorce` event render with double diagonal hatch marks (`//`) or dashed ochre paths on the canvas, while the downward children distribution bus and union anchor remain fully intact.
+- [ ] **Single-Parent Canvas Layout:** Single parents with children drop a clean direct stem into a dedicated distribution bus lane with zero dummy or phantom person cards rendered on the canvas.
 - [ ] **Floating Multi-Trace Legend HUD:** Canvas displays a compact floating legend chip showing active traces with color badges, 1-click camera lerp to each trace, and a "Clear Highlights" (`✕`) button.
 - [ ] **Localization Parity:** English and Russian strings are fully provided for all new controls with zero raw English leakage and zero icon glyphs in JSON string values.

@@ -21,6 +21,7 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - [GOT-013: Stale or Invalid Session Cookies Blocking Anonymous Access on Public Instances](#got-013-stale-or-invalid-session-cookies-blocking-anonymous-access-on-public-instances)
 - [GOT-014: Serialized "null" or "undefined" Tokens in Browser Storage Causing Permanent 401 Loops](#got-014-serialized-null-or-undefined-tokens-in-browser-storage-causing-permanent-401-loops)
 - [GOT-015: Story Intake Commit Deserialization Failure on draft_person_id vs draft_temp_id](#got-015-story-intake-commit-deserialization-failure-on-draft_person_id-vs-draft_temp_id)
+- [GOT-016: Family Edits — Partner Slots, Undo Logging Order, Vec Index Shift, LF Endings](#got-016-family-edits--partner-slots-undo-logging-order-vec-index-shift-lf-endings)
 
 ---
 
@@ -114,4 +115,12 @@ This register catalogs known pitfalls, subtleties, edge cases, and past bugs wit
 - **Root Cause:** Naming discrepancy between client/MCP callers sending `draft_person_id` (and `target_person_id`) and the backend Rust struct `DraftMatchOverrideDto` expecting `draft_temp_id` and `matched_person_id`. Additionally, `getLocalizedErrorMessage` previously masked specific validation details behind the generic "Validation failed" string, hiding the exact missing field name.
 - **Rule:** Use `#[serde(alias = "...")]` on Rust DTO structs to support alternative parameter naming aliases across client, MCP, and external callers. On the frontend, provide both aliases (`draft_temp_id` + `draft_person_id`, `matched_person_id` + `target_person_id`) in client commit payloads for backward compatibility, and preserve specific backend error messages for `validation_failed` in `error-formatter.ts`.
 
-_Last curated: 2026-11-09 (GOT-015 Story intake commit deserialization aliases & error formatting)_
+### GOT-016: Family Edits — Partner Slots, Undo Logging Order, Vec Index Shift, LF Endings
+- **Partner slots:** after clearing a partner, call `normalize_partner_slots` (`backend/src/routes/rbac/family_moves.rs`): a lone partner must sit in `partner1_id` and each child's `rel_to_partner1` is remapped from the old `rel_to_partner2`; otherwise pedigree relations point at the wrong parent.
+- **Undo:** log the pre-edit snapshot (same `tx_id`) *before* `dissolve_family` removes the family (`commit_family_edit`); logging after loses the undo record. Mutating endpoints return `tx_id` (JSON `FamilyMutationResponse`) or the `X-Transaction-Id` header (`DELETE /families/{id}`, `DELETE /events/{id}`).
+- **Vec index shift:** families live in a `Vec` in the privacy store; removing one shifts later indexes, so re-resolve by id instead of reusing a stored index.
+- **Two dissolve rules on purpose:** `is_childless_union` (no children, any partner count) for marriage-event removal; `is_orphaned_family` (no children AND <=1 partner) for unlink/detach/PATCH. Do not unify them.
+- **Line endings:** files in this repo checked in with LF; edits by tools that write CRLF produce whole-file diffs — keep LF.
+- **QuickAdd link picker:** `QuickAddRelativeDialog.tsx` once read an never-populated `existingPeople` prop (empty picker); it now uses server search `fetchPeopleDirectory({ q, limit: 20 })`.
+
+_Last curated: 2026-11-13 (GOT-016 family link editing)_

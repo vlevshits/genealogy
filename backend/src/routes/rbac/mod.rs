@@ -100,6 +100,8 @@ pub mod quick_add;
 pub use quick_add::*;
 pub mod person_delete_families;
 pub use person_delete_families::*;
+pub mod family_moves;
+pub use family_moves::*;
 pub mod events;
 pub use events::*;
 pub mod notes_media_files;

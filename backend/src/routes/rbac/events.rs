@@ -377,7 +377,7 @@ pub async fn update_event(
         ("id" = String, Path, description = "Event UUID or GID")
     ),
     responses(
-        (status = 204, description = "Life event deleted and vitals recomputed"),
+        (status = 204, description = "Life event deleted and vitals recomputed; a childless union is dissolved when its marriage event is removed. Undo transaction id in the `X-Transaction-Id` header"),
         (status = 404, description = "Event not found", body = ErrorResponse)
     ),
     tag = "Tree & Privacy"
@@ -386,7 +386,7 @@ pub async fn delete_event(
     RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<StatusCode, AppError> {
+) -> Result<(StatusCode, [(&'static str, String); 1]), AppError> {
     let settings = state.resolve_instance_settings().await;
     let current_year = Utc::now().year();
     let age_threshold = settings.living_person_age_threshold as i32;
@@ -429,56 +429,24 @@ pub async fn delete_event(
         }
     }
 
-    // Removing a marriage dissolves a childless union so the spouse disappears from
-    // relatives. A union with children is retained to keep their parental links
-    // (the spouse can then be detached explicitly via `PATCH /families/{id}`).
-    let mut dissolved_family = None;
-    if removed_ev.event_type == "marriage" {
-        if let Some(ref fam_id) = removed_ev.family_id {
-            let dissolve = store
-                .families
-                .iter()
-                .find(|f| &f.id == fam_id)
-                .is_some_and(|f| f.children.is_empty());
-            if dissolve {
-                if let Some(pos) = store.families.iter().position(|f| &f.id == fam_id) {
-                    let fam = store.families.remove(pos);
-                    store
-                        .events
-                        .retain(|e| e.family_id.as_deref() != Some(fam.id.as_str()));
-                    dissolved_family = Some(fam);
-                }
-            }
-        }
-    }
-
+    // Removing a marriage event dissolves a *childless* union (whatever its partner
+    // count) so the spouse disappears from relatives; a union with children is
+    // retained to keep their parental links (`is_childless_union`). This differs on
+    // purpose from `is_orphaned_family` (no children AND <= 1 partner) used when
+    // unlinking children/partners: the marriage fact is what made the union exist.
+    let tx_id = Uuid::new_v4().to_string();
+    let tx_label = "event.delete";
+    let actor = (
+        Some(editor.user.id.to_string()),
+        Some(editor.user.display_name()),
+    );
     recompute_all_places_metadata(&mut store);
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-    if let Some(fam) = dissolved_family {
-        log_change(
-            &mut store,
-            None,
-            "family.delete",
-            "family",
-            &fam.id,
-            "delete",
-            Some(fam.gid.clone()),
-            format!(
-                "Dissolved childless family union {} (marriage removed)",
-                fam.gid
-            ),
-            serde_json::to_value(&fam).ok(),
-            None,
-            Some(editor.user.id.to_string()),
-            Some(editor.user.display_name()),
-        );
-    }
-
     log_change(
         &mut store,
-        None,
-        "event.delete",
+        Some(tx_id.clone()),
+        tx_label,
         "event",
         &removed_ev.id,
         "delete",
@@ -486,11 +454,25 @@ pub async fn delete_event(
         format!("Deleted {} event {}", removed_ev.event_type, removed_ev.gid),
         serde_json::to_value(&removed_ev).ok(),
         None,
-        Some(editor.user.id.to_string()),
-        Some(editor.user.display_name()),
+        actor.0.clone(),
+        actor.1.clone(),
     );
 
-    Ok(StatusCode::NO_CONTENT)
+    if removed_ev.event_type == "marriage" {
+        if let Some(ref fam_id) = removed_ev.family_id {
+            let dissolve = store
+                .families
+                .iter()
+                .find(|f| &f.id == fam_id)
+                .is_some_and(is_childless_union);
+            if dissolve {
+                dissolve_family(&mut store, fam_id, &tx_id, tx_label, None, actor);
+                recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+            }
+        }
+    }
+
+    Ok((StatusCode::NO_CONTENT, [("x-transaction-id", tx_id)]))
 }
 
 #[utoipa::path(

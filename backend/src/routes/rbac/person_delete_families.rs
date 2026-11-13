@@ -488,7 +488,7 @@ pub async fn create_family(
     ),
     request_body = UpdateFamilyRequest,
     responses(
-        (status = 200, description = "Family union updated", body = FamilyDto),
+        (status = 200, description = "Family union updated; `tx_id` is undoable via /history/tx/{tx_id}/undo, `dissolved` is true when an emptied single-parent union was removed", body = FamilyMutationResponse),
         (status = 400, description = "Validation error or ancestor cycle detected", body = ErrorResponse),
         (status = 404, description = "Family not found", body = ErrorResponse),
         (status = 409, description = "Optimistic locking version conflict", body = ErrorResponse)
@@ -501,7 +501,7 @@ pub async fn update_family(
     Path(id): Path<String>,
     headers: HeaderMap,
     Json(req): Json<UpdateFamilyRequest>,
-) -> Result<Json<FamilyDto>, AppError> {
+) -> Result<Json<FamilyMutationResponse>, AppError> {
     let settings = state.resolve_instance_settings().await;
     let current_year = Utc::now().year();
     let age_threshold = settings.living_person_age_threshold as i32;
@@ -586,10 +586,13 @@ pub async fn update_family(
         }
     }
 
+    let was_orphaned = is_orphaned_family(&store.families[fam_idx]);
+
     let fam = &mut store.families[fam_idx];
     fam.partner1_id = next_p1;
     fam.partner2_id = next_p2;
     fam.children = next_children;
+    normalize_partner_slots(fam);
     if let Some(rel_type) = req.relationship_type {
         fam.relationship_type = normalize_relationship_type(&rel_type);
     }
@@ -599,24 +602,32 @@ pub async fn update_family(
     fam.version += 1;
 
     let updated = fam.clone();
-    recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
-
-    log_change(
-        &mut store,
-        None,
-        "family.update",
-        "family",
-        &updated.id,
-        "update",
-        Some(updated.gid.clone()),
-        format!("Updated family union {}", updated.gid),
-        before_json,
-        serde_json::to_value(&updated).ok(),
+    let tx_id = Uuid::new_v4().to_string();
+    let actor = (
         Some(editor.user.id.to_string()),
         Some(editor.user.display_name()),
     );
 
-    Ok(Json(updated))
+    // Dissolve when the update leaves the union orphaned (no children, <= 1 partner),
+    // i.e. a child was removed or a partner slot was cleared.
+    let dissolved = !was_orphaned && is_orphaned_family(&updated);
+    commit_family_edit(
+        &mut store,
+        before_json,
+        &updated,
+        dissolved,
+        &tx_id,
+        "family.update",
+        format!("Updated family union {}", updated.gid),
+        actor,
+    );
+    recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
+
+    Ok(Json(FamilyMutationResponse {
+        family: updated,
+        tx_id,
+        dissolved,
+    }))
 }
 
 #[utoipa::path(
@@ -626,7 +637,7 @@ pub async fn update_family(
         ("id" = String, Path, description = "Family UUID or GID")
     ),
     responses(
-        (status = 204, description = "Family union deleted while keeping partner and child individuals intact"),
+        (status = 204, description = "Family union deleted while keeping partner and child individuals intact; undo transaction id in the `X-Transaction-Id` response header"),
         (status = 404, description = "Family not found", body = ErrorResponse)
     ),
     tag = "Tree & Privacy"
@@ -635,7 +646,7 @@ pub async fn delete_family(
     RequireEditor(editor): RequireEditor,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<StatusCode, AppError> {
+) -> Result<(StatusCode, [(&'static str, String); 1]), AppError> {
     let settings = state.resolve_instance_settings().await;
     let current_year = Utc::now().year();
     let age_threshold = settings.living_person_age_threshold as i32;
@@ -648,28 +659,21 @@ pub async fn delete_family(
         .position(|f| f.id == target || f.gid.eq_ignore_ascii_case(target))
         .ok_or(AppError::NotFound)?;
 
-    let removed_fam = store.families.remove(fam_idx);
-    store
-        .events
-        .retain(|e| e.family_id.as_deref() != Some(removed_fam.id.as_str()));
-
-    recompute_all_places_metadata(&mut store);
+    let fam_id = store.families[fam_idx].id.clone();
+    let before = serde_json::to_value(&store.families[fam_idx]).ok();
+    let tx_id = Uuid::new_v4().to_string();
+    dissolve_family(
+        &mut store,
+        &fam_id,
+        &tx_id,
+        "family.delete",
+        before,
+        (
+            Some(editor.user.id.to_string()),
+            Some(editor.user.display_name()),
+        ),
+    );
     recompute_all_individuals_vitals(&mut store, current_year, age_threshold);
 
-    log_change(
-        &mut store,
-        None,
-        "family.delete",
-        "family",
-        &removed_fam.id,
-        "delete",
-        Some(removed_fam.gid.clone()),
-        format!("Deleted family union {}", removed_fam.gid),
-        serde_json::to_value(&removed_fam).ok(),
-        None,
-        Some(editor.user.id.to_string()),
-        Some(editor.user.display_name()),
-    );
-
-    Ok(StatusCode::NO_CONTENT)
+    Ok((StatusCode::NO_CONTENT, [("x-transaction-id", tx_id)]))
 }

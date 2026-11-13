@@ -151,6 +151,33 @@ export interface UpdateFamilyInput extends Partial<CreateFamilyInput> {
   children?: FamilyChildLinkInput[];
 }
 
+/** `PATCH /families/{id}` response: the family plus undo transaction id. */
+export interface UpdateFamilyResponse extends FamilyDto {
+  tx_id?: string;
+  /** True when the family was removed (no children and <=1 partner left). */
+  dissolved?: boolean;
+}
+
+/** Body of `POST /persons/{id}/move-to-family`. */
+export interface MoveToFamilyInput {
+  family_id?: string;
+  partner1_id?: string;
+  partner2_id?: string;
+  from_family_id?: string;
+  rel_to_partner1?: string;
+  rel_to_partner2?: string;
+}
+
+export interface MoveToFamilyResponse {
+  person_id: string;
+  target_family: FamilyDto;
+  target_family_created: boolean;
+  source_family_id: string | null;
+  source_family: FamilyDto | null;
+  source_family_dissolved: boolean;
+  tx_id: string;
+}
+
 export interface PersonDetailDto {
   id: string;
   gid: string;

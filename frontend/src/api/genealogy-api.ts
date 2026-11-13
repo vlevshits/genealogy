@@ -35,7 +35,10 @@ import {
   SurnamesIndexResponse,
   TreeViewQuery,
   TreeViewResponse,
+  MoveToFamilyInput,
+  MoveToFamilyResponse,
   UpdateFamilyInput,
+  UpdateFamilyResponse,
   UpdateLifeEventInput,
   UpdateNoteInput,
   UpdatePersonInput,
@@ -153,20 +156,68 @@ export async function createFamily(
   });
 }
 
+export async function fetchFamily(id: string): Promise<FamilyDto> {
+  return apiFetch<FamilyDto>(`/families/${encodeURIComponent(id)}`);
+}
+
 export async function updateFamily(
   id: string,
   payload: UpdateFamilyInput
-): Promise<FamilyDto> {
-  return apiFetch<FamilyDto>(`/families/${encodeURIComponent(id)}`, {
+): Promise<UpdateFamilyResponse> {
+  return apiFetch<UpdateFamilyResponse>(`/families/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
-export async function deleteFamily(id: string): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>(`/families/${encodeURIComponent(id)}`, {
+/** Detach one child from a family (single undoable tx; may dissolve the family). */
+export async function detachFamilyChild(
+  familyId: string,
+  childId: string,
+  version?: number
+): Promise<UpdateFamilyResponse> {
+  const qs = version !== undefined ? `?version=${version}` : '';
+  return apiFetch<UpdateFamilyResponse>(
+    `/families/${encodeURIComponent(familyId)}/children/${encodeURIComponent(childId)}${qs}`,
+    { method: 'DELETE' }
+  );
+}
+
+/** Detach one partner from a family (single undoable tx; may dissolve the family). */
+export async function detachFamilyPartner(
+  familyId: string,
+  personId: string,
+  version?: number
+): Promise<UpdateFamilyResponse> {
+  const qs = version !== undefined ? `?version=${version}` : '';
+  return apiFetch<UpdateFamilyResponse>(
+    `/families/${encodeURIComponent(familyId)}/partners/${encodeURIComponent(personId)}${qs}`,
+    { method: 'DELETE' }
+  );
+}
+
+/** Deletes a family; the undo transaction id comes from `X-Transaction-Id`. */
+export async function deleteFamily(
+  id: string
+): Promise<{ tx_id: string | null }> {
+  let txId: string | null = null;
+  await apiFetch<void>(`/families/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    onResponse: (res) => {
+      txId = res.headers.get('X-Transaction-Id');
+    },
   });
+  return { tx_id: txId };
+}
+
+export async function moveToFamily(
+  personId: string,
+  payload: MoveToFamilyInput
+): Promise<MoveToFamilyResponse> {
+  return apiFetch<MoveToFamilyResponse>(
+    `/persons/${encodeURIComponent(personId)}/move-to-family`,
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
 }
 
 export async function fetchPlaces(params?: {

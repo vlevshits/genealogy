@@ -153,7 +153,7 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
     loadProfile();
   }, [initialProfile, loadProfile]);
 
-  const { removeSpouse, removeChild } = useFamilyLinkActions(
+  const { removeSpouse, removeChild, unlinkParent, unlinkParentOnly, moveToFamily } = useFamilyLinkActions(
     profile?.person.id ?? personId,
     loadProfile
   );
@@ -506,10 +506,14 @@ export const PersonProfilePage: React.FC<PersonProfilePageProps> = ({
           families={profile.families}
           canEdit={effectiveCanEdit}
           accessTier={resolvedAccessTier}
+          personId={profile.person.id}
           onSelectRelative={(relId) => navigateTo(`/persons/${relId}`)}
           onQuickAdd={(relation) => setQuickAddState({ open: true, relation })}
           onRemoveSpouse={(sf) => void removeSpouse(sf)}
           onRemoveChild={(sf, childId) => void removeChild(sf, childId)}
+          onUnlinkParent={(pf) => void unlinkParent(pf)}
+          onUnlinkParentOnly={(pf, otherId) => void unlinkParentOnly(pf, otherId)}
+          onMoveToFamily={moveToFamily}
         />
       ),
     },

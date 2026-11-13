@@ -81,8 +81,43 @@ The Person Profile page provides an immersive, biographical deep-dive into an in
     - Narrative biography markdown text block.
 - **Tab 2: Family & Relations:**
   - Structured card groups:
-    - **Parents & Siblings**
-    - **Spouses & Children** (distinguishing biological, adopted, or step relationships).
+    - **Group 1: Parents & Siblings:**
+      - Header actions: `+ Add Father`, `+ Add Mother`, `+ Add Sibling` buttons (Editors/Admins).
+      - **Parent Cards:**
+        - Identity: Avatar, display name, vital dates, role badge (`Father` / `Mother`), and pedigree relation dropdown (`Birth`, `Adopted`, `Foster`, `Step`).
+        - **Unlink Button (`Unlink` icon):** Detaches the child from the parent.
+          - *Single-parent family:* Confirms removal; dissolves family container if left childless.
+          - *Two-parent couple family:* Confirmation dialog offers:
+            1. *"Unlink [Name] only":* Retains child with the other parent by transitioning to a single-parent family container for the other parent.
+            2. *"Unlink from parental family":* Detaches child from both parents.
+        - **"Change parents…" Button (`ArrowRightLeft` icon):** Opens the Move Child dialog (searchable family picker, dry-run cycle validation, atomic move via `POST /api/v1/persons/{id}/move-to-family`).
+      - **"Unknown parent" UI Placeholder:** When only one parent is recorded, the missing parent slot renders a clean dashed card (*"Father unknown"* / *"Mother unknown"*) with an *"Add Father"* / *"Add Mother"* button. No dummy or placeholder person records are ever created.
+      - **Sibling Cards:**
+        - Displays avatar, name, lifespan, and dynamic kinship badge:
+          - `Full sibling` (*Родной брат / Родная сестра*)
+          - `Half-brother (paternal)` / `Единокровный брат`; `Half-sister (paternal)` / `Единокровная сестра`
+          - `Half-brother (maternal)` / `Единоутробный брат`; `Half-sister (maternal)` / `Единоутробная сестра`
+          - `Step-brother` / `Сводный брат`; `Step-sister` / `Сводная сестра`
+    - **Group 2: Spouses & Children:**
+      - One card unit per family union (or empty state with `+ Add Partner` CTA):
+      - **Union Header:**
+        - Partner summary (avatar, name, vital dates) or *"Children with unknown partner"* (*Дети от неизвестного партнёра*) for single-parent unions.
+        - **Union Type Selector (Dropdown):** `Married`, `Civil Union`, `Partners`, `Unknown` (persisted via `PATCH /api/v1/families/{id}`).
+        - **Divorce Status & Badge:**
+          - If a `divorce` event is recorded: renders `Badge variant="neutral"` labeled *"Divorced / Расторгнут брак"* with event year/place, and union date range (e.g. *1934 – 1952*).
+          - Children remain grouped under this union; both parents remain linked.
+          - If not divorced, header provides an *"Add Divorce"* action to record the legal dissolution milestone.
+        - **Unlink Partner Button (`Unlink` icon):**
+          - For mistaken links. Confirmation dialog notes: if children exist, the family container is retained as a single-parent family for the children; if 0 children, the family container is dissolved.
+        - **Spouse Reorder Controls:** Up/Down buttons or drag handle when multiple spouses exist.
+      - **Children Sub-Section:**
+        - Header with child count, *"Sort by birth date"* button (`ArrowDownWideNarrow` icon), and `+ Add Child` button.
+        - Child row items (reorderable via drag handle `GripVertical`):
+          - Avatar, name, birth year, gender indicator.
+          - **Per-Parent Relationship Dropdown:** `Birth`, `Adopted`, `Foster`, `Step` selector for each parent in the union.
+          - **"Move child…" Action:** Opens Move Child dialog.
+          - **Unlink Button (`Unlink` icon):** Removes child from this union.
+      - **1-Click Undo Toast:** Every unlink, move, relation update, or reorder displays a 6-second `useUndoToast` backed by `POST /api/v1/history/tx/{tx_id}/undo`.
 - **Tab 3: Media & Documents:**
   - Photo gallery showing all images this person is tagged in.
   - Scanned documents, certificates, and censuses.
@@ -96,7 +131,7 @@ Editing happens **in place** on the profile — no separate editor page, no nest
 - **Identity:** `Edit Profile` turns the hero into a form (name parts, alt names, sex, living override, privacy). Save / Cancel sticky bar at the bottom; dirty-state guard on navigation.
 - **Events:** each timeline row has an inline edit pencil → row expands into a form (type, date with live parse preview *"→ about 1890"*, place picker, description, source (free text with autocomplete), attach scan / photos). `+ Add Event` inserts a new expanded row at the correct chronological position.
 - **Biography:** Markdown editor with preview toggle.
-- **Family tab:** add/remove/reorder relationships as in [07 §4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/07-person-family-management.md#4-families--relationships).
+- **Family tab:** In-place relationship editing per [§3.2 Tab 2](#32-standard-tabbed-navigation) and [07 §4](file:///Users/levshitsvv/Projects/Personal/genealogy/docs/features/07-person-family-management.md#4-families--relationships): unlink parents/children/spouses, move children between families, change per-parent relationship types, change union types, and drag-and-drop reorder.
 - Every save sends `version`; conflicts open the comparison dialog; every save offers an *Undo* toast.
 
 ---
@@ -108,6 +143,15 @@ Editing happens **in place** on the profile — no separate editor page, no nest
 - [ ] **Living Privacy Guard:** When an anonymous visitor accesses a living person's profile in public mode, name displays as a single initial character with dot (e.g. `И.` / `J.`), surnames, patronymics, dates, maps, notes, and photos are masked with privacy placeholders; in default private mode, unauthenticated access redirects to `/login`.
 - [ ] **Zero Edit Controls for Unauthenticated Public Profile:** When accessed unauthenticated under public mode, no Edit Profile button, inline event edit pencils, Add Event/Relative CTAs, avatar upload triggers, or mutating dropdown actions are rendered.
 - [ ] **Role-Segregated Profile Actions:** Authenticated Viewers view full living person records in read-only mode with zero edit controls; inline edit pencils, the `Edit Profile` button, and `+ Add Event` render for Editors and Admins; `Merge with…` and the header ⚠️ data-quality badge are accessible exclusively to Administrators.
+- [ ] **Parent Unlink & Dissolution:** Parent cards in the Family tab feature an Unlink button; couple families offer unlinking from both parents or moving to a single-parent family; childless families dissolve cleanly without deleting profiles.
+- [ ] **Move Child Dialog:** "Change parents…" opens a dialog to pick a target family, performs cycle validation, and atomically executes `POST /api/v1/persons/{id}/move-to-family` with an Undo toast.
+- [ ] **Child Relation Selectors:** Child and parent cards provide interactive dropdowns for `birth`, `adopted`, `foster`, and `step` per parent, updating `rel_to_partner1`/`2`.
+- [ ] **Union Type Editor:** Union headers provide a dropdown to select `married`, `civil_union`, `partners`, or `unknown`.
+- [ ] **Children Reordering:** Family card provides a *"Sort by birth date"* button and drag-and-drop handles updating `family_children.sort_order`.
+- [ ] **Divorce Badge & Ended Union State:** Recording a `divorce` event renders a "Divorced" badge with date and place in the union header, retaining all children under the union.
+- [ ] **Sibling Kinship Badges:** Sibling cards display localized badges distinguishing full, paternal half (*единокровный*), maternal half (*единоутробный*), and step (*сводный*) siblings.
+- [ ] **Unknown Parent Representation:** Single-parent unions and unknown parents render clean dashed placeholder cards without creating dummy person rows.
+- [ ] **Undo Toast for Relationship Actions:** Every unlink, move, relation change, and reordering displays a 6-second Undo toast triggering rollback.
 - [ ] **Fast Navigation to Tree:** Clicking "View in Tree" opens the tree canvas and centers the camera on the person in <300ms.
 - [ ] **Inline Editing:** All person data (identity, events, biography, relationships) can be edited from the profile without leaving the page.
 - [ ] **Single Request Load:** Profile renders from one API call using `?include=` expansion.

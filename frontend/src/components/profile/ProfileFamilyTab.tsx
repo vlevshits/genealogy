@@ -3,6 +3,7 @@ import {
   Calendar,
   ChevronRight,
   Heart,
+  Pencil,
   MapPin,
   Unlink,
   UserPlus,
@@ -10,12 +11,16 @@ import {
 } from 'lucide-react';
 import { Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, IconButton } from '../ui';
 import {
+  MoveToFamilyInput,
   ProfileChildSummaryDto,
   ProfileFamiliesDto,
+  ProfileParentFamilyDto,
   ProfileRelativeSummaryDto,
   ProfileSpouseFamilyDto,
   QuickAddRelation,
 } from '../../api/client';
+import { ParentUnlinkDialog } from './ParentUnlinkDialog';
+import { ProfileChangeParentsDialog } from './ProfileChangeParentsDialog';
 import { useI18n } from '../../i18n';
 import {
   normalizePedigreeType,
@@ -27,12 +32,20 @@ export interface ProfileFamilyTabProps {
   families: ProfileFamiliesDto;
   canEdit: boolean;
   accessTier?: string;
+  /** Id of the profile owner (needed for the change-parents dialog). */
+  personId?: string;
   onSelectRelative: (relativeId: string) => void;
   onQuickAdd: (relation: QuickAddRelation) => void;
   /** Detach the spouse from the union (profile is kept). */
   onRemoveSpouse?: (family: ProfileSpouseFamilyDto) => void;
   /** Detach a child from the union (profile is kept). */
   onRemoveChild?: (family: ProfileSpouseFamilyDto, childId: string) => void;
+  /** Detach the profile person from a parent family (parents stay linked). */
+  onUnlinkParent?: (family: ProfileParentFamilyDto) => void;
+  /** Unlink one parent only; the child stays with the other parent. */
+  onUnlinkParentOnly?: (family: ProfileParentFamilyDto, otherParentId: string) => void;
+  /** Move the profile person to another parent family; rejects on API error. */
+  onMoveToFamily?: (payload: MoveToFamilyInput) => Promise<void>;
 }
 
 export function formatRelativeDisplayName(
@@ -69,17 +82,28 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
   families,
   canEdit,
   accessTier = 'admin',
+  personId,
   onSelectRelative,
   onQuickAdd,
   onRemoveSpouse,
   onRemoveChild,
+  onUnlinkParent,
+  onUnlinkParentOnly,
+  onMoveToFamily,
 }) => {
   const { t } = useI18n();
   const [pendingRemoval, setPendingRemoval] = React.useState<
     | { kind: 'spouse'; family: ProfileSpouseFamilyDto }
     | { kind: 'child'; family: ProfileSpouseFamilyDto; childId: string }
+    | {
+        kind: 'parent';
+        family: ProfileParentFamilyDto;
+        parent?: ProfileRelativeSummaryDto;
+        otherParent?: ProfileRelativeSummaryDto;
+      }
     | null
   >(null);
+  const [changeParentsOpen, setChangeParentsOpen] = React.useState(false);
 
   const renderRelativeCard = (
     rel: ProfileRelativeSummaryDto,
@@ -160,6 +184,10 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
   };
 
   const parentFamilies = families.parent_families || [];
+  const twoParentUnlink =
+    pendingRemoval?.kind === 'parent' && pendingRemoval.otherParent && pendingRemoval.parent
+      ? pendingRemoval
+      : null;
   const spouseFamilies = families.spouse_families || [];
 
   return (
@@ -200,6 +228,16 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
               >
                 {t('person.actions.addSibling')}
               </Button>
+              {onMoveToFamily && personId && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Pencil className="h-3.5 w-3.5" />}
+                  onClick={() => setChangeParentsOpen(true)}
+                >
+                  {t('profile.family.changeParentsBtn')}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -262,7 +300,26 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
                   {parentsList.length > 0 ? (
                     <div className="space-y-2">
                       {parentsList.map(({ rel, roleLabel }) =>
-                        renderRelativeCard(rel, roleLabel, pf.child_relation)
+                        renderRelativeCard(
+                          rel,
+                          roleLabel,
+                          pf.child_relation,
+                          canEdit && onUnlinkParent
+                            ? {
+                                label: t('profile.family.unlinkParentAria'),
+                                onClick: () =>
+                                  setPendingRemoval({
+                                    kind: 'parent',
+                                    family: pf,
+                                    parent: rel,
+                                    otherParent:
+                                      parentsList.length === 2 && onUnlinkParentOnly
+                                        ? parentsList.find((p) => p.rel.id !== rel.id)?.rel
+                                        : undefined,
+                                  }),
+                              }
+                            : undefined
+                        )
                       )}
                     </div>
                   ) : (
@@ -450,19 +507,46 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
           </div>
         )}
       </Card>
+      {twoParentUnlink && twoParentUnlink.parent && twoParentUnlink.otherParent && (
+        <ParentUnlinkDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPendingRemoval(null);
+          }}
+          parentName={formatRelativeDisplayName(twoParentUnlink.parent, accessTier).name}
+          otherParentName={
+            formatRelativeDisplayName(twoParentUnlink.otherParent, accessTier).name
+          }
+          onUnlinkOnly={() => {
+            onUnlinkParentOnly?.(
+              twoParentUnlink.family,
+              twoParentUnlink.otherParent!.id
+            );
+            setPendingRemoval(null);
+          }}
+          onUnlinkBoth={() => {
+            onUnlinkParent?.(twoParentUnlink.family);
+            setPendingRemoval(null);
+          }}
+        />
+      )}
       <ConfirmDialog
-        open={pendingRemoval !== null}
+        open={pendingRemoval !== null && !twoParentUnlink}
         onOpenChange={(open) => {
           if (!open) setPendingRemoval(null);
         }}
         title={
           pendingRemoval?.kind === 'child'
             ? t('profile.family.removeChildTitle')
+            : pendingRemoval?.kind === 'parent'
+            ? t('profile.family.unlinkParentTitle')
             : t('profile.family.removeSpouseTitle')
         }
         description={
           pendingRemoval?.kind === 'child'
             ? t('profile.family.removeChildDesc')
+            : pendingRemoval?.kind === 'parent'
+            ? t('profile.family.unlinkParentDesc')
             : t('profile.family.removeSpouseDesc')
         }
         confirmLabel={t('profile.family.removeConfirm')}
@@ -472,10 +556,21 @@ export const ProfileFamilyTab: React.FC<ProfileFamilyTabProps> = ({
             onRemoveSpouse?.(pendingRemoval.family);
           } else if (pendingRemoval?.kind === 'child') {
             onRemoveChild?.(pendingRemoval.family, pendingRemoval.childId);
+          } else if (pendingRemoval?.kind === 'parent') {
+            onUnlinkParent?.(pendingRemoval.family);
           }
           setPendingRemoval(null);
         }}
       />
+      {changeParentsOpen && onMoveToFamily && personId && (
+        <ProfileChangeParentsDialog
+          open
+          onOpenChange={setChangeParentsOpen}
+          personId={personId}
+          parentFamilies={parentFamilies}
+          onSubmit={onMoveToFamily}
+        />
+      )}
     </div>
   );
 };

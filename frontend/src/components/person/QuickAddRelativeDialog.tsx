@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Combobox,
+  type ComboboxOption,
   Dialog,
   SegmentedControl,
   Select,
@@ -13,6 +14,7 @@ import {
 import { FormField, GenDateInput } from '../form';
 import {
   createPerson,
+  fetchPeopleDirectory,
   PersonDetailDto,
   QuickAddRelation,
   quickAddRelative,
@@ -151,18 +153,22 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
     }
   };
 
-  const candidateOptions = existingPeople
-    .filter((p) => p.id !== anchorPerson?.id)
-    .map((p) => ({
-      value: p.id,
-      label: `${[
-        p.primary_name.given_name,
-        p.primary_name.patronymic,
-        p.primary_name.surname,
-      ]
-        .filter(Boolean)
-        .join(' ')} (${p.gid})`,
-    }));
+  // Server-side search: callers (profile, dashboard, people pages) do not
+  // preload the whole tree, so the picker must query the directory itself.
+  const loadCandidates = async (
+    query: string,
+    signal: AbortSignal
+  ): Promise<ComboboxOption[]> => {
+    const res = await fetchPeopleDirectory({ q: query, limit: 20 });
+    if (signal.aborted) return [];
+    return res.items
+      .filter((p) => p.id !== anchorPerson?.id)
+      .map((p) => ({
+        value: p.id,
+        label: `${p.display_name} (${p.gid})`,
+        description: p.birth_year ? String(p.birth_year) : undefined,
+      }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +273,7 @@ export const QuickAddRelativeDialog: React.FC<QuickAddRelativeDialogProps> = ({
               value={selectedExistingId || null}
               placeholder={t('person.quickAdd.selectExistingPlaceholder')}
               onChange={(val) => setSelectedExistingId(val ?? '')}
-              options={candidateOptions}
+              loadOptions={loadCandidates}
             />
           </FormField>
         ) : (

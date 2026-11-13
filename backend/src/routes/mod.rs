@@ -43,8 +43,9 @@ use crate::{
             create_media, create_media_link, create_note, create_person, create_place,
             delete_ai_story_draft_handler, delete_event, delete_face_tag, delete_family,
             delete_media, delete_media_link, delete_note, delete_person, delete_place,
-            dismiss_quality_place_issue, dismiss_quality_warning, dismiss_quality_warning_by_id,
-            export_gedcom, export_gedcom_post, export_printable_pdf, fix_quality_place_hierarchy,
+            detach_family_child, detach_family_partner, dismiss_quality_place_issue,
+            dismiss_quality_warning, dismiss_quality_warning_by_id, export_gedcom,
+            export_gedcom_post, export_printable_pdf, fix_quality_place_hierarchy,
             get_admin_ai_settings_handler, get_ai_story_draft_handler, get_anniversaries,
             get_audit_history, get_dashboard, get_data_quality_warnings, get_family, get_fan_chart,
             get_kinship, get_media_crop, get_media_detail, get_media_file, get_onboarding_status,
@@ -56,9 +57,9 @@ use crate::{
             list_mcp_tokens_handler, list_media_archive, list_notes, list_people_directory,
             list_people_surnames, list_places_directory, list_quality_warnings, list_snapshots,
             mark_pair_not_duplicate, match_people_candidates, mcp_jsonrpc_handler, mcp_sse_handler,
-            merge_duplicate_people, merge_place, parse_ai_story_handler, preview_merge_people_get,
-            preview_merge_people_post, preview_quality_place_issue, quick_add_relative,
-            reconcile_ai_story_draft_handler, reconcile_gedcom_media_bundle,
+            merge_duplicate_people, merge_place, move_person_to_family, parse_ai_story_handler,
+            preview_merge_people_get, preview_merge_people_post, preview_quality_place_issue,
+            quick_add_relative, reconcile_ai_story_draft_handler, reconcile_gedcom_media_bundle,
             refine_ai_story_draft_by_id_handler, refine_ai_story_draft_handler,
             restore_deleted_person, revoke_mcp_token_handler, rollback_to_snapshot,
             start_with_self, transcribe_ai_story_handler, undo_history_transaction,
@@ -160,12 +161,21 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/persons/{id}/profile", get(get_person_profile))
         .route("/persons/{id}/quick-add", post(quick_add_relative))
+        .route("/persons/{id}/move-to-family", post(move_person_to_family))
         .route("/persons/{id}/delete-impact", get(get_person_delete_impact))
         .route("/persons/{id}/restore", post(restore_deleted_person))
         .route("/families", get(list_families).post(create_family))
         .route(
             "/families/{id}",
             get(get_family).patch(update_family).delete(delete_family),
+        )
+        .route(
+            "/families/{id}/children/{child_id}",
+            delete(detach_family_child),
+        )
+        .route(
+            "/families/{id}/partners/{person_id}",
+            delete(detach_family_partner),
         )
         .route("/events/sources", get(list_event_sources))
         .route("/events", get(list_events).post(create_event))

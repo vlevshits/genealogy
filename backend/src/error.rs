@@ -80,6 +80,12 @@ pub enum AppError {
     #[error("Person not found")]
     PersonNotFound,
 
+    #[error("Child is not part of this family")]
+    ChildNotFound,
+
+    #[error("Partner is not part of this family")]
+    PartnerNotFound,
+
     #[error("First-time instance setup has already been completed")]
     SetupAlreadyCompleted,
 
@@ -156,6 +162,8 @@ impl AppError {
             Self::SettingsLockedFromEnv => "settings_locked_from_env",
             Self::NotFound => "not_found",
             Self::PersonNotFound => "person_not_found",
+            Self::ChildNotFound => "child_not_found",
+            Self::PartnerNotFound => "partner_not_found",
             Self::SetupAlreadyCompleted => "setup_already_completed",
             Self::AlreadyOnboarded => "already_onboarded",
             Self::VersionConflict(_) | Self::VersionConflictWithRecord(_, _) => "version_conflict",
@@ -201,9 +209,11 @@ impl AppError {
             | Self::SettingsLockedFromEnv
             | Self::PasswordAuthDisabled
             | Self::CsrfValidationFailed => StatusCode::FORBIDDEN,
-            Self::NotFound | Self::PersonNotFound | Self::InvalidOrExpiredInvite => {
-                StatusCode::NOT_FOUND
-            }
+            Self::NotFound
+            | Self::PersonNotFound
+            | Self::ChildNotFound
+            | Self::PartnerNotFound
+            | Self::InvalidOrExpiredInvite => StatusCode::NOT_FOUND,
             Self::VersionConflict(_)
             | Self::VersionConflictWithRecord(_, _)
             | Self::SetupAlreadyCompleted

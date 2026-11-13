@@ -227,6 +227,15 @@ async fn deleting_marriage_event_keeps_union_with_children_and_spouse_can_be_det
     )
     .await;
     assert_eq!(st, StatusCode::OK);
-    let fams = spouse_families(&app, &cookie, &self_id).await;
-    assert!(fams[0]["children"].as_array().unwrap().is_empty());
+    // The emptied single-parent union is dissolved (same rule as marriage removal).
+    assert!(spouse_families(&app, &cookie, &self_id).await.is_empty());
+    let (st, _) = call(
+        &app,
+        &cookie,
+        Method::GET,
+        &format!("/api/v1/families/{family_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
 }

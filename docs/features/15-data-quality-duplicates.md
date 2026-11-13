@@ -99,11 +99,33 @@ Entry points: Data Quality page, People Directory (*Compare / Merge* action), pe
 Merge execution rules:
 - **Scalar fields:** User picks per field; the unselected name is automatically preserved in `individual_alt_names`.
 - **Events, notes, media links, face tags:** Union of all items; exact duplicates (same type + date + place) collapsed.
-- **Families:** If both are children in families with the same parents $\to$ families merged; if both are partners with the same spouse $\to$ families merged (children unioned). Otherwise families re-point to the surviving person.
+- **Families & Unions:** Consolidated per [§3.2.1](#321-consolidation-of-duplicate-unions-during-person-merge).
 - `users.person_id` and `home_person_id` re-pointed.
 - The losing `gid` is recorded as an alias so old links and bookmarks redirect cleanly.
 - Executed in a single atomic SQL transaction, logged as one `change_log` entry $\to$ fully undoable ([14](14-change-history-concurrency.md)).
 - Cycle check runs on the merged result; merge is rejected if an ancestor cycle would be introduced.
+
+#### 3.2.1 Consolidation of Duplicate Unions During Person Merge
+When merging Source Person ($P_s$) into Target Person ($P_t$), relationships must be reconciled to prevent duplicate family containers:
+
+1. **Partner Unions with the Same Spouse:**
+   - Scan all families where $P_s$ is a partner ($F_s$) and all families where $P_t$ is a partner ($F_t$).
+   - If $F_s$ and $F_t$ share the identical partner ($P_{\text{other}}$), or if both $F_s$ and $F_t$ are single-parent families (no second partner):
+     - **Consolidate $F_s$ into $F_t$:**
+       - **Children:** For each child in $F_s$:
+         - If child already in $F_t$: collapse duplicate link; retain the more specific relation type (`adopted` / `foster` / `step` wins over default `birth` / `unknown`); retain the lower `sort_order`.
+         - If child not in $F_t$: move child to $F_t$, preserving `rel_to_partner1` and `rel_to_partner2`, appending to `sort_order`.
+       - **Family Events:** Re-point all `life_events` where `family_id = F_s.id` to $F_t$. Collapse exact duplicate events (same event type, date, and place).
+       - **Divorce Semantics:** If either $F_s$ or $F_t$ has a `divorce` event, the consolidated family retains the divorce event and marks the union as ended.
+       - **Notes & Media:** Re-point all polymorphic `notes` and `media_links` belonging to $F_s$ to $F_t$.
+       - **Union Type:** If $F_t$'s `relationship_type` is `'unknown'` and $F_s$'s is specific (`'married'`, `'civil_union'`, `'partners'`), adopt $F_s$'s type.
+       - **Deletion:** Delete the redundant $F_s$ row.
+   - If $F_s$ has no matching spouse in $F_t$, simply re-point $P_s$'s partner reference in $F_s$ to $P_t$.
+2. **Parental Families (Where $P_s$ is a Child):**
+   - If both $P_s$ and $P_t$ are children of families sharing the identical parents, collapse the child link into a single child record.
+   - Otherwise, re-point child references from $P_s$ to $P_t$.
+3. **Graph Integrity & Cycle Check:**
+   - Before committing, run recursive ancestor cycle verification across the entire post-merge graph. If a loop is detected, the entire merge transaction is aborted and rolled back with `400 Bad Request` (`relationship_cycle_detected`).
 
 ---
 

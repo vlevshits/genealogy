@@ -222,7 +222,16 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
-export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export interface ApiFetchOptions extends RequestInit {
+  /** Called with the raw successful response (e.g. to read response headers). */
+  onResponse?: (response: Response) => void;
+}
+
+export async function apiFetch<T>(
+  endpoint: string,
+  fetchOptions: ApiFetchOptions = {}
+): Promise<T> {
+  const { onResponse, ...options } = fetchOptions;
   const headers = new Headers(options.headers || {});
 
   // Custom header required for CSRF protection on state mutations (17 §3.2)
@@ -279,6 +288,8 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     }
     throw new ApiError(response.status, errData.error);
   }
+
+  onResponse?.(response);
 
   const method = (options.method || 'GET').toUpperCase();
   const shouldNotifyTreeChange =

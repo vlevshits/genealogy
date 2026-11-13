@@ -31,7 +31,7 @@
 12. EN + RU localization and anti-fluff copywriting from day 0 ([00](features/00-internationalization-localization.md)).
 13. **Progressive Web App (PWA) & Mobile/Tablet UX:** Web App Manifest, maskable and Apple touch icons, standalone launch, service worker static asset caching, mobile `BottomNav`, swipeable quick-view bottom sheets, and multi-touch tree gestures (pinch-to-zoom, pan) ([18](features/18-progressive-web-app-mobile.md)).
 
-### Phase 2 — "Delight" (Completed: Core, Milestones 2.1, 2.2, 2.3, 2.4, 2.5; In Progress: Milestones 2.6, 2.7, 2.8, 2.9)
+### Phase 2 — "Delight" (Completed: Core, Milestones 2.1, 2.2, 2.3, 2.4, 2.5; In Progress: Milestones 2.6, 2.7, 2.8, 2.9, 2.10)
 1. **Visualizations & Discovery:** Face tagging & primary avatar synchronization ([06](features/06-media-face-tagging.md)), fan chart (180°/360° concentric SVG, 4–8 generations, Ahnentafel indexing, quadrant colors), and Kinship Finder (LCA + bidirectional BFS, natural localized EN/RU kinship terms) ([04](features/04-tree-visualizations.md)).
 2. **Dashboard Widgets & Anniversaries:** 4 live widgets (`AnniversariesWidget` with Julian-to-Gregorian shift and round milestone badges, `RecentActivityWidget` with 1-click Undo, `TreeGlanceWidget`, `LatestPhotosWidget`), default user `start_page: "dashboard"` setting ([16 §4](features/16-dashboard-home.md#4-dashboard-widgets)).
 3. **Data Quality Warnings & Duplicate Person Merge (Admin only):** 10 soft validation rules with fuzzy-date windowing, warning dismissal memory (`dismissed_warnings`), Quick-Add duplicate detection guard, and 2-column side-by-side Person Merge wizard (`/people/merge`) with atomic transactions and GID aliases redirection ([15](features/15-data-quality-duplicates.md)).
@@ -387,6 +387,52 @@
     - Batch auto-fix: Applies all $\ge 85\%$ suggestions in one atomic transaction; 1-click Undo completely restores previous place hierarchy.
     - Offline isolation: Zero external HTTP requests made during analysis and batch fixing.
     - Role segregation: Viewers and Editors receive `403 Forbidden` on all place quality endpoints.
+
+#### Milestone 2.10 — Family Relationship Editing Parity, Domain Integrity & Graph Restructuring
+- **`TASK-FAMILY-RELATIONSHIP-EDITING-PARITY`**: Complete Family Relationship Editing, Divorce Semantics & Graph Integrity
+  - **User Story & Trigger:** "Spec §4 promises: add/remove child, change child relation, reorder spouses, unlink a partner, change parents — but only partial unlink was delivered. Need full domain-logic parity: unlink parents with dissolution rules, move child to another family in a single undoable transaction with cycle validation, change child relations (birth/adopted/foster/step), change union types, manual drag and auto-sort for children/spouses, divorce semantics marking unions ended while keeping children, single-parent unknown partner representation without dummy persons, half/step sibling labels, duplicate union merge on person merge, and 1-click undo for all link actions." ([07 §4](features/07-person-family-management.md#4-families--relationships), [10 §4.2](features/10-core-data-model.md#42-families--children), [15 §3.2.1](features/15-data-quality-duplicates.md#321-consolidation-of-duplicate-unions-during-person-merge), [03 page §3.2](pages/03-person-profile-page.md#32-standard-tabbed-navigation)).
+  - **Backend Acceptance Criteria:**
+    - Implement atomic endpoint `POST /api/v1/persons/{id}/move-to-family` accepting `source_family_id`, `target_family_id`, `rel_to_partner1`, `rel_to_partner2`:
+      - Ancestor cycle validation via recursive CTE: reject if target partners are descendants of the child or child is equal to partner (`relationship_cycle_detected`).
+      - Moves child atomically, dissolves old family if left childless with $\le 1$ partner, sets `sort_order`, logs single `change_log` entry with `tx_id`.
+    - Enhance parent and child unlinking in `DELETE /api/v1/families/{id}/children/{child_id}`:
+      - Dissolves family container if left childless and $\le 1$ partner.
+      - In couple families, support unlinking one parent (transitioning child to single-parent family for surviving parent) vs both parents.
+      - Person profiles are strictly preserved.
+    - Implement child relation updating in `PATCH /api/v1/families/{id}/children/{child_id}`:
+      - Accepts `rel_to_partner1` and `rel_to_partner2` (`birth`, `adopted`, `foster`, `step`, `unknown`).
+    - Implement union type updating in `PATCH /api/v1/families/{id}`:
+      - Accepts `relationship_type` (`married`, `civil_union`, `partners`, `unknown`).
+    - Implement children reordering in `PUT /api/v1/families/{id}/children/reorder`:
+      - Accepts `child_ids` array, updating `family_children.sort_order` sequentially.
+    - Implement divorce semantics:
+      - Adding `divorce` event to a family marks union ended in profile and tree view without dropping partners or children.
+    - Implement duplicate union consolidation on person merge (`merge_duplicate_people`):
+      - When merging two persons who share a partner, merge family containers, union children sets, collapse duplicate events/notes, and delete redundant family row.
+    - Undo support: All link endpoints return `tx_id` and write undoable `change_log` entries restorable via `POST /api/v1/history/tx/{tx_id}/undo`.
+  - **Frontend Acceptance Criteria:**
+    - Profile Family tab (`ProfileFamilyTab.tsx`):
+      - Parent cards: Unlink button with confirmation dialog (single parent dissolution or couple options: unlink from both vs move to single-parent family).
+      - "Change parents…" button: Opens Move Child modal with searchable family/couple combobox, dry-run cycle validation, and atomic move.
+      - Child relation dropdown: Interactive selector on child and parent cards for `Birth`, `Adopted`, `Foster`, `Step` per parent.
+      - Union header: Dropdown to change union type (`Married`, `Civil Union`, `Partners`, `Unknown`).
+      - Divorce indicator: Renders "Divorced" badge with event year/place; children kept intact under union; "Add Divorce" button when not divorced.
+      - Sibling kinship badges: Localized badges distinguishing full, half-brother/sister (paternal: *единокровный*), half-brother/sister (maternal: *единоутробный*), and step-brother/sister (*сводный*).
+      - Single-parent & unknown parent UI: Header displays *"Children with unknown partner"* with "Add other parent" action; missing parent slot renders clean dashed placeholder card. No dummy people.
+      - Children reordering: *"Sort by birth date"* button + drag-and-drop handles (`GripVertical`).
+      - 1-Click Undo toast: Every link action displays 6-second `useUndoToast` calling `/history/tx/{tx_id}/undo`.
+    - Tree Canvas (`TreeCanvas.tsx`):
+      - Divorced union renders ochre marriage bar with diagonal double-slash (`//`) hatch marks or dashed stroke; downward children bus remains intact.
+      - Single parent drops direct vertical stem with zero dummy cards.
+    - UI & i18n Quality: Full EN/RU translation parity; zero icon glyphs or emojis in JSON translation strings.
+  - **QA & Verification Criteria:**
+    - Cycle check: Attempting to move a parent to be a child of their descendant is rejected with `400 Bad Request` (`relationship_cycle_detected`).
+    - Parent unlink: Unlinking child from childless single-parent family dissolves family container; profiles intact.
+    - Move child: Child moved atomically in 1 transaction; undo reverts move cleanly.
+    - Relation types: Setting adoptive/step updates `family_children` and displays correctly in profile and tree.
+    - Divorce event: Recording divorce keeps children linked under union; displays divorce badge on profile and canvas.
+    - Person merge: Merging duplicate persons sharing a spouse merges their families and unions children.
+    - Undo toast: Reverts all relationship mutations within 6 seconds.
 
 ### Phase 3 — "Power tools"
 - Printable PDF posters / tiles ([05](features/05-printable-tree-pdf.md), [implementation](implementation/05-printable-tree-pdf.md)) — **Complete**.
