@@ -26,3 +26,8 @@ pub mod undo;
 pub use undo::*;
 pub mod snapshots;
 pub use snapshots::*;
+pub mod enrich;
+pub use enrich::*;
+mod enrich_diff;
+mod enrich_format;
+mod enrich_index;

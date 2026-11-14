@@ -46,6 +46,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const { locale, setLocale, t } = useI18n();
   const { isAuthenticated, user } = useAuth();
   const isViewer = user?.role === 'viewer';
+  const isAdmin = user?.role === 'admin';
   const [moreOpen, setMoreOpen] = useState(false);
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -124,30 +125,34 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       href: '/places',
       icon: <MapPin className="h-4 w-4" />,
     },
-    {
-      id: 'print',
-      label: t('nav.print'),
-      href: '/export/print',
-      icon: <Printer className="h-4 w-4" />,
-    },
-    {
-      id: 'changes',
-      label: t('nav.history'),
-      href: '/history',
-      icon: <Activity className="h-4 w-4" />,
-    },
-    {
-      id: 'quality',
-      label: t('nav.quality'),
-      href: '/quality',
-      icon: <ShieldCheck className="h-4 w-4" />,
-    },
-    {
-      id: 'admin',
-      label: t('nav.adminSettings'),
-      href: '/settings',
-      icon: <Settings className="h-4 w-4" />,
-    },
+    ...(isAdmin
+      ? [
+          {
+            id: 'print',
+            label: t('nav.print'),
+            href: '/export/print',
+            icon: <Printer className="h-4 w-4" />,
+          },
+          {
+            id: 'changes',
+            label: t('nav.history'),
+            href: '/history',
+            icon: <Activity className="h-4 w-4" />,
+          },
+          {
+            id: 'quality',
+            label: t('nav.quality'),
+            href: '/quality',
+            icon: <ShieldCheck className="h-4 w-4" />,
+          },
+          {
+            id: 'admin',
+            label: t('nav.adminSettings'),
+            href: '/settings',
+            icon: <Settings className="h-4 w-4" />,
+          },
+        ]
+      : []),
   ];
 
   const isMoreActive =

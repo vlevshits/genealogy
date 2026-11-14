@@ -161,6 +161,84 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
     };
   };
 
+  const openConflictFromError = (
+    err: ApiError,
+    submittedPayload: Record<string, unknown>
+  ) => {
+    const details = (err.details ?? {}) as {
+      current?: Record<string, unknown>;
+      their_data?: Record<string, unknown>;
+      version?: number;
+      current_version?: number;
+      expected_version?: number;
+      updated_by_name?: string;
+      updated_at?: string;
+    };
+    const theirData = (details.their_data ??
+      details.current ??
+      {}) as Record<string, unknown>;
+    const theirPrimaryName = (theirData.primary_name ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const currentRemote: Record<string, unknown> = {
+      given_name:
+        theirPrimaryName.given_name ??
+        theirData.given_name ??
+        person.primary_name.given_name,
+      patronymic:
+        theirPrimaryName.patronymic ??
+        theirData.patronymic ??
+        person.primary_name.patronymic,
+      surname:
+        theirPrimaryName.surname ??
+        theirData.surname ??
+        person.primary_name.surname,
+      birth_surname: theirData.birth_surname ?? person.birth_surname,
+      nickname: theirData.nickname ?? person.nickname,
+      sex: theirData.sex ?? person.sex,
+      biography:
+        theirData.biography ??
+        theirData.notes ??
+        person.biography ??
+        person.notes ??
+        null,
+    };
+    const resolvedRemoteVersion =
+      details.current_version ??
+      details.version ??
+      (typeof theirData.version === 'number'
+        ? theirData.version
+        : undefined) ??
+      remoteVersion ??
+      (person.version ?? 1) + 1;
+    setConflictState({
+      open: true,
+      myChanges: {
+        given_name: submittedPayload.given_name,
+        patronymic: submittedPayload.patronymic,
+        surname: submittedPayload.surname,
+        birth_surname: submittedPayload.birth_surname,
+        nickname: submittedPayload.nickname,
+        sex: submittedPayload.sex,
+        biography: submittedPayload.biography,
+      },
+      theirChanges: currentRemote,
+      remoteVersion: resolvedRemoteVersion,
+      updatedByName:
+        details.updated_by_name ??
+        (typeof theirData.updated_by_name === 'string'
+          ? theirData.updated_by_name
+          : undefined) ??
+        updatedByName,
+      updatedAt:
+        details.updated_at ??
+        (typeof theirData.updated_at === 'string'
+          ? theirData.updated_at
+          : undefined),
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving || !givenName.trim()) return;
@@ -187,78 +265,7 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
       onOpenChange(false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        const details = (err.details ?? {}) as {
-          current?: Record<string, unknown>;
-          their_data?: Record<string, unknown>;
-          version?: number;
-          current_version?: number;
-          expected_version?: number;
-          updated_by_name?: string;
-          updated_at?: string;
-        };
-        const theirData = (details.their_data ??
-          details.current ??
-          {}) as Record<string, unknown>;
-        const theirPrimaryName = (theirData.primary_name ?? {}) as Record<
-          string,
-          unknown
-        >;
-        const currentRemote: Record<string, unknown> = {
-          given_name:
-            theirPrimaryName.given_name ??
-            theirData.given_name ??
-            person.primary_name.given_name,
-          patronymic:
-            theirPrimaryName.patronymic ??
-            theirData.patronymic ??
-            person.primary_name.patronymic,
-          surname:
-            theirPrimaryName.surname ??
-            theirData.surname ??
-            person.primary_name.surname,
-          birth_surname: theirData.birth_surname ?? person.birth_surname,
-          nickname: theirData.nickname ?? person.nickname,
-          sex: theirData.sex ?? person.sex,
-          biography:
-            theirData.biography ??
-            theirData.notes ??
-            person.biography ??
-            person.notes ??
-            null,
-        };
-        const resolvedRemoteVersion =
-          details.current_version ??
-          details.version ??
-          (typeof theirData.version === 'number'
-            ? theirData.version
-            : undefined) ??
-          remoteVersion ??
-          (person.version ?? 1) + 1;
-        setConflictState({
-          open: true,
-          myChanges: {
-            given_name: payload.given_name,
-            patronymic: payload.patronymic,
-            surname: payload.surname,
-            birth_surname: payload.birth_surname,
-            nickname: payload.nickname,
-            sex: payload.sex,
-            biography: payload.biography,
-          },
-          theirChanges: currentRemote,
-          remoteVersion: resolvedRemoteVersion,
-          updatedByName:
-            details.updated_by_name ??
-            (typeof theirData.updated_by_name === 'string'
-              ? theirData.updated_by_name
-              : undefined) ??
-            updatedByName,
-          updatedAt:
-            details.updated_at ??
-            (typeof theirData.updated_at === 'string'
-              ? theirData.updated_at
-              : undefined),
-        });
+        openConflictFromError(err, payload);
       } else {
         setErrorMsg(getLocalizedErrorMessage(err, t));
       }
@@ -512,28 +519,55 @@ export const PersonEditDialog: React.FC<PersonEditDialogProps> = ({
       }
       updatedByName={conflictState.updatedByName}
       updatedAt={conflictState.updatedAt}
+      remoteVersion={conflictState.remoteVersion}
       myChanges={conflictState.myChanges}
       theirChanges={conflictState.theirChanges}
-      onKeepMine={async () => {
-        const updated = await updatePerson(
-          person.id,
-          buildPayload(conflictState.remoteVersion)
-        );
-        onPersonUpdated?.(updated);
-        onOpenChange(false);
+      onKeepMine={async (resolvedVersion) => {
+        const targetVersion =
+          typeof resolvedVersion === 'number'
+            ? resolvedVersion
+            : conflictState.remoteVersion;
+        const retryPayload = buildPayload(targetVersion);
+        try {
+          const updated = await updatePerson(person.id, retryPayload);
+          onPersonUpdated?.(updated);
+          setConflictState((prev) => ({ ...prev, open: false }));
+          onOpenChange(false);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 409) {
+            openConflictFromError(err, retryPayload);
+            return;
+          }
+          throw err;
+        }
       }}
       onUseTheirs={() => {
+        setConflictState((prev) => ({ ...prev, open: false }));
         onOpenChange(false);
       }}
-      onMerge={async (mergedFields) => {
-        const base = buildPayload(conflictState.remoteVersion);
-        const updated = await updatePerson(person.id, {
+      onMerge={async (mergedFields, resolvedVersion) => {
+        const targetVersion =
+          typeof resolvedVersion === 'number'
+            ? resolvedVersion
+            : conflictState.remoteVersion;
+        const base = buildPayload(targetVersion);
+        const mergedPayload = {
           ...base,
           ...(mergedFields as Partial<typeof base>),
-          version: conflictState.remoteVersion,
-        });
-        onPersonUpdated?.(updated);
-        onOpenChange(false);
+          version: targetVersion,
+        };
+        try {
+          const updated = await updatePerson(person.id, mergedPayload);
+          onPersonUpdated?.(updated);
+          setConflictState((prev) => ({ ...prev, open: false }));
+          onOpenChange(false);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 409) {
+            openConflictFromError(err, mergedPayload);
+            return;
+          }
+          throw err;
+        }
       }}
     />
     </>

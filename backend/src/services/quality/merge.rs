@@ -691,6 +691,8 @@ pub fn execute_person_merge(
         summary: label.clone(),
         before_json: Some(before_bundle),
         after_json,
+        entity_gid: None,
+        diffs: Vec::new(),
         created_at: Utc::now().to_rfc3339(),
     });
     store.persist_if_production();

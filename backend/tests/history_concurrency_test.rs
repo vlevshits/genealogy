@@ -861,4 +861,674 @@ async fn test_tree_snapshots_and_safe_rollback() {
     )
     .unwrap();
     assert_eq!(snap_list.total, 2);
+
+    // Verify `snapshot.rollback` emits structured integer `record_counts` (not hardcoded English text)
+    let rb_hist_res = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/history?page_size=20")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rb_hist_res.status(), StatusCode::OK);
+    let rb_hist: HistoryFeedResponse =
+        serde_json::from_slice(&to_bytes(rb_hist_res.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let rb_entry = rb_hist
+        .items
+        .iter()
+        .find(|e| e.tx_label == "snapshot.rollback")
+        .expect("snapshot.rollback entry in history");
+    let rc_diff = rb_entry
+        .diffs
+        .iter()
+        .find(|d| d.field == "record_counts")
+        .expect("record_counts diff on snapshot.rollback");
+    let rc_obj = rc_diff
+        .after
+        .as_object()
+        .expect("record_counts.after should be a structured JSON object");
+    assert!(rc_obj.get("individuals").and_then(|v| v.as_u64()).is_some());
+    assert!(rc_obj.get("families").and_then(|v| v.as_u64()).is_some());
+    assert!(rc_obj.get("events").and_then(|v| v.as_u64()).is_some());
+    assert!(rc_obj.get("places").and_then(|v| v.as_u64()).is_some());
+    assert!(rc_obj.get("media").and_then(|v| v.as_u64()).is_some());
+    assert!(rc_obj.get("notes").and_then(|v| v.as_u64()).is_some());
+}
+
+fn contains_uuid(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() < 36 {
+        return false;
+    }
+    for i in 0..=bytes.len() - 36 {
+        if !text.is_char_boundary(i) || !text.is_char_boundary(i + 36) {
+            continue;
+        }
+        let slice = &text[i..i + 36];
+        if uuid::Uuid::parse_str(slice).is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+fn assert_clean_diffs(diffs: &[genealogy_backend::services::history::FieldDiffDto], context: &str) {
+    assert!(!diffs.is_empty(), "{context}: expected non-empty diffs");
+    for d in diffs {
+        assert!(
+            !matches!(
+                d.field.as_str(),
+                "id" | "gid"
+                    | "version"
+                    | "tx_id"
+                    | "created_at"
+                    | "updated_at"
+                    | "birth_sort"
+                    | "death_sort"
+                    | "date_sort"
+                    | "primary_name"
+                    | "keep_before"
+                    | "merge_person"
+                    | "families_before"
+                    | "events_before"
+                    | "events_count"
+                    | "children_count"
+            ),
+            "{context}: unexpected noisy diff field `{}`",
+            d.field
+        );
+        let b_str = d.before.to_string();
+        let a_str = d.after.to_string();
+        assert!(
+            !contains_uuid(&b_str) && !contains_uuid(&a_str),
+            "{context}: raw UUID leaked in diff `{}`: before={b_str} after={a_str}",
+            d.field
+        );
+        for raw in [&b_str, &a_str] {
+            assert!(
+                !raw.contains("\"child_id\"")
+                    && !raw.contains("\"rel_to_partner1\"")
+                    && !raw.contains("\"cal\"")
+                    && !raw.contains("\"mod\""),
+                "{context}: raw nested GenDate/FamilyChildDto JSON in `{}`: {raw}",
+                d.field
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_history_enrichment_labels_gids_and_clean_diffs() {
+    let (app, admin_auth, editor1_auth, _editor2_auth, _viewer_auth) = setup_test_env().await;
+
+    let post_json = |uri: String, auth: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            let res = app
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(&uri)
+                        .header(header::AUTHORIZATION, &auth)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header("x-requested-with", "genealogy")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = res.status();
+            let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+            )
+        }
+    };
+
+    let patch_json = |uri: String, auth: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            let res = app
+                .oneshot(
+                    Request::builder()
+                        .method(Method::PATCH)
+                        .uri(&uri)
+                        .header(header::AUTHORIZATION, &auth)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header("x-requested-with", "genealogy")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = res.status();
+            let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+            )
+        }
+    };
+
+    // 1. Create people (with Russian/Slavic names) and edit one person
+    let (st, p1) = post_json(
+        "/api/v1/persons".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "sex": "M",
+            "given_name": "Иван",
+            "surname": "Морозов",
+            "birth_date": "1900",
+            "death_date": "1970",
+            "is_living": false
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let p1_id = p1["id"].as_str().unwrap().to_string();
+    let p1_gid = p1["gid"].as_str().unwrap().to_string();
+
+    let (st, p2) = post_json(
+        "/api/v1/persons".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "sex": "F",
+            "given_name": "Елена",
+            "surname": "Петрова",
+            "birth_date": "1904",
+            "death_date": "1978",
+            "is_living": false
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let p2_id = p2["id"].as_str().unwrap().to_string();
+    let p2_gid = p2["gid"].as_str().unwrap().to_string();
+
+    let (st, child) = post_json(
+        "/api/v1/persons".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "sex": "M",
+            "given_name": "Сергей",
+            "surname": "Морозов",
+            "birth_date": "1930",
+            "death_date": "1995",
+            "is_living": false
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let child_id = child["id"].as_str().unwrap().to_string();
+    let child_gid = child["gid"].as_str().unwrap().to_string();
+
+    let (st, _) = patch_json(
+        format!("/api/v1/persons/{p1_id}"),
+        editor1_auth.clone(),
+        json!({
+            "given_name": "Иван-Младший",
+            "biography": "Born in Vitebsk"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // 2. Family create + partner/children edit (with non-"birth" pedigree relation)
+    let (st, fam) = post_json(
+        "/api/v1/families".to_string(),
+        editor1_auth.clone(),
+        json!({ "partner1_id": p1_id }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let fam_id = fam["id"].as_str().unwrap().to_string();
+    let fam_gid = fam["gid"].as_str().unwrap().to_string();
+
+    let (st, _) = patch_json(
+        format!("/api/v1/families/{fam_id}"),
+        editor1_auth.clone(),
+        json!({
+            "partner2_id": p2_id,
+            "children": [{
+                "child_id": child_id,
+                "rel_to_partner1": "birth",
+                "rel_to_partner2": "adopted"
+            }]
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // 3. Place + Event create + date/place edit
+    let (st, place) = post_json(
+        "/api/v1/places".to_string(),
+        editor1_auth.clone(),
+        json!({ "name": "Витебск", "place_type": "city" }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let place_id = place["id"].as_str().unwrap().to_string();
+
+    let (st, ev_occ) = post_json(
+        "/api/v1/events".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "individual_id": p1_id,
+            "event_type": "occupation",
+            "date_text": "1925",
+            "description": "Blacksmith"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let ev_occ_id = ev_occ["id"].as_str().unwrap().to_string();
+    let ev_occ_gid = ev_occ["gid"].as_str().unwrap().to_string();
+
+    let (st, _) = patch_json(
+        format!("/api/v1/events/{ev_occ_id}"),
+        editor1_auth.clone(),
+        json!({
+            "date_text": "abt 1914",
+            "place_id": place_id
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // 4. Note create + Undo transaction
+    let (st, _note) = post_json(
+        "/api/v1/notes".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "entity_type": "individual",
+            "entity_id": p1_id,
+            "body": "Family archive reference"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+
+    // 5. Duplicate birth events + merge (event_merge_bundle)
+    let (st, b1) = post_json(
+        "/api/v1/events".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "individual_id": p2_id,
+            "event_type": "birth",
+            "date_text": "1904",
+            "source_text": "Parish record"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let b1_id = b1["id"].as_str().unwrap().to_string();
+    let b1_gid = b1["gid"].as_str().unwrap().to_string();
+    let (st, b2) = post_json(
+        "/api/v1/events".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "individual_id": p2_id,
+            "event_type": "birth",
+            "date_text": "1904",
+            "description": "Winter morning"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let b2_id = b2["id"].as_str().unwrap().to_string();
+    let b2_gid = b2["gid"].as_str().unwrap().to_string();
+
+    let (st, _) = post_json(
+        "/api/v1/quality/events/merge".to_string(),
+        admin_auth.clone(),
+        json!({
+            "keep_event_id": b1_id,
+            "merge_event_ids": [b2_id]
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // 5b. Batch merge duplicate death events
+    let (st, _) = post_json(
+        "/api/v1/events".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "individual_id": p1_id,
+            "event_type": "death",
+            "date_text": "1970",
+            "source_text": "Civil registry"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let (st, d2) = post_json(
+        "/api/v1/events".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "individual_id": p1_id,
+            "event_type": "death",
+            "date_text": "1970",
+            "description": "Winter"
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let d2_gid = d2["gid"].as_str().unwrap().to_string();
+
+    let (st, _) = post_json(
+        "/api/v1/quality/events/batch-merge".to_string(),
+        admin_auth.clone(),
+        json!({}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // 6. Create and delete a temporary person (`DeletedPersonSnapshotPayload`)
+    let (st, doomed) = post_json(
+        "/api/v1/persons".to_string(),
+        editor1_auth.clone(),
+        json!({
+            "sex": "M",
+            "given_name": "Пётр",
+            "surname": "Удаляемый",
+            "birth_date": "1910",
+            "death_date": "1980",
+            "is_living": false
+        }),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let doomed_id = doomed["id"].as_str().unwrap().to_string();
+    let doomed_gid = doomed["gid"].as_str().unwrap().to_string();
+
+    let del_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/v1/persons/{doomed_id}"))
+                .header(header::AUTHORIZATION, &editor1_auth)
+                .header("x-requested-with", "genealogy")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(del_res.status(), StatusCode::OK);
+
+    // Undo the `ev_occ` update to also generate a `history.undo_transaction` entry
+    let ev_hist_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/history/event/{ev_occ_gid}"))
+                .header(header::AUTHORIZATION, &editor1_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ev_hist_res.status(), StatusCode::OK);
+    let ev_hist: RecordHistoryResponse =
+        serde_json::from_slice(&to_bytes(ev_hist_res.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    let ev_upd = ev_hist.items.iter().find(|i| i.action == "update").unwrap();
+    let (st, _) = post_json(
+        format!("/api/v1/history/tx/{}/undo", ev_upd.tx_id),
+        editor1_auth.clone(),
+        json!({}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // Verify Global Feed (`/api/v1/history`) enrichment
+    let feed_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/history?page_size=200")
+                .header(header::AUTHORIZATION, &admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(feed_res.status(), StatusCode::OK);
+    let feed: HistoryFeedResponse =
+        serde_json::from_slice(&to_bytes(feed_res.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    // Check person edit in feed
+    let person_upd = feed
+        .items
+        .iter()
+        .find(|e| e.entity_id == p1_id && e.op == "update")
+        .expect("person update in feed");
+    assert_eq!(person_upd.entity_gid.as_deref(), Some(p1_gid.as_str()));
+    assert_clean_diffs(&person_upd.diffs, "feed person update");
+    assert!(person_upd
+        .diffs
+        .iter()
+        .any(|d| d.field == "given_name" && d.after == "Иван-Младший"));
+
+    // Check family update in feed
+    let fam_upd = feed
+        .items
+        .iter()
+        .find(|e| e.entity_id == fam_id && e.op == "update")
+        .expect("family update in feed");
+    assert_eq!(fam_upd.entity_gid.as_deref(), Some(fam_gid.as_str()));
+    let fam_lbl = fam_upd.entity_label.as_deref().unwrap_or("");
+    assert!(
+        fam_lbl.contains("Морозов")
+            && fam_lbl.contains("Елена Петрова")
+            && !fam_lbl.contains(&fam_gid),
+        "unexpected family label (should omit separate entity_gid): {fam_lbl}"
+    );
+    assert_clean_diffs(&fam_upd.diffs, "feed family update");
+    let p2_diff = fam_upd
+        .diffs
+        .iter()
+        .find(|d| d.field == "partner2_id")
+        .unwrap();
+    assert!(p2_diff.after.as_str().unwrap().contains(&p2_gid));
+    let ch_diff = fam_upd
+        .diffs
+        .iter()
+        .find(|d| d.field == "children")
+        .unwrap();
+    let ch_arr = ch_diff.after.as_array().unwrap();
+    assert_eq!(ch_arr.len(), 1);
+    let ch_str = ch_arr[0].as_str().unwrap();
+    assert!(
+        ch_str.contains(&child_gid) && ch_str.contains("[adopted]"),
+        "got {ch_str}"
+    );
+
+    // Check event edit in feed
+    let ev_feed_upd = feed
+        .items
+        .iter()
+        .find(|e| e.entity_id == ev_occ_id && e.op == "update")
+        .expect("event update in feed");
+    assert_eq!(ev_feed_upd.entity_gid.as_deref(), Some(ev_occ_gid.as_str()));
+    let ev_lbl = ev_feed_upd.entity_label.as_deref().unwrap_or("");
+    assert!(
+        ev_lbl.contains("occupation — ")
+            && ev_lbl.contains("Морозов")
+            && !ev_lbl.contains(&ev_occ_gid),
+        "unexpected event label (should omit separate entity_gid): {ev_lbl}"
+    );
+    assert_clean_diffs(&ev_feed_upd.diffs, "feed event update");
+    assert!(ev_feed_upd.diffs.iter().any(|d| d.field == "date"
+        && d.after
+            .as_str()
+            .is_some_and(|s| s.eq_ignore_ascii_case("abt 1914"))));
+    assert!(!ev_feed_upd
+        .diffs
+        .iter()
+        .any(|d| d.field == "gedcom_date" || d.field == "place_id"));
+
+    // Check note in feed
+    let note_create = feed
+        .items
+        .iter()
+        .find(|e| e.entity_type == "note" && e.op == "create")
+        .expect("note create in feed");
+    assert!(note_create.entity_gid.is_none());
+    let note_lbl = note_create.entity_label.as_deref().unwrap_or("");
+    assert!(
+        note_lbl.starts_with("Note — ") && note_lbl.contains("Морозов"),
+        "got {note_lbl}"
+    );
+    assert_clean_diffs(&note_create.diffs, "feed note create");
+
+    // Check person deletion in feed (`DeletedPersonSnapshotPayload` unwrapped)
+    let del_entry = feed
+        .items
+        .iter()
+        .find(|e| e.entity_id == doomed_id && e.op == "delete")
+        .expect("deleted person in feed");
+    assert_eq!(del_entry.entity_gid.as_deref(), Some(doomed_gid.as_str()));
+    assert_clean_diffs(&del_entry.diffs, "feed person delete");
+    assert!(del_entry
+        .diffs
+        .iter()
+        .any(|d| d.field == "given_name" && d.before == "Пётр"));
+    assert!(!del_entry.diffs.iter().any(|d| d.field == "person"));
+
+    // Check event merge & batch merge in feed (`event_merge_bundle`)
+    let merge_entry = feed
+        .items
+        .iter()
+        .find(|e| e.tx_label == "quality.events.merge")
+        .expect("event merge in feed");
+    assert_eq!(merge_entry.entity_gid.as_deref(), Some(b1_gid.as_str()));
+    let merge_lbl = merge_entry.entity_label.as_deref().unwrap_or("");
+    assert!(
+        merge_lbl.contains("birth — Елена Петрова") && !merge_lbl.contains(&b1_gid),
+        "unexpected merge label (should omit separate entity_gid): {merge_lbl}"
+    );
+    assert_clean_diffs(&merge_entry.diffs, "feed event merge");
+    let merged_diff = merge_entry
+        .diffs
+        .iter()
+        .find(|d| d.field == "merged_events")
+        .unwrap();
+    assert!(merged_diff.before.to_string().contains(&b2_gid));
+    assert!(merged_diff.after.to_string().contains(&b1_gid));
+
+    let batch_entry = feed
+        .items
+        .iter()
+        .find(|e| e.tx_label == "quality.events.batch_merge")
+        .expect("batch event merge in feed");
+    assert_clean_diffs(&batch_entry.diffs, "feed batch event merge");
+    let batch_diff = batch_entry
+        .diffs
+        .iter()
+        .find(|d| d.field == "merged_events")
+        .unwrap();
+    assert!(
+        batch_diff.before.to_string().contains(&d2_gid)
+            || batch_diff.after.to_string().contains("death"),
+        "unexpected batch diff: {:?}",
+        batch_diff
+    );
+
+    // Check person.create diffs and transaction-grouped entries are also enriched
+    let person_create = feed
+        .items
+        .iter()
+        .find(|e| e.entity_id == p1_id && e.op == "create")
+        .expect("person create in feed");
+    assert_eq!(person_create.entity_gid.as_deref(), Some(p1_gid.as_str()));
+    assert_clean_diffs(&person_create.diffs, "feed person create");
+    assert!(feed
+        .transactions
+        .iter()
+        .flat_map(|t| t.entries.iter())
+        .any(|e| e.entity_id == fam_id
+            && e.op == "update"
+            && e.entity_gid.as_deref() == Some(fam_gid.as_str())
+            && !e.diffs.is_empty()));
+
+    // Check transaction undo entry in feed
+    let undo_entry = feed
+        .items
+        .iter()
+        .find(|e| e.tx_label == "history.undo_transaction")
+        .expect("undo tx in feed");
+    assert!(undo_entry.entity_gid.is_none());
+    let undo_lbl = undo_entry.entity_label.as_deref().unwrap_or("");
+    assert!(
+        !undo_lbl.is_empty() && !contains_uuid(undo_lbl),
+        "got {undo_lbl}"
+    );
+    assert_clean_diffs(&undo_entry.diffs, "feed undo transaction");
+
+    // Verify per-record history (`/api/v1/history/{entity_type}/{entity_id}`) via GID, including deleted person!
+    let doomed_hist_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/history/individual/{doomed_gid}"))
+                .header(header::AUTHORIZATION, &editor1_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(doomed_hist_res.status(), StatusCode::OK);
+    let doomed_hist: RecordHistoryResponse = serde_json::from_slice(
+        &to_bytes(doomed_hist_res.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(doomed_hist.entity_id, doomed_id);
+    assert_eq!(doomed_hist.items.len(), 2);
+    for item in &doomed_hist.items {
+        assert_eq!(item.entity_gid.as_deref(), Some(doomed_gid.as_str()));
+        assert_clean_diffs(&item.diffs, "per-record deleted person");
+    }
+
+    let fam_hist_res = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/history/family/{fam_gid}"))
+                .header(header::AUTHORIZATION, &editor1_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fam_hist_res.status(), StatusCode::OK);
+    let fam_hist: RecordHistoryResponse = serde_json::from_slice(
+        &to_bytes(fam_hist_res.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(fam_hist.entity_id, fam_id);
+    if let Some(ref lbl) = fam_hist.entity_label {
+        assert!(!lbl.contains(&fam_gid), "got {lbl}");
+    }
+    for item in &fam_hist.items {
+        assert_eq!(item.entity_gid.as_deref(), Some(fam_gid.as_str()));
+        if let Some(ref lbl) = item.entity_label {
+            assert!(!lbl.contains(&fam_gid), "got {lbl}");
+        }
+        assert_clean_diffs(&item.diffs, "per-record family");
+    }
 }

@@ -2,15 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { Calendar, Sparkles } from 'lucide-react';
 import { Badge, Button, EmptyState, useToast } from '../ui';
 import {
-  ApiError,
   DuplicateEventGroupDto,
   MergeDuplicateEventsRequest,
   qualityApi,
 } from '../../api/client';
 import { useUndoToast } from '../../hooks/useUndoToast';
-import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import {
+  getLocalizedErrorMessage,
+  isOfflineFallbackError,
+} from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { DuplicateEventCard } from './DuplicateEventCard';
+
+export { isOfflineFallbackError };
 import { DuplicateEventCustomizeModal } from './DuplicateEventCustomizeModal';
 
 export interface DuplicateEventsSubViewProps {
@@ -20,13 +24,6 @@ export interface DuplicateEventsSubViewProps {
   onDismissed: (groupId: string) => void;
   onReload: () => void;
   onNavigate?: (path: string) => void;
-}
-
-export function isOfflineFallbackError(err: unknown): boolean {
-  return (
-    err instanceof ApiError &&
-    (err.status === 0 || err.code === 'network_error')
-  );
 }
 
 export function buildDefaultDuplicateEventGroups(

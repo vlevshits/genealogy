@@ -134,6 +134,7 @@ frontend/src/
 │   ├── profile/        # Person profile cards, timeline, facts, family groups
 │   ├── media/          # Lightbox studio, face tagging canvas, metadata editor
 │   ├── quality/        # Data validation issues, merge preview, duplicate pairs & duplicate events
+│   ├── history/        # Record history drawer, 409 conflict resolution modal, filter bar, diff & label formatters
 │   ├── print/          # PDF export controls, tile cut-mark previews
 │   ├── settings/       # Security & MCP Personal Access Token settings UI (`McpTokensPanel`)
 │   └── stories/        # AI story audio recorder, text intake, draft review
@@ -166,4 +167,4 @@ Every mutating genealogy operation (`POST`, `PATCH`, `DELETE` on persons, famili
 - Mutations supply `If-Match: "<version>"` or an equivalent payload version.
 - On mismatch, the backend yields a `409 Conflict` (`version_conflict`), which triggers the frontend conflict reconciliation dialog.
 
-_Last curated: 2026-11-14 (Duplicate Events service/UI & MCP settings component tree)_
+_Last curated: 2026-11-14 (Duplicate Events service/UI, History components & MCP settings tree)_

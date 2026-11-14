@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ArrowUpRight,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -21,9 +22,16 @@ import {
 import {
   HistoryFilterBar,
   HistoryFiltersState,
+  extractEntityGid,
   extractEntryDiffs,
   formatDiffValue,
+  formatEntityLabel,
+  formatEntityTypeLabel,
+  formatFieldLabel,
+  formatTxLabel,
 } from '../components/history';
+
+export { formatTxLabel } from '../components/history';
 import {
   ChangeLogEntryDto,
   ChangeLogTransactionGroupDto,
@@ -32,7 +40,10 @@ import {
   undoTransaction,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
-import { getLocalizedErrorMessage } from '../lib/error-formatter';
+import {
+  getLocalizedErrorMessage,
+  isOfflineFallbackError,
+} from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export interface HistoryPageProps {
@@ -134,41 +145,78 @@ const DEFAULT_FILTERS: HistoryFiltersState = {
   onlyDeletions: false,
 };
 
-export function formatTxLabel(
-  txLabel: string | undefined | null,
+function normalizeFilterEntityType(raw: string): string {
+  const norm = raw.toLowerCase();
+  if (norm === 'individual') return 'person';
+  if (norm === 'life_event') return 'event';
+  if (norm === 'media_asset') return 'media';
+  return norm;
+}
+
+function getHistoryActionBadgeProps(
+  opLower: string,
   t: (key: string) => string
-): string {
-  if (!txLabel) return t('history.txLabels.default');
-  const map: Record<string, string> = {
-    'person.add_parent': 'history.txLabels.personAddParent',
-    'person.add_child': 'history.txLabels.personAddChild',
-    'person.add_spouse': 'history.txLabels.personAddSpouse',
-    'person.add_sibling': 'history.txLabels.personAddSibling',
-    'person.create': 'history.txLabels.personCreate',
-    'person.update_profile': 'history.txLabels.personUpdateProfile',
-    'person.update': 'history.txLabels.personUpdateProfile',
-    'person.delete': 'history.txLabels.personDelete',
-    'family.create': 'history.txLabels.familyCreate',
-    'family.update': 'history.txLabels.familyUpdate',
-    'event.create': 'history.txLabels.eventCreate',
-    'event.update': 'history.txLabels.eventUpdate',
-    'event.delete': 'history.txLabels.eventDelete',
-    'media.upload': 'history.txLabels.mediaUpload',
-    'place.update': 'history.txLabels.placeUpdate',
-  };
-  const i18nKey = map[txLabel.toLowerCase()];
-  if (i18nKey) {
-    return t(i18nKey);
+): { variant: 'success' | 'danger' | 'brand' | 'neutral' | 'warning'; label: string } {
+  if (opLower.startsWith('creat')) return { variant: 'success', label: t('history.actions.created') };
+  if (opLower.startsWith('delet')) return { variant: 'danger', label: t('history.actions.deleted') };
+  if (opLower.startsWith('merg')) return { variant: 'brand', label: t('history.actions.merged') };
+  if (opLower.startsWith('restor')) return { variant: 'brand', label: t('history.actions.restored') };
+  if (opLower.startsWith('und')) return { variant: 'neutral', label: t('history.actions.undone') };
+  if (opLower === 'gedcom_import' || opLower.startsWith('import')) {
+    return { variant: 'neutral', label: t('history.actions.imported') };
   }
-  return txLabel
-    .replace(/[._-]+/g, ' ')
-    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+  return { variant: 'warning', label: t('history.actions.updated') };
 }
 
 export function getGroupEntries(
   group: ChangeLogTransactionGroupDto
 ): ChangeLogEntryDto[] {
   return group.entries || group.changes || [];
+}
+
+function extractIsoDateKey(iso: string | undefined | null): string {
+  if (!iso) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) {
+    return iso.slice(0, 10);
+  }
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+export function filterHistoryGroups(
+  groups: ChangeLogTransactionGroupDto[],
+  filters: HistoryFiltersState
+): ChangeLogTransactionGroupDto[] {
+  return groups.filter((group) => {
+    const createdDate = extractIsoDateKey(group.created_at);
+    if (filters.fromDate && (!createdDate || createdDate < filters.fromDate)) {
+      return false;
+    }
+    if (filters.toDate && (!createdDate || createdDate > filters.toDate)) {
+      return false;
+    }
+
+    const groupEntries = getGroupEntries(group);
+    return groupEntries.some((entry) => {
+      const entryOp = (entry.op || entry.action || '').toLowerCase();
+      if (filters.onlyDeletions && !entryOp.startsWith('delet')) {
+        return false;
+      }
+      if (
+        filters.entityType !== 'all' &&
+        normalizeFilterEntityType(entry.entity_type) !== filters.entityType.toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        filters.op !== 'all' &&
+        !entryOp.startsWith(filters.op.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  });
 }
 
 export const HistoryPage: React.FC<HistoryPageProps> = ({
@@ -205,52 +253,41 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
       to_date: filters.toDate || undefined,
     })
       .then((res) => {
-        const txGroups =
-          res.transactions && res.transactions.length > 0
-            ? res.transactions
-            : Array.isArray(res.items) &&
-              res.items.length > 0 &&
-              ('entries' in res.items[0] || 'changes' in res.items[0])
-            ? (res.items as unknown as ChangeLogTransactionGroupDto[])
-            : [];
-        if (txGroups.length > 0) {
-          setGroups(txGroups);
+        const txGroups = Array.isArray(res.transactions)
+          ? res.transactions
+          : Array.isArray(res.items) &&
+            (res.items.length === 0 ||
+              'entries' in res.items[0] ||
+              'changes' in res.items[0])
+          ? (res.items as unknown as ChangeLogTransactionGroupDto[])
+          : [];
+        setGroups(txGroups);
+      })
+      .catch((err) => {
+        if (isOfflineFallbackError(err)) {
+          setGroups(buildDefaultHistoryFeed());
+        } else {
+          setGroups([]);
+          addToast({
+            type: 'error',
+            title: t('history.page.loadErrorTitle'),
+            description: getLocalizedErrorMessage(err, t),
+          });
         }
       })
-      .catch(() => {})
       .finally(() => {
         setLoading(false);
       });
-  }, [isAdmin, initialGroups, filters]);
+  }, [isAdmin, initialGroups, filters, addToast, t]);
 
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
 
-  const filteredGroups = useMemo(() => {
-    return groups.filter((group) => {
-      const groupEntries = getGroupEntries(group);
-      return groupEntries.some((entry) => {
-        const entryOp = (entry.op || entry.action || '').toLowerCase();
-        if (filters.onlyDeletions && !entryOp.startsWith('delet')) {
-          return false;
-        }
-        if (
-          filters.entityType !== 'all' &&
-          entry.entity_type.toLowerCase() !== filters.entityType.toLowerCase()
-        ) {
-          return false;
-        }
-        if (
-          filters.op !== 'all' &&
-          !entryOp.startsWith(filters.op.toLowerCase())
-        ) {
-          return false;
-        }
-        return true;
-      });
-    });
-  }, [groups, filters]);
+  const filteredGroups = useMemo(
+    () => filterHistoryGroups(groups, filters),
+    [groups, filters]
+  );
 
   if (!isAdmin) {
     return (
@@ -279,11 +316,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
   const handleUndoTx = async (txId: string) => {
     try {
-      await undoTransaction(txId).catch(() => ({
-        tx_id: txId,
-        reverted_count: 1,
-        status: 'undone',
-      }));
+      try {
+        await undoTransaction(txId);
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+      }
       setGroups((prev) =>
         prev.map((g) => (g.tx_id === txId ? { ...g, can_undo: false } : g))
       );
@@ -294,7 +331,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('history.undoErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     }
@@ -302,12 +339,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
   const handleRestoreDeleted = async (entry: ChangeLogEntryDto) => {
     try {
-      await restoreChange(entry.id).catch(() => ({
-        change_id: entry.id,
-        restored_entity_type: entry.entity_type,
-        restored_entity_id: entry.entity_id,
-        status: 'restored',
-      }));
+      try {
+        await restoreChange(entry.id);
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+      }
       addToast({
         type: 'success',
         title: t('history.restore.successToast'),
@@ -316,7 +352,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('history.restore.errorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     }
@@ -390,37 +426,35 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                         <span className="text-sm font-semibold text-primary">
                           {actorName}
                         </span>
-                        <Badge
-                          variant={
-                            opLower.startsWith('creat')
-                              ? 'success'
-                              : isDeletion
-                              ? 'danger'
-                              : 'warning'
-                          }
-                          size="sm"
-                        >
-                          {opLower.startsWith('creat')
-                            ? t('history.actions.created')
-                            : isDeletion
-                            ? t('history.actions.deleted')
-                            : t('history.actions.updated')}
-                        </Badge>
+                        {(() => {
+                          const badge = getHistoryActionBadgeProps(opLower, t);
+                          return (
+                            <Badge variant={badge.variant} size="sm">
+                              {badge.label}
+                            </Badge>
+                          );
+                        })()}
                         {primaryEntry?.entity_label && (
                           <span className="text-sm font-medium text-primary">
-                            {primaryEntry.entity_label}
+                            {formatEntityLabel(
+                              primaryEntry.entity_label,
+                              primaryEntry.entity_type,
+                              extractEntityGid(primaryEntry),
+                              t,
+                              { stripGid: true }
+                            )}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-secondary">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-secondary">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 text-tertiary" />
                           {formatTimestamp(group.created_at)}
                         </span>
                         {group.tx_label && (
                           <>
-                            <span>·</span>
+                            <span className="hidden sm:inline" aria-hidden="true">·</span>
                             <span
                               data-testid={`history-tx-label-${group.tx_id}`}
                               className="text-secondary font-medium"
@@ -441,6 +475,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                         data-testid={`history-undo-tx-${group.tx_id}`}
                         leftIcon={<Undo2 className="h-3.5 w-3.5" />}
                         onClick={() => void handleUndoTx(group.tx_id)}
+                        className="min-h-10 sm:min-h-8"
                       >
                         {t('common.undo')}
                       </Button>
@@ -448,10 +483,10 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
                     {isDeletion && primaryEntry && (
                       <Button
-                        size="sm"
+                        size="md"
                         variant="primary"
                         data-testid={`history-restore-entry-${primaryEntry.id}`}
-                        leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+                        leftIcon={<RotateCcw className="h-4 w-4" />}
                         onClick={() => void handleRestoreDeleted(primaryEntry)}
                       >
                         {t('history.page.restoreDeletedBtn')}
@@ -461,6 +496,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                     <Button
                       size="sm"
                       variant="ghost"
+                      className="min-h-10 sm:min-h-8"
                       rightIcon={
                         isExpanded ? (
                           <ChevronUp className="h-3.5 w-3.5" />
@@ -490,12 +526,43 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                   <div className="border-t border-border pt-3 space-y-2">
                     {groupEntries.map((entry) => {
                       const diffs = extractEntryDiffs(entry);
-                      const entityTypeKey = `history.entityTypes.${entry.entity_type.toLowerCase()}`;
-                      const translatedEntityType = t(entityTypeKey);
-                      const displayEntityType =
-                        translatedEntityType !== entityTypeKey
-                          ? translatedEntityType
-                          : entry.entity_type;
+                      const displayEntityType = formatEntityTypeLabel(
+                        entry.entity_type,
+                        t
+                      );
+                      const gid = extractEntityGid(entry);
+                      const entryOp = (entry.op || entry.action || '').toLowerCase();
+                      const isEntryDeleted = entryOp.startsWith('delet');
+                      const normType = normalizeFilterEntityType(entry.entity_type);
+                      const targetPath =
+                        !isEntryDeleted && onNavigate && entry.entity_id
+                          ? normType === 'person'
+                            ? `/persons/${entry.entity_id}`
+                            : normType === 'place'
+                            ? '/places'
+                            : normType === 'family'
+                            ? '/tree'
+                            : null
+                          : null;
+                      const rawFormattedLabel = formatEntityLabel(
+                        entry.entity_label,
+                        entry.entity_type,
+                        gid,
+                        t,
+                        { stripGid: true }
+                      );
+                      const isOnlyRawGidLabel =
+                        Boolean(gid) &&
+                        rawFormattedLabel.toLowerCase() === gid!.toLowerCase();
+                      const entryTitle =
+                        rawFormattedLabel &&
+                        !isOnlyRawGidLabel &&
+                        rawFormattedLabel.toLowerCase() !==
+                          displayEntityType.toLowerCase()
+                          ? `${rawFormattedLabel} (${displayEntityType})`
+                          : displayEntityType;
+                      const showSeparateGidPill =
+                        Boolean(gid) && !isOnlyRawGidLabel;
 
                       return (
                         <div
@@ -503,47 +570,70 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                           className="rounded-xl border border-border bg-canvas p-3 space-y-2 text-xs"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-primary">
-                              {entry.entity_label || entry.entity_id} (
-                              {displayEntityType})
-                            </span>
-                            <span className="font-mono text-[11px] text-tertiary">
-                              {entry.entity_id}
-                            </span>
+                            {targetPath ? (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                rightIcon={<ArrowUpRight className="h-3.5 w-3.5 shrink-0" />}
+                                className="min-h-10 sm:min-h-8 h-auto px-0 py-1 font-medium text-brand hover:underline text-left justify-start"
+                                onClick={() => onNavigate?.(targetPath)}
+                              >
+                                {entryTitle}
+                              </Button>
+                            ) : (
+                              <span className="font-medium text-primary">
+                                {entryTitle}
+                              </span>
+                            )}
+                            {showSeparateGidPill && (
+                              <span className="font-mono text-[11px] text-tertiary shrink-0">
+                                {gid}
+                              </span>
+                            )}
                           </div>
 
                           {diffs.length > 0 && (
                             <div className="space-y-1.5">
-                              {diffs.map((d, idx) => {
-                                const fieldKey = `history.fields.${d.field}`;
-                                const translatedField = t(fieldKey);
-                                const displayField =
-                                  translatedField !== fieldKey
-                                    ? translatedField
-                                    : d.field;
-                                return (
-                                  <div
-                                    key={`${d.field}-${idx}`}
-                                    className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-[11px]"
-                                  >
-                                    <span className="font-mono font-semibold text-secondary">
-                                      {displayField}
+                              <div className="hidden sm:grid sm:grid-cols-3 gap-2 px-1 pb-1 border-b border-border/60 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                                <span>{t('history.diff.colField')}</span>
+                                <span>{t('history.diff.colBefore')}</span>
+                                <span>{t('history.diff.colAfter')}</span>
+                              </div>
+                              {diffs.map((d, idx) => (
+                                <div
+                                  key={`${d.field}-${idx}`}
+                                  className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-2 items-center text-[11px]"
+                                >
+                                  <span className="font-semibold text-secondary">
+                                    {formatFieldLabel(d.field, t)}
+                                  </span>
+                                  <span className="rounded bg-danger/10 px-2 py-1 sm:py-0.5 text-secondary break-words max-w-full overflow-hidden">
+                                    <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary mr-1.5">
+                                      {t('history.diff.colBefore')}:
                                     </span>
-                                    <span className="rounded bg-danger/10 px-2 py-0.5 text-secondary line-through break-words max-w-full overflow-hidden text-ellipsis">
+                                    <span className="line-through">
                                       {formatDiffValue(
                                         d.before,
-                                        t('history.drawer.emptyValue')
+                                        t('history.drawer.emptyValue'),
+                                        { t, locale, field: d.field }
                                       )}
                                     </span>
-                                    <span className="rounded bg-success/10 px-2 py-0.5 font-medium text-primary break-words max-w-full overflow-hidden text-ellipsis">
+                                  </span>
+                                  <span className="rounded bg-success/10 px-2 py-1 sm:py-0.5 font-medium text-primary break-words max-w-full overflow-hidden">
+                                    <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary mr-1.5">
+                                      {t('history.diff.colAfter')}:
+                                    </span>
+                                    <span>
                                       {formatDiffValue(
                                         d.after,
-                                        t('history.drawer.emptyValue')
+                                        t('history.drawer.emptyValue'),
+                                        { t, locale, field: d.field }
                                       )}
                                     </span>
-                                  </div>
-                                );
-                              })}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

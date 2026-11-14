@@ -91,7 +91,7 @@ let person = if let Ok(uuid) = Uuid::parse_str(&id_or_gid) {
 All network calls go through [`frontend/src/api/client.ts`](../../frontend/src/api/client.ts):
 - Requests automatically attach `X-Requested-With: genealogy` and send session cookies (`credentials: 'same-origin'`).
 - Failed calls reject with an `ApiError` instance containing `status`, `code`, and `details`.
-- Use [`frontend/src/lib/error-formatter.ts`](../../frontend/src/lib/error-formatter.ts) to translate errors (`getLocalizedErrorMessage` maps error codes to localized strings while preserving explicit backend validation error details for `validation_failed`, `GOT-015`):
+- Use [`frontend/src/lib/error-formatter.ts`](../../frontend/src/lib/error-formatter.ts) to translate errors (`getLocalizedErrorMessage` maps error codes to localized strings while preserving explicit backend validation error details for `validation_failed`, `GOT-015`) and guard offline demo fallbacks strictly via `isOfflineFallbackError` (`status === 0 || code === 'network_error'`, `GOT-012`/`GOT-022`/`GOT-023`):
 ```tsx
 import { getLocalizedErrorMessage } from '../lib/error-formatter';
 import { useI18n } from '../i18n';
@@ -150,4 +150,4 @@ Vitest tests in `frontend/tests/components/` use React Testing Library to verify
 - Test keyboard navigation (Enter, Tab, Escape).
 - Test role-based visibility (Editor vs Viewer).
 
-_Last curated: 2026-11-09 (Serde alias DTO compatibility GOT-015 & validation error formatting)_
+_Last curated: 2026-11-14 (Serde alias DTOs GOT-015, error formatting & strict isOfflineFallbackError guard)_

@@ -26,7 +26,10 @@ import {
   rollbackSnapshot,
   TreeSnapshotDto,
 } from '../../api/client';
-import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import {
+  getLocalizedErrorMessage,
+  isOfflineFallbackError,
+} from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
 import { formatBytes } from './SystemDiagnosticsCard';
 
@@ -91,17 +94,24 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
   const [confirmWord, setConfirmWord] = useState<string>('');
   const [rollingBack, setRollingBack] = useState<boolean>(false);
   const [rollbackError, setRollbackError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadSnapshots = useCallback(() => {
     if (initialSnapshots) return;
+    setLoadError(null);
     getSnapshots()
       .then((items) => {
-        if (items && items.length > 0) {
-          setSnapshots(items);
-        }
+        setSnapshots(items ?? []);
       })
-      .catch(() => {});
-  }, [initialSnapshots]);
+      .catch((err) => {
+        if (isOfflineFallbackError(err)) {
+          setSnapshots(buildDefaultTreeSnapshots());
+        } else {
+          setSnapshots([]);
+          setLoadError(getLocalizedErrorMessage(err, t));
+        }
+      });
+  }, [initialSnapshots, t]);
 
   useEffect(() => {
     loadSnapshots();
@@ -151,11 +161,15 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
     if (creating) return;
     setCreating(true);
     try {
-      const created = await createSnapshot({
-        label: labelInput.trim() || undefined,
-        reason: 'manual',
-      }).catch(
-        (): TreeSnapshotDto => ({
+      let created: TreeSnapshotDto;
+      try {
+        created = await createSnapshot({
+          label: labelInput.trim() || undefined,
+          reason: 'manual',
+        });
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+        created = {
           id: `snap-${Date.now()}`,
           label: labelInput.trim() || t('history.snapshots.defaultManualLabel'),
           reason: 'manual',
@@ -172,8 +186,8 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
           expires_at: new Date(
             Date.now() + 14 * 24 * 60 * 60 * 1000
           ).toISOString(),
-        })
-      );
+        };
+      }
 
       setSnapshots((prev) => [created, ...prev]);
       setLabelInput('');
@@ -185,7 +199,7 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('history.snapshots.createErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     } finally {
@@ -200,13 +214,11 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
     setRollingBack(true);
     setRollbackError(null);
     try {
-      await rollbackSnapshot(rollbackTarget.id, confirmWord.trim()).catch(
-        () => ({
-          restored_snapshot_id: rollbackTarget.id,
-          pre_rollback_snapshot_id: `snap-safety-${Date.now()}`,
-          status: 'rolled_back',
-        })
-      );
+      try {
+        await rollbackSnapshot(rollbackTarget.id, confirmWord.trim());
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+      }
       addToast({
         type: 'success',
         title: t('history.snapshots.rolledBackToast'),
@@ -244,9 +256,9 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
 
           <form
             onSubmit={handleCreateSnapshot}
-            className="flex flex-wrap items-center gap-2 shrink-0"
+            className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0"
           >
-            <div className="w-56">
+            <div className="w-full sm:w-72 md:w-80">
               <TextInput
                 size="sm"
                 value={labelInput}
@@ -257,10 +269,11 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
             </div>
             <Button
               type="submit"
-              size="sm"
+              size="md"
               variant="primary"
               loading={creating}
-              leftIcon={<Plus className="h-3.5 w-3.5" />}
+              leftIcon={<Plus className="h-4 w-4" />}
+              className="w-full sm:w-auto"
             >
               {t('history.snapshots.createBtn')}
             </Button>
@@ -268,6 +281,11 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
         </CardHeader>
 
         <CardBody>
+          {loadError && (
+            <Alert variant="danger" className="mb-4">
+              {loadError}
+            </Alert>
+          )}
           {snapshots.length === 0 ? (
             <EmptyState
               icon={<ArchiveRestore className="h-6 w-6" />}
@@ -291,9 +309,6 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
                           {snap.label || snap.id}
                         </span>
                         {formatReasonBadge(snap.reason)}
-                        <span className="font-mono text-xs text-tertiary">
-                          ({snap.id})
-                        </span>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary">
@@ -338,9 +353,9 @@ export const TreeSnapshotsCard: React.FC<TreeSnapshotsCardProps> = ({
 
                     <div className="shrink-0">
                       <Button
-                        size="sm"
+                        size="md"
                         variant="secondary"
-                        leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+                        leftIcon={<RotateCcw className="h-4 w-4" />}
                         onClick={() => {
                           setRollbackTarget(snap);
                           setConfirmWord('');

@@ -84,22 +84,22 @@ export const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({
                 <li
                   key={tx.tx_id}
                   data-testid={`dashboard-activity-${tx.tx_id}`}
-                  className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                  className="py-3 first:pt-0 last:pb-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3"
                 >
                   <div className="flex items-start gap-2.5 min-w-0">
                     <Avatar name={actorName} size="sm" />
                     <div className="min-w-0 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                         <span className="font-semibold text-primary">
                           {actorName}
                         </span>
-                        <span className="text-secondary">·</span>
+                        <span className="hidden sm:inline text-secondary" aria-hidden="true">·</span>
                         <span className="text-secondary">
                           {formatTxLabel(tx.tx_label, t)}
                         </span>
                         {firstEntry?.entity_label && (
                           <>
-                            <span className="text-secondary">—</span>
+                            <span className="hidden sm:inline text-secondary" aria-hidden="true">—</span>
                             {firstEntry.entity_type === 'person' &&
                             onSelectPerson ? (
                               <Button
@@ -108,7 +108,7 @@ export const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({
                                 onClick={() =>
                                   onSelectPerson(firstEntry.entity_id)
                                 }
-                                className="text-xs font-semibold text-brand"
+                                className="min-h-10 sm:min-h-0 px-0 py-1 sm:py-0 text-xs font-semibold text-brand"
                               >
                                 {firstEntry.entity_label}
                               </Button>
@@ -135,6 +135,7 @@ export const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({
                       data-testid={`dashboard-undo-${tx.tx_id}`}
                       leftIcon={<Undo2 className="h-3.5 w-3.5" />}
                       onClick={() => onUndoTransaction(tx.tx_id)}
+                      className="shrink-0 min-h-10 sm:min-h-8"
                     >
                       {t('common.undo')}
                     </Button>

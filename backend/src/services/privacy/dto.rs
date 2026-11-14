@@ -321,6 +321,10 @@ pub struct ChangeLogEntryDto {
     pub before_json: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after_json: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_gid: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diffs: Vec<crate::services::history::FieldDiffDto>,
     pub created_at: String,
 }
 

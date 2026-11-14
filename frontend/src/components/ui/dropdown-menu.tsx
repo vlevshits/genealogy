@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Kbd } from './kbd';
@@ -25,6 +25,24 @@ export interface DropdownMenuProps {
   className?: string;
 }
 
+const VIEWPORT_PADDING = 8;
+
+export function clampMenuHorizontalOffset(
+  menuRect: Pick<DOMRect, 'left' | 'right' | 'width'>,
+  viewportWidth: number,
+  margin: number = VIEWPORT_PADDING
+): number {
+  if (viewportWidth <= 0) return 0;
+  let dx = 0;
+  if (menuRect.right > viewportWidth - margin) {
+    dx = viewportWidth - margin - menuRect.right;
+  }
+  if (menuRect.left + dx < margin) {
+    dx += margin - (menuRect.left + dx);
+  }
+  return Math.round(dx);
+}
+
 export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   trigger,
   items,
@@ -34,10 +52,79 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
+  activeIndexRef.current = activeIndex;
+  const [horizontalShift, setHorizontalShift] = useState(0);
+  const menuId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerWrapperRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const pendingFocusModeRef = useRef<'first' | 'last'>('first');
+
+  const findEnabledIndex = useCallback(
+    (startIndex: number, direction: 1 | -1): number => {
+      if (items.length === 0) return -1;
+      for (let step = 0; step < items.length; step += 1) {
+        const candidate =
+          (startIndex + direction * step + items.length) % items.length;
+        if (!items[candidate]?.disabled) {
+          return candidate;
+        }
+      }
+      return -1;
+    },
+    [items]
+  );
+
+  const focusItemAt = useCallback((index: number) => {
+    if (index < 0 || index >= items.length) return;
+    activeIndexRef.current = index;
+    setActiveIndex(index);
+    itemRefs.current[index]?.focus();
+  }, [items.length]);
+
+  const restoreTriggerFocus = useCallback(() => {
+    const focusTarget =
+      triggerWrapperRef.current?.querySelector<HTMLElement>(
+        'button, a[href], [tabindex]:not([tabindex="-1"])'
+      ) ?? triggerWrapperRef.current;
+    focusTarget?.focus();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setHorizontalShift(0);
+      return;
+    }
+
+    const updatePosition = () => {
+      const menuEl = menuRef.current;
+      if (!menuEl || typeof window === 'undefined') return;
+      menuEl.style.transform = '';
+      const rect = menuEl.getBoundingClientRect();
+      const shift = clampMenuHorizontalOffset(rect, window.innerWidth);
+      setHorizontalShift(shift);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, [open, align, items.length]);
 
   useEffect(() => {
     if (!open) return;
+
+    const targetIndex =
+      pendingFocusModeRef.current === 'last'
+        ? findEnabledIndex(items.length - 1, -1)
+        : findEnabledIndex(0, 1);
+    if (targetIndex !== -1) {
+      activeIndexRef.current = targetIndex;
+      setActiveIndex(targetIndex);
+      itemRefs.current[targetIndex]?.focus();
+    }
+
     const onOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -45,13 +132,28 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        restoreTriggerFocus();
+      } else if (e.key === 'Tab') {
         setOpen(false);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex((i) => (i + 1) % Math.max(1, items.length));
+        const next = findEnabledIndex(activeIndexRef.current + 1, 1);
+        if (next !== -1) focusItemAt(next);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex((i) => (i - 1 + Math.max(1, items.length)) % Math.max(1, items.length));
+        const prev = findEnabledIndex(activeIndexRef.current - 1, -1);
+        if (prev !== -1) focusItemAt(prev);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        const first = findEnabledIndex(0, 1);
+        if (first !== -1) focusItemAt(first);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        const last = findEnabledIndex(items.length - 1, -1);
+        if (last !== -1) focusItemAt(last);
       }
     };
     document.addEventListener('mousedown', onOutside);
@@ -60,23 +162,56 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
       document.removeEventListener('mousedown', onOutside);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, items.length]);
+  }, [open, items.length, findEnabledIndex, focusItemAt, restoreTriggerFocus]);
+
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      pendingFocusModeRef.current = 'first';
+      setOpen(true);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      pendingFocusModeRef.current = 'last';
+      setOpen(true);
+    }
+  };
+
+  const enhancedTrigger = React.isValidElement<Record<string, unknown>>(trigger)
+    ? React.cloneElement(trigger, {
+        'aria-haspopup': 'menu',
+        'aria-expanded': open,
+        'aria-controls': open ? menuId : undefined,
+      })
+    : trigger;
 
   return (
     <div ref={containerRef} className={cn('relative inline-block', className)}>
       <div
-        onClick={() => setOpen((o) => !o)}
+        ref={triggerWrapperRef}
+        onClick={() => {
+          pendingFocusModeRef.current = 'first';
+          setOpen((o) => !o);
+        }}
+        onKeyDown={handleTriggerKeyDown}
         className="inline-flex cursor-pointer"
       >
-        {trigger}
+        {enhancedTrigger}
       </div>
 
       {open && (
         <div
+          ref={menuRef}
+          id={menuId}
           role="menu"
           aria-label={ariaLabel}
+          style={
+            horizontalShift !== 0
+              ? { transform: `translateX(${horizontalShift}px)` }
+              : undefined
+          }
           className={cn(
-            'absolute z-40 mt-1.5 min-w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg',
+            'absolute z-40 mt-1.5 min-w-52 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-surface p-1.5 shadow-lg',
             align === 'end' ? 'right-0' : 'left-0'
           )}
         >
@@ -89,10 +224,14 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
                 </div>
               )}
               <button
+                ref={(el) => {
+                  itemRefs.current[idx] = el;
+                }}
                 type="button"
                 role={item.checked !== undefined ? 'menuitemcheckbox' : 'menuitem'}
                 aria-checked={item.checked}
                 disabled={item.disabled}
+                tabIndex={idx === activeIndex ? 0 : -1}
                 title={item.disabled ? item.disabledReason : undefined}
                 onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => {
@@ -103,9 +242,9 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
                   }
                 }}
                 className={cn(
-                  'flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-left transition-colors cursor-pointer',
+                  'flex w-full min-h-10 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs sm:text-sm text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                   item.danger
-                    ? 'text-danger hover:bg-danger/10'
+                    ? 'text-danger hover:bg-danger/10 focus-visible:bg-danger/10'
                     : idx === activeIndex
                       ? 'bg-surface-muted text-primary'
                       : 'text-primary hover:bg-surface-muted',
@@ -114,7 +253,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
               >
                 <span className="flex items-center gap-2 min-w-0">
                   {item.checked !== undefined && (
-                    <span className="flex h-4 w-4 items-center justify-center">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                       {item.checked && <Check className="h-3.5 w-3.5 text-brand" />}
                     </span>
                   )}

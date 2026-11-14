@@ -1,13 +1,19 @@
-import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Check, GitMerge, RefreshCw, Save } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, GitMerge, RefreshCw, Save } from 'lucide-react';
 import {
   Alert,
   Badge,
   Button,
   Dialog,
+  RadioChoiceRow,
 } from '../ui';
 import { useI18n } from '../../i18n';
-import { cn } from '../../lib/utils';
+import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import {
+  HistoryTranslateFn,
+  formatDiffValue,
+  formatFieldLabel,
+} from './history-diff-utils';
 
 export interface ConflictFieldEntry {
   field: string;
@@ -41,7 +47,8 @@ export interface ConflictResolutionModalProps {
 export function computeConflictFields(
   myChanges: Record<string, unknown>,
   theirData: Record<string, unknown>,
-  fieldLabels: Record<string, string> = {}
+  fieldLabels: Record<string, string> = {},
+  t?: HistoryTranslateFn
 ): ConflictFieldEntry[] {
   const keys = Object.keys(myChanges).filter(
     (k) => k !== 'version' && k !== 'updated_at'
@@ -53,7 +60,7 @@ export function computeConflictFields(
     if (JSON.stringify(mine) !== JSON.stringify(theirs)) {
       list.push({
         field: key,
-        label: fieldLabels[key] || key,
+        label: fieldLabels[key] || formatFieldLabel(key, t ?? ((k) => k)),
         myValue: mine,
         theirValue: theirs,
       });
@@ -62,21 +69,25 @@ export function computeConflictFields(
   return list;
 }
 
-function stringifyFieldValue(value: unknown, emptyText: string): string {
-  if (value === null || value === undefined || value === '') {
-    return emptyText;
-  }
-  if (typeof value === 'boolean') {
-    return value ? 'true' : 'false';
-  }
-  if (typeof value === 'object') {
+function formatConflictTimeLabel(
+  updatedAt: string | null | undefined,
+  remoteVersion: number,
+  locale: 'en' | 'ru'
+): string {
+  const trimmed = updatedAt?.trim();
+  if (!trimmed) return `v${remoteVersion}`;
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
     try {
-      return JSON.stringify(value);
+      return new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(parsed);
     } catch {
-      return String(value);
+      return trimmed;
     }
   }
-  return String(value);
+  return trimmed;
 }
 
 export const ConflictResolutionModal: React.FC<
@@ -85,6 +96,7 @@ export const ConflictResolutionModal: React.FC<
   open,
   onOpenChange,
   updatedByName,
+  updatedAt,
   remoteVersion = 2,
   myChanges,
   theirData,
@@ -95,57 +107,153 @@ export const ConflictResolutionModal: React.FC<
   onMergeFields,
   onMerge,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [mergeMode, setMergeMode] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const resolvedTheirs = useMemo(
     () => theirData ?? theirChanges ?? {},
     [theirData, theirChanges]
   );
 
   const differingFields = useMemo<ConflictFieldEntry[]>(
-    () => computeConflictFields(myChanges, resolvedTheirs, fieldLabels),
-    [myChanges, resolvedTheirs, fieldLabels]
+    () => computeConflictFields(myChanges, resolvedTheirs, fieldLabels, t),
+    [myChanges, resolvedTheirs, fieldLabels, t]
   );
 
   const [selectedSourceByField, setSelectedSourceByField] = useState<
     Record<string, 'mine' | 'theirs'>
   >({});
 
+  useEffect(() => {
+    setMergeMode(false);
+    setSelectedSourceByField({});
+    setSubmitError(null);
+    setSubmitting(false);
+  }, [open, myChanges, theirData, theirChanges, remoteVersion]);
+
   const getChoice = (field: string): 'mine' | 'theirs' =>
     selectedSourceByField[field] ?? 'mine';
 
-  const handleApplyFieldMerge = () => {
+  const handleApplyFieldMerge = async () => {
+    if (submitting) return;
     const merged: Record<string, unknown> = { ...myChanges };
     for (const item of differingFields) {
       const choice = getChoice(item.field);
       merged[item.field] =
         choice === 'mine' ? item.myValue : item.theirValue;
     }
-    onMergeFields?.(merged, remoteVersion);
-    onMerge?.(merged, remoteVersion);
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onMergeFields?.(merged, remoteVersion);
+      await onMerge?.(merged, remoteVersion);
+    } catch (err) {
+      setSubmitError(getLocalizedErrorMessage(err, t));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleKeepMine = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onKeepMine(remoteVersion);
+    } catch (err) {
+      setSubmitError(getLocalizedErrorMessage(err, t));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUseTheirs = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onUseTheirs(resolvedTheirs);
+    } catch (err) {
+      setSubmitError(getLocalizedErrorMessage(err, t));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const editorName = updatedByName || t('history.conflict.anotherEditor');
+
+  const modalFooter = (
+    <div className="flex w-full flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2">
+      <Button
+        variant="secondary"
+        size="md"
+        disabled={submitting}
+        leftIcon={<RefreshCw className="h-4 w-4" />}
+        onClick={() => void handleUseTheirs()}
+        className="w-full sm:w-auto"
+      >
+        {t('history.conflict.useTheirsBtn')}
+      </Button>
+
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        {!mergeMode ? (
+          <Button
+            variant="secondary"
+            size="md"
+            disabled={submitting}
+            leftIcon={<GitMerge className="h-4 w-4" />}
+            onClick={() => setMergeMode(true)}
+            className="w-full sm:w-auto"
+          >
+            {t('history.conflict.mergeFieldByFieldBtn')}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            size="md"
+            loading={submitting}
+            leftIcon={<GitMerge className="h-4 w-4" />}
+            onClick={() => void handleApplyFieldMerge()}
+            className="w-full sm:w-auto"
+          >
+            {t('history.conflict.applyMergedBtn')}
+          </Button>
+        )}
+
+        <Button
+          variant={mergeMode ? 'secondary' : 'primary'}
+          size="md"
+          loading={submitting && !mergeMode}
+          disabled={submitting}
+          leftIcon={<Save className="h-4 w-4" />}
+          onClick={() => void handleKeepMine()}
+          className="w-full sm:w-auto"
+        >
+          {t('history.conflict.keepMineBtn')}
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       size="xl"
+      data-testid="conflict-resolution-modal"
       title={t('history.conflict.title')}
       description={t('history.conflict.subtitle', { editor: editorName })}
+      footer={modalFooter}
     >
-      <div
-        data-testid="conflict-resolution-modal"
-        className="space-y-4"
-      >
+      <div className="space-y-4">
         <Alert variant="warning">
           <div className="flex items-center justify-between gap-2">
             <span>
               {t('history.conflict.bannerText', {
                 name: editorName,
                 editor: editorName,
-                time: String(remoteVersion),
+                time: formatConflictTimeLabel(updatedAt, remoteVersion, locale),
                 version: remoteVersion,
               })}
             </span>
@@ -154,6 +262,12 @@ export const ConflictResolutionModal: React.FC<
             </Badge>
           </div>
         </Alert>
+
+        {submitError && (
+          <Alert variant="danger" data-testid="conflict-error-alert">
+            {submitError}
+          </Alert>
+        )}
 
         {mergeMode && (
           <p className="text-xs text-secondary flex items-center gap-1.5">
@@ -178,148 +292,78 @@ export const ConflictResolutionModal: React.FC<
             ) : (
               differingFields.map((item) => {
                 const choice = getChoice(item.field);
+                const formattedMine = formatDiffValue(
+                  item.myValue,
+                  t('history.drawer.emptyValue'),
+                  { t, locale, field: item.field }
+                );
+                const formattedTheirs = formatDiffValue(
+                  item.theirValue,
+                  t('history.drawer.emptyValue'),
+                  { t, locale, field: item.field }
+                );
+                const mineLabel = t('history.conflict.colMine');
+                const theirsLabel = t('history.conflict.colTheirs', {
+                  editor: editorName,
+                });
+
+                if (!mergeMode) {
+                  return (
+                    <div
+                      key={item.field}
+                      data-testid={`conflict-field-${item.field}`}
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 items-center text-xs"
+                    >
+                      <div className="font-semibold text-primary">
+                        {item.label}
+                      </div>
+
+                      <div className="min-w-0 rounded-xl border border-border bg-canvas/60 p-2.5 text-primary">
+                        <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary block mb-0.5">
+                          {mineLabel}
+                        </span>
+                        <span className="break-words block">{formattedMine}</span>
+                      </div>
+
+                      <div className="min-w-0 rounded-xl border border-border bg-canvas/60 p-2.5 text-primary">
+                        <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary block mb-0.5">
+                          {theirsLabel}
+                        </span>
+                        <span className="break-words block">{formattedTheirs}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div
+                  <RadioChoiceRow
                     key={item.field}
-                    role="radiogroup"
-                    aria-label={item.label || item.field}
                     data-testid={`conflict-field-${item.field}`}
-                    className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 items-center text-xs"
-                  >
-                    <div className="font-mono font-semibold text-primary">
-                      {item.label}
-                    </div>
-
-                    <div
-                      role="radio"
-                      aria-checked={choice === 'mine'}
-                      tabIndex={0}
-                      onClick={() =>
-                        setSelectedSourceByField((prev) => ({
-                          ...prev,
-                          [item.field]: 'mine',
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setSelectedSourceByField((prev) => ({
-                            ...prev,
-                            [item.field]: 'mine',
-                          }));
-                        }
-                      }}
-                      className={cn(
-                        'flex items-center justify-between gap-2 rounded-xl border p-2.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                        choice === 'mine'
-                          ? 'border-brand bg-brand/10 text-primary font-medium'
-                          : 'border-border bg-canvas text-secondary hover:border-brand/40'
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary block mb-0.5">
-                          {t('history.conflict.colMine')}
-                        </span>
-                        <span className="break-words block">
-                          {stringifyFieldValue(
-                            item.myValue,
-                            t('history.drawer.emptyValue')
-                          )}
-                        </span>
-                      </div>
-                      {choice === 'mine' && (
-                        <Check className="h-3.5 w-3.5 text-brand shrink-0" />
-                      )}
-                    </div>
-
-                    <div
-                      role="radio"
-                      aria-checked={choice === 'theirs'}
-                      tabIndex={0}
-                      onClick={() =>
-                        setSelectedSourceByField((prev) => ({
-                          ...prev,
-                          [item.field]: 'theirs',
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setSelectedSourceByField((prev) => ({
-                            ...prev,
-                            [item.field]: 'theirs',
-                          }));
-                        }
-                      }}
-                      className={cn(
-                        'flex items-center justify-between gap-2 rounded-xl border p-2.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                        choice === 'theirs'
-                          ? 'border-brand bg-brand/10 text-primary font-medium'
-                          : 'border-border bg-canvas text-secondary hover:border-brand/40'
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary block mb-0.5">
-                          {t('history.conflict.colTheirs', { editor: editorName })}
-                        </span>
-                        <span className="break-words block">
-                          {stringifyFieldValue(
-                            item.theirValue,
-                            t('history.drawer.emptyValue')
-                          )}
-                        </span>
-                      </div>
-                      {choice === 'theirs' && (
-                        <Check className="h-3.5 w-3.5 text-brand shrink-0" />
-                      )}
-                    </div>
-                  </div>
+                    rowLabel={item.label}
+                    ariaLabel={item.label || item.field}
+                    value={choice}
+                    onChange={(nextChoice) =>
+                      setSelectedSourceByField((prev) => ({
+                        ...prev,
+                        [item.field]: nextChoice,
+                      }))
+                    }
+                    options={[
+                      {
+                        value: 'mine',
+                        label: formattedMine,
+                        mobileHeader: mineLabel,
+                      },
+                      {
+                        value: 'theirs',
+                        label: formattedTheirs,
+                        mobileHeader: theirsLabel,
+                      },
+                    ]}
+                  />
                 );
               })
             )}
-          </div>
-        </div>
-
-        {/* 3 Resolution Paths */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
-            onClick={() => onUseTheirs(resolvedTheirs)}
-          >
-            {t('history.conflict.useTheirsBtn')}
-          </Button>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!mergeMode ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<GitMerge className="h-3.5 w-3.5" />}
-                onClick={() => setMergeMode(true)}
-              >
-                {t('history.conflict.mergeFieldByFieldBtn')}
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<GitMerge className="h-3.5 w-3.5" />}
-                onClick={handleApplyFieldMerge}
-              >
-                {t('history.conflict.applyMergedBtn')}
-              </Button>
-            )}
-
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Save className="h-3.5 w-3.5" />}
-              onClick={() => onKeepMine(remoteVersion)}
-            >
-              {t('history.conflict.keepMineBtn')}
-            </Button>
           </div>
         </div>
       </div>

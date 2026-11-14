@@ -16,6 +16,9 @@ export type ChangeActionOp =
   | 'delete'
   | 'restore'
   | 'undo'
+  | 'merge'
+  | 'merged'
+  | 'gedcom_import'
   | 'created'
   | 'updated'
   | 'deleted'
@@ -29,11 +32,14 @@ export interface ChangeLogEntryDto {
   tx_label: string;
   entity_type: string;
   entity_id: string;
+  entity_gid?: string | null;
   action?: ChangeActionOp;
   op: ChangeActionOp;
   entity_label?: string | null;
   actor_id?: string | null;
   actor_name?: string | null;
+  summary?: string | null;
+  can_revert?: boolean;
   created_at: string;
   diffs?: FieldDiffDto[];
   before_json?: Record<string, unknown> | null;
@@ -73,22 +79,26 @@ export interface HistoryFeedResponseDto {
 export interface EntityHistoryResponseDto {
   entity_type: string;
   entity_id: string;
+  entity_label?: string | null;
   items: ChangeLogEntryDto[];
   total: number;
 }
 
 export interface UndoTransactionResponseDto {
   tx_id: string;
-  reverted_count: number;
-  status: string;
+  undone_count?: number;
+  reverted_count?: number;
+  status?: string;
 }
 
 export interface RestoreChangeResponseDto {
   change_id: string | number;
-  restored_entity_type: string;
-  restored_entity_id: string;
+  entity_type?: string;
+  entity_id?: string;
+  restored_entity_type?: string;
+  restored_entity_id?: string;
   skipped_links?: string[];
-  status: string;
+  status?: string;
 }
 
 export interface TreeSnapshotRecordCountsDto {

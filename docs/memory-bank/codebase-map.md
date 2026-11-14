@@ -33,7 +33,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `services/email.rs` | 630 | SMTP mailer, HTML email templates (invitations, magic links, account recovery). |
 | `services/gedcom/` | ~1,200 | Modularized GEDCOM parser, exporter, record linkage, and family relations; `importer.rs` preserves PATs and `ai_config` across resets. |
 | `services/genealogy/` | ~1,100 | Modularized traversal, pedigree trees, descendant trees, and multi-trace kinship paths. |
-| `services/history/` | ~800 | Modularized change log recording, snapshots, undo transaction engine. |
+| `services/history/` | 2,881 | Modularized change log recording (`feed.rs`, `types.rs`, `mod.rs`), read-time label/GID/diff enrichment (`enrich.rs`, `enrich_index.rs`, `enrich_diff.rs`, `enrich_format.rs`), snapshots (`snapshots.rs`), and undo engine (`undo.rs`). |
 | `services/mcp/` | 2,775 | Modularized MCP server (6 files): `catalog.rs`, `db_tokens.rs` (PAT file/DB persistence, expiration, seed bootstrap), `rpc_read.rs`, `tools_mutation.rs` (incl. `merge_duplicate_individuals`, `list_duplicate_events`, `merge_duplicate_events`, `undo_transaction`), `types_tokens.rs`. |
 | `services/media_bundle.rs` | 433 | Batch ZIP upload extraction, checksum validation, automatic reconciliation with GEDCOM stubs. |
 | `services/pdf/` | ~1,500 | Modularized printable tree PDF engine: layout planning (`layout/`), vector rendering (`render/`), and themes. |
@@ -70,7 +70,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `gedcom_test.rs` | Import and export roundtrip of GEDCOM 5.5.1 and 7.0 sample files. |
 | `gendate_fixtures_test.rs` | Complex genealogical date string parsing, serialization, and comparisons. |
 | `health_test.rs` | Health check route, system status, uptime. |
-| `history_concurrency_test.rs` | Audit logs, optimistic locking conflicts (`409 Conflict`), rollback, undo. |
+| `history_concurrency_test.rs` | Audit logs, read-time label/GID/diff enrichment (`test_history_enrichment_labels_gids_and_clean_diffs`), optimistic locking (`409 Conflict`), rollback, undo (5 tests). |
 | `media_bundle_reconciliation_test.rs`| ZIP archive batch ingestion, reconciliation of stubs with physical files. |
 | `media_test.rs` | Uploads, EXIF parsing, image thumbnail generation, face tag management. |
 | `onboarding_home_person_test.rs` | Setup wizard, first administrator registration, "Start with self" flow. |
@@ -93,23 +93,23 @@ A complete directory and module responsibility map of the Genealogy repository.
 | Directory | Responsibility |
 | :--- | :--- |
 | `api/` | Modular typed API clients: `core.ts` (`apiFetch` with auto-purge on 401, defensive token sanitization, `ApiError`), `client.ts` (re-export facade), `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `delight-types.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (extraction engine selector), `openapi-types.ts`, and `openapi-types-domain.ts`. |
-| `components/ui/` | Reusable Design System primitives: `Button`, `IconButton`, `TextInput`, `Select`, `Dialog` (`Modal` with focus trap & toast-exempt `inert`), `Card`, `Badge`, `Toast` (`data-toast-region`, multi-line wrapping), `Spinner`, `Tabs`, `SegmentedControl`, `ThemeToggle`, `LanguageToggle`. |
+| `components/ui/` | Reusable Design System primitives (`~60` files): `overlay-stack.ts` (`useModalOverlay`), `Dialog` (`Modal`, `dialog-scroll-fade`), `Drawer`, `DropdownMenu` (`clampMenuHorizontalOffset`), `RadioChoiceRow`, `Switch`, `Toast` (`data-toast-region`), `SegmentedControl`, `BottomNav`, `AccessDeniedCard`, `Button`, `TextInput`, `Select`, `Tabs`. |
 | `components/domain/` | Domain-specific widgets: `GenDateInput`, `PlacePicker`, `RoleBadge`, `GenderIcon`. |
 | `components/auth/` | Auth UI: `LoginCard`, `MagicLinkVerifyCard`, `RecoveryCodesCard`, `RegisterInviteCard`. |
 | `components/tree/` | Interactive canvas: `TreeCanvas`, `PersonNodeCard`, `FanChartCanvas`, `KinshipFinderDialog`, `TreePrivacyPreviewCard`. |
-| `components/profile/` | Person profile view: `ProfileHeroHeader`, timeline events, relatives lists. |
-| `components/person/` | Person creation and edit modals (`PersonEditDialog`, quick-add components). |
+| `components/profile/` | Person profile view: `ProfileHeroHeader` (`buildProfileOverflowItems`), timeline events, relatives lists. |
+| `components/person/` | Person creation and edit modals (`PersonEditDialog` with recursive `409` `openConflictFromError`, quick-add components). |
 | `components/media/` | Gallery components: `MediaLightboxStudio`, `FaceTagCanvas`, `MediaMetadataPanel`. |
 | `components/places/` | Place hierarchy tree, place edit modal, interactive Leaflet/SVG place maps. |
 | `components/quality/` | Quality dashboard cards, candidate duplicate comparisons, duplicate events (`DuplicateEventsSubView`, `DuplicateEventCard`, `DuplicateEventCustomizeModal`, `default-quality-fixtures.ts`), place issue fixes. |
 | `components/print/` | PDF configuration options, tile cut-mark previews (`PrintPreviewCanvas`). |
-| `components/history/` | Audit log tables, diff viewers, `RecordHistoryDrawer`. |
+| `components/history/` | `RecordHistoryDrawer`, `ConflictResolutionModal`, `HistoryFilterBar`, `history-diff-constants.ts`, `history-diff-utils.ts`, `history-label-formatters.ts`. |
 | `components/stories/` | Audio recording widget (`AudioRecorderWidget`), story input panel (`StoryInputPanel`), speaker selector (`SpeakerSelectorCard`), draft review canvas (`DraftSubtreeCanvas`, `ReconciliationMatrixCard`, `DraftClarificationBar`). |
-| `components/settings/` | Settings management panels (`McpTokensPanel` with `availableScopesForRole` default scope helper, re-exported via `index.ts`). |
+| `components/settings/` | Settings management panels (`McpTokensPanel` with `availableScopesForRole`, `TreeSnapshotsCard` on `/settings/backups`, re-exported via `index.ts`). |
 | `components/onboarding/`| First-run setup wizards (`EmptyTreeOnboardingCard`). |
 | `hooks/` | Custom React hooks (`useLiveVersion`, `useUndoToast`). |
 | `i18n/` | Localization engine (`index.tsx`), translation dictionaries (`en.json`, `ru.json`). |
-| `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts`, `tree-layouts/` (`hourglass/`, `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts`). |
+| `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts` (`getLocalizedErrorMessage`, `isOfflineFallbackError`), `tree-layouts/` (`hourglass/`, `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts`). |
 | `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `DataQualityPage`, `PersonMergePage`, `AiStoryIntakePage`, `PrintExportPage`, `DevUiWorkbench`, etc.). |
 | `types/` | Domain data types (`person.ts`, `place.ts`, `event.ts`, `gendate.ts`). |
 
@@ -118,10 +118,12 @@ A complete directory and module responsibility map of the Genealogy repository.
 | Test Suite | Coverage Scope |
 | :--- | :--- |
 | `tests/api/auth-token-resilience.test.ts` | Defensive token sanitization (`cleanToken`), 401 auto-purge in `apiFetch`, and `AuthProvider` token cleanup. |
+| `tests/components/history-concurrency.test.tsx` | Change History feed/drawer/conflict modal EN/RU diff formatting, `{ stripGid }` dedup, `can_edit` profile History gate, overlay stack `Escape`/focus, and `DropdownMenu` / `RadioChoiceRow` UX checks (18 tests). |
 | `tests/components/milestone-2-9-and-3-2.test.tsx` | Story intake UI, Gemini engine controls, and `McpTokensPanel` PAT role-ceiling scope & lifecycle flows. |
 | `tests/components/person-merge-and-quality.test.tsx` | Person merge preview, Duplicate Events cards/customize modal/offline guard, `Dialog` focus trap & `SegmentedControl` tests (18 tests). |
 | `tests/i18n/parity.test.ts` | Bilingual key parity between `en.json` and `ru.json`, and emoji/icon prohibition. |
 | `e2e/duplicate-events.spec.ts` | Playwright Desktop/Mobile E2E tests for Duplicate Events (`e2e/fixtures/quality-api-mock.ts`, `e2e/pages/quality.page.ts`, `playwright.config.ts` with `serviceWorkers: 'block'`; 16 tests / 52 runs). |
+| `e2e/history-visualization.spec.ts` | Playwright Desktop/Mobile E2E tests for Change History feed, `RecordHistoryDrawer`, `ConflictResolutionModal` retries, filter/RBAC & EN/RU parity (`e2e/fixtures/history-api-mock.ts`, `e2e/pages/history.page.ts`; 15 test specs). |
 
 ---
 
@@ -163,4 +165,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-14 (Duplicate Events backend/UI/E2E modules, Dialog/Toast polish & verified module line counts)_
+_Last curated: 2026-11-14 (Change History enrichment/UI/E2E modules, Overlay Stack, Duplicate Events & verified module line counts)_

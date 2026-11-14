@@ -24,7 +24,10 @@ import {
   undoTransaction,
 } from '../api/client';
 import { useAuth } from '../lib/auth-context';
-import { getLocalizedErrorMessage } from '../lib/error-formatter';
+import {
+  getLocalizedErrorMessage,
+  isOfflineFallbackError,
+} from '../lib/error-formatter';
 import { useI18n } from '../i18n';
 
 export interface DashboardPageProps {
@@ -291,11 +294,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const handleUndoTx = async (txId: string) => {
     try {
-      await undoTransaction(txId).catch(() => ({
-        tx_id: txId,
-        reverted_count: 1,
-        status: 'undone',
-      }));
+      try {
+        await undoTransaction(txId);
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+      }
       setDashboard((prev) => ({
         ...prev,
         recent_activity: prev.recent_activity.map((tx) =>
@@ -309,7 +312,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     } catch (err) {
       addToast({
         type: 'error',
-        title: t('common.errorLoading'),
+        title: t('history.undoErrorTitle'),
         description: getLocalizedErrorMessage(err, t),
       });
     }

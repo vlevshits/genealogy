@@ -18,6 +18,8 @@ pub struct RecordHistoryItemDto {
     pub entity_type: String,
     pub entity_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_gid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity_label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor_id: Option<String>,
@@ -201,12 +203,14 @@ pub fn log_change(
         action: op.to_string(),
         entity_type: entity_type.to_string(),
         entity_id: entity_id.to_string(),
+        entity_gid: None,
         entity_label,
         actor_id,
         actor_name,
         summary,
         before_json,
         after_json,
+        diffs: Vec::new(),
         created_at: Utc::now().to_rfc3339(),
     };
     store.change_log.push(entry.clone());
@@ -251,27 +255,7 @@ pub fn parse_if_match_version(headers: &axum::http::HeaderMap) -> Option<i32> {
 
 /// Computes field-level diffs between `before_json` and `after_json` (`14 §3.2`).
 pub fn compute_field_diffs(before: Option<&Value>, after: Option<&Value>) -> Vec<FieldDiffDto> {
-    let mut diffs = Vec::new();
-    if let (Some(Value::Object(b_map)), Some(Value::Object(a_map))) = (before, after) {
-        let mut all_keys: Vec<&String> = b_map.keys().chain(a_map.keys()).collect();
-        all_keys.sort();
-        all_keys.dedup();
-        for key in all_keys {
-            if matches!(key.as_str(), "version" | "id" | "birth_sort" | "death_sort") {
-                continue;
-            }
-            let b_val = b_map.get(key).cloned().unwrap_or(Value::Null);
-            let a_val = a_map.get(key).cloned().unwrap_or(Value::Null);
-            if b_val != a_val {
-                diffs.push(FieldDiffDto {
-                    field: key.clone(),
-                    before: b_val,
-                    after: a_val,
-                });
-            }
-        }
-    }
-    diffs
+    super::compute_field_diffs_with_index(before, after, &super::HistoryLookupIndex::empty())
 }
 
 pub(crate) fn normalize_entity_type(raw: &str) -> String {

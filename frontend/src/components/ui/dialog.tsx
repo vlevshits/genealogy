@@ -3,67 +3,13 @@ import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { IconButton } from './icon-button';
 import { useI18n } from '../../i18n';
+import {
+  getFocusableElements,
+  handleDialogFocusTrapKeyDown,
+  useModalOverlay,
+} from './overlay-stack';
 
-const FOCUSABLE_SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ');
-
-export function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  const candidates = Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-  );
-  return candidates.filter((el) => {
-    if (el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true') {
-      return false;
-    }
-    const hiddenAncestor = el.closest('[hidden], [inert], [aria-hidden="true"]');
-    if (hiddenAncestor && hiddenAncestor !== container && container.contains(hiddenAncestor)) {
-      return false;
-    }
-    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
-      const style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') {
-        return false;
-      }
-    }
-    return true;
-  });
-}
-
-export function handleDialogFocusTrapKeyDown(
-  e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'preventDefault'>,
-  container: HTMLElement | null,
-  activeElement: Element | null = typeof document !== 'undefined'
-    ? document.activeElement
-    : null
-): boolean {
-  if (e.key !== 'Tab' || !container) return false;
-  const focusables = getFocusableElements(container);
-  if (focusables.length === 0) {
-    e.preventDefault();
-    container.focus();
-    return true;
-  }
-  const first = focusables[0];
-  const last = focusables[focusables.length - 1];
-  if (e.shiftKey) {
-    if (!activeElement || activeElement === first || !container.contains(activeElement)) {
-      e.preventDefault();
-      last.focus();
-      return true;
-    }
-  } else if (!activeElement || activeElement === last || !container.contains(activeElement)) {
-    e.preventDefault();
-    first.focus();
-    return true;
-  }
-  return false;
-}
+export { getFocusableElements, handleDialogFocusTrapKeyDown };
 
 export type DialogSize = 'sm' | 'md' | 'xl' | 'full';
 
@@ -77,6 +23,7 @@ export interface DialogProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  'data-testid'?: string;
 }
 
 export const Dialog: React.FC<DialogProps> = ({
@@ -89,6 +36,7 @@ export const Dialog: React.FC<DialogProps> = ({
   children,
   footer,
   className,
+  'data-testid': dataTestId,
 }) => {
   const { t } = useI18n();
   const titleId = useId();
@@ -96,9 +44,6 @@ export const Dialog: React.FC<DialogProps> = ({
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const previousActiveRef = useRef<HTMLElement | null>(null);
-  const onOpenChangeRef = useRef(onOpenChange);
-  onOpenChangeRef.current = onOpenChange;
   const [canScrollDown, setCanScrollDown] = useState(false);
 
   const updateScrollCue = useCallback(() => {
@@ -110,66 +55,14 @@ export const Dialog: React.FC<DialogProps> = ({
     setCanScrollDown(el.scrollHeight - el.scrollTop - el.clientHeight > 6);
   }, []);
 
-  useEffect(() => {
-    if (!open || typeof document === 'undefined') return;
-    previousActiveRef.current = document.activeElement as HTMLElement | null;
-
-    // Mark background sibling subtrees outside this dialog overlay as inert & aria-hidden
-    // so neither keyboard Tab nor assistive technologies escape behind the active modal.
-    const modifiedSiblings: Array<{
-      el: HTMLElement;
-      prevAriaHidden: string | null;
-      hadInert: boolean;
-    }> = [];
-    let current: HTMLElement | null = overlayRef.current;
-    while (current && current.parentElement && current !== document.body) {
-      const parent = current.parentElement;
-      for (const child of Array.from(parent.children)) {
-        if (!(child instanceof HTMLElement) || child === current) continue;
-        if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE') continue;
-        if (child.hasAttribute('data-toast-region')) continue;
-        modifiedSiblings.push({
-          el: child,
-          prevAriaHidden: child.getAttribute('aria-hidden'),
-          hadInert: child.hasAttribute('inert'),
-        });
-        child.setAttribute('aria-hidden', 'true');
-        child.setAttribute('inert', '');
-      }
-      current = parent;
-    }
-
-    if (dialogRef.current) {
-      const focusables = getFocusableElements(dialogRef.current);
-      const target = focusables[0] ?? dialogRef.current;
-      target.focus();
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dismissible) {
-        e.preventDefault();
-        onOpenChangeRef.current(false);
-        return;
-      }
-      handleDialogFocusTrapKeyDown(e, dialogRef.current);
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      for (const { el, prevAriaHidden, hadInert } of modifiedSiblings) {
-        if (prevAriaHidden === null) {
-          el.removeAttribute('aria-hidden');
-        } else {
-          el.setAttribute('aria-hidden', prevAriaHidden);
-        }
-        if (!hadInert) {
-          el.removeAttribute('inert');
-        }
-      }
-      previousActiveRef.current?.focus?.();
-    };
-  }, [open, dismissible]);
+  useModalOverlay({
+    open,
+    modal: true,
+    dismissible,
+    overlayRef,
+    panelRef: dialogRef,
+    onOpenChange,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -227,6 +120,7 @@ export const Dialog: React.FC<DialogProps> = ({
         tabIndex={-1}
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
+        data-testid={dataTestId}
         className={cn(
           'relative z-10 flex flex-col border border-border bg-surface text-primary shadow-xl max-h-screen md:max-h-[85vh] focus:outline-none',
           sizeClasses[size],
@@ -276,7 +170,7 @@ export const Dialog: React.FC<DialogProps> = ({
           )}
         </div>
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 border-t border-border bg-surface-muted/40 px-6 py-3.5 rounded-b-2xl">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-border bg-surface-muted/40 px-6 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom,0px))] md:rounded-b-2xl">
             {footer}
           </div>
         )}

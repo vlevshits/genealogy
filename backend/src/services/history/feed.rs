@@ -105,8 +105,12 @@ pub fn query_history_feed(
         (page - 1) * page_size
     };
 
-    let page_items: Vec<ChangeLogEntryDto> =
+    let mut page_items: Vec<ChangeLogEntryDto> =
         filtered.drain(..).skip(offset).take(page_size).collect();
+    let index = HistoryLookupIndex::from_store(store);
+    for item in &mut page_items {
+        index.enrich_entry(item);
+    }
 
     let next_cursor = if offset + page_items.len() < total {
         Some((offset + page_items.len()).to_string())
@@ -170,7 +174,13 @@ pub fn query_record_history(
     raw_entity_id: &str,
 ) -> Result<RecordHistoryResponse, AppError> {
     let entity_type = normalize_entity_type(raw_entity_type);
-    let resolved_id = resolve_canonical_entity_id(store, &entity_type, raw_entity_id);
+    let index = HistoryLookupIndex::from_store(store);
+    let mut resolved_id = resolve_canonical_entity_id(store, &entity_type, raw_entity_id);
+    if resolved_id == raw_entity_id.trim() {
+        if let Some(id) = index.resolve_id_by_gid(&entity_type, raw_entity_id) {
+            resolved_id = id;
+        }
+    }
 
     let items: Vec<RecordHistoryItemDto> = store
         .change_log
@@ -182,7 +192,18 @@ pub fn query_record_history(
                     || e.entity_id.eq_ignore_ascii_case(raw_entity_id.trim()))
         })
         .map(|e| {
-            let diffs = compute_field_diffs(e.before_json.as_ref(), e.after_json.as_ref());
+            let before = e.before_json.as_ref();
+            let after = e.after_json.as_ref();
+            let diffs = compute_field_diffs_with_index(before, after, &index);
+            let entity_gid = index.resolve_entity_gid(&entity_type, &e.entity_id, before, after);
+            let entity_label = index.resolve_entity_label(
+                &entity_type,
+                &e.entity_id,
+                e.entity_label.as_deref(),
+                &e.tx_label,
+                before,
+                after,
+            );
             RecordHistoryItemDto {
                 id: e.id.clone(),
                 tx_id: if e.tx_id.is_empty() {
@@ -199,7 +220,8 @@ pub fn query_record_history(
                 },
                 entity_type: entity_type.clone(),
                 entity_id: e.entity_id.clone(),
-                entity_label: e.entity_label.clone(),
+                entity_gid,
+                entity_label,
                 actor_id: e.actor_id.clone(),
                 actor_name: e.actor_name.clone(),
                 summary: e.summary.clone(),
@@ -212,7 +234,10 @@ pub fn query_record_history(
         })
         .collect();
 
-    let entity_label = items.iter().find_map(|i| i.entity_label.clone());
+    let entity_label = items
+        .iter()
+        .find_map(|i| i.entity_label.clone())
+        .or_else(|| index.resolve_entity_label(&entity_type, &resolved_id, None, "", None, None));
     let total = items.len();
 
     Ok(RecordHistoryResponse {

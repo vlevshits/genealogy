@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Clock,
   History,
+  RefreshCw,
   RotateCcw,
 } from 'lucide-react';
 import {
@@ -19,12 +20,26 @@ import {
 } from '../ui';
 import {
   ChangeLogEntryDto,
-  FieldDiffDto,
   getEntityHistory,
   restoreChange,
 } from '../../api/client';
-import { getLocalizedErrorMessage } from '../../lib/error-formatter';
+import {
+  getLocalizedErrorMessage,
+  isOfflineFallbackError,
+} from '../../lib/error-formatter';
 import { useI18n } from '../../i18n';
+import {
+  extractEntityGid,
+  extractEntryDiffs,
+  formatDiffValue,
+  formatEntityLabel,
+  formatEntityTypeLabel,
+  formatFieldLabel,
+  formatTxLabel,
+  isRawUuid,
+} from './history-diff-utils';
+
+export { extractEntryDiffs, formatDiffValue };
 
 export interface RecordHistoryDrawerProps {
   open: boolean;
@@ -53,6 +68,7 @@ export function buildDefaultEntityHistory(
       action: 'updated',
       actor_id: 'u-vera',
       actor_name: 'Vera Levshits',
+      can_revert: true,
       created_at: '2026-10-26T14:32:00Z',
       diffs: [
         {
@@ -78,6 +94,7 @@ export function buildDefaultEntityHistory(
       action: 'created',
       actor_id: 'u-admin',
       actor_name: 'Lev Levshits',
+      can_revert: false,
       created_at: '2026-10-20T09:15:00Z',
       diffs: [
         {
@@ -93,158 +110,6 @@ export function buildDefaultEntityHistory(
       ],
     },
   ];
-}
-
-export function formatDiffValue(val: unknown, emptyLabel: string = '—'): string {
-  if (val === null || val === undefined || val === '') {
-    return emptyLabel;
-  }
-  if (typeof val === 'boolean') {
-    return val ? 'true' : 'false';
-  }
-  if (typeof val === 'number') {
-    return String(val);
-  }
-  if (typeof val === 'string') {
-    return val;
-  }
-  if (Array.isArray(val)) {
-    if (val.length === 0) return emptyLabel;
-    if (
-      val.every((item) => typeof item === 'string' || typeof item === 'number')
-    ) {
-      return val.join(', ');
-    }
-    const formatted = val
-      .map((item) => {
-        if (typeof item === 'object' && item !== null) {
-          const obj = item as Record<string, unknown>;
-          if (obj.title) return String(obj.title);
-          if (obj.name) return String(obj.name);
-          if (obj.date)
-            return [obj.date, obj.place].filter(Boolean).join(', ');
-          if (obj.gid) return `@${obj.gid}@`;
-        }
-        return formatDiffValue(item, emptyLabel);
-      })
-      .filter((s) => s && s !== emptyLabel);
-    if (formatted.length === 0) return emptyLabel;
-    if (formatted.length <= 3) return formatted.join(', ');
-    return `${formatted.slice(0, 3).join(', ')} (+${formatted.length - 3})`;
-  }
-  if (typeof val === 'object') {
-    const obj = val as Record<string, unknown>;
-    // Person object with primary_name or gid
-    if (obj.gid || obj.primary_name) {
-      const pName = (obj.primary_name ?? obj) as Record<string, unknown>;
-      const given = pName?.given_name ?? obj.given_name;
-      const patr = pName?.patronymic ?? obj.patronymic;
-      const surn = pName?.surname ?? obj.surname;
-      const nameParts = [given, patr, surn].filter(Boolean).join(' ');
-      const gidPart = obj.gid ? ` (${obj.gid})` : '';
-      return `${nameParts || 'Person'}${gidPart}`;
-    }
-    // Name object
-    if ('given_name' in obj || 'surname' in obj || 'patronymic' in obj) {
-      const parts = [obj.given_name, obj.patronymic, obj.surname].filter(
-        Boolean
-      );
-      if (parts.length > 0) return parts.join(' ');
-    }
-    // Date/place object
-    if ('date' in obj || 'place' in obj) {
-      const parts = [obj.date, obj.place].filter(Boolean);
-      if (parts.length > 0) return parts.join(', ');
-    }
-    try {
-      const entries = Object.entries(obj).filter(
-        ([_, v]) => v !== undefined && v !== null && v !== ''
-      );
-      if (entries.length === 0) return emptyLabel;
-      if (entries.length <= 3) {
-        return entries
-          .map(
-            ([k, v]) =>
-              `${k}: ${
-                typeof v === 'object' ? formatDiffValue(v, emptyLabel) : String(v)
-              }`
-          )
-          .join(', ');
-      }
-      return JSON.stringify(val);
-    } catch {
-      return String(val);
-    }
-  }
-  return String(val);
-}
-
-export function extractEntryDiffs(entry: ChangeLogEntryDto): FieldDiffDto[] {
-  if (entry.diffs && entry.diffs.length > 0) {
-    return entry.diffs;
-  }
-  const rawEntry = entry as ChangeLogEntryDto & {
-    before?: Record<string, unknown> | null;
-    after?: Record<string, unknown> | null;
-  };
-  let beforeObj = (entry.before_json ?? rawEntry.before ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const afterObj = (entry.after_json ?? rawEntry.after ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  const syntheticDiffs: FieldDiffDto[] = [];
-
-  // Special handling for person merge bundles
-  if (beforeObj && beforeObj.kind === 'person_merge_bundle') {
-    const keepBefore = (beforeObj.keep_before ?? {}) as Record<string, unknown>;
-    const mergePerson = (beforeObj.merge_person ?? {}) as Record<string, unknown>;
-
-    const mergePersonLabel = formatDiffValue(mergePerson, '—');
-    const keepPersonLabel = formatDiffValue(keepBefore, '—');
-
-    syntheticDiffs.push({
-      field: 'merged_profile',
-      before: mergePersonLabel,
-      after: keepPersonLabel,
-    });
-
-    beforeObj = keepBefore;
-  }
-
-  const ignoredKeys = new Set([
-    'updated_at',
-    'version',
-    'created_at',
-    'id',
-    'gid',
-    'tx_id',
-    'kind',
-    'families_before',
-    'events_before',
-    'notes_before',
-    'media_before',
-    'gid_aliases_before',
-    'keep_before',
-    'merge_person',
-  ]);
-
-  const keys = Array.from(
-    new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)])
-  ).filter((k) => !ignoredKeys.has(k));
-
-  const computed: FieldDiffDto[] = [...syntheticDiffs];
-  for (const key of keys) {
-    const bVal = beforeObj[key];
-    const aVal = afterObj[key];
-    if (JSON.stringify(bVal) !== JSON.stringify(aVal)) {
-      computed.push({ field: key, before: bVal, after: aVal });
-    }
-  }
-  return computed;
 }
 
 export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
@@ -274,33 +139,39 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
     useState<ChangeLogEntryDto | null>(null);
   const [restoring, setRestoring] = useState<boolean>(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [resolvedEntityLabel, setResolvedEntityLabel] = useState<string | null>(null);
 
   const loadHistory = useCallback(() => {
     if (!entityId) return;
     if (initialEntries) {
       setEntries(initialEntries);
+      setLoadError(null);
       return;
     }
     setLoading(true);
+    setLoadError(null);
     getEntityHistory(entityType, entityId)
       .then((res) => {
-        if (res.items && res.items.length > 0) {
-          setEntries(res.items);
-        } else {
+        if (res.entity_label) {
+          setResolvedEntityLabel(res.entity_label);
+        }
+        setEntries(res.items ?? []);
+      })
+      .catch((err) => {
+        if (isOfflineFallbackError(err)) {
           setEntries(
             buildDefaultEntityHistory(entityType, entityId, entityLabel)
           );
+        } else {
+          setEntries([]);
+          setLoadError(getLocalizedErrorMessage(err, t));
         }
-      })
-      .catch(() => {
-        setEntries(
-          buildDefaultEntityHistory(entityType, entityId, entityLabel)
-        );
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [entityType, entityId, entityLabel, initialEntries]);
+  }, [entityType, entityId, entityLabel, initialEntries, t]);
 
   useEffect(() => {
     if (open) {
@@ -338,6 +209,12 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
     if (op === 'undo' || op === 'undone') {
       return <Badge variant="neutral" size="sm">{t('history.actions.undone')}</Badge>;
     }
+    if (op === 'merge' || op === 'merged') {
+      return <Badge variant="brand" size="sm">{t('history.actions.merged')}</Badge>;
+    }
+    if (op === 'gedcom_import' || op === 'import' || op === 'imported') {
+      return <Badge variant="neutral" size="sm">{t('history.actions.imported')}</Badge>;
+    }
     return <Badge variant="warning" size="sm">{t('history.actions.updated')}</Badge>;
   };
 
@@ -346,12 +223,11 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
     setRestoring(true);
     setRestoreError(null);
     try {
-      await restoreChange(confirmRestoreTarget.id).catch(() => ({
-        change_id: confirmRestoreTarget.id,
-        restored_entity_type: entityType,
-        restored_entity_id: entityId || '',
-        status: 'restored',
-      }));
+      try {
+        await restoreChange(confirmRestoreTarget.id);
+      } catch (err) {
+        if (!isOfflineFallbackError(err)) throw err;
+      }
       addToast({
         type: 'success',
         title: t('history.restore.successToast'),
@@ -367,6 +243,19 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
     }
   };
 
+  const firstEntryGid = entries.length > 0 ? extractEntityGid(entries[0]) : null;
+  const rawDrawerLabel =
+    entityLabel ||
+    resolvedEntityLabel ||
+    entries[0]?.entity_label ||
+    firstEntryGid ||
+    (entityId && !isRawUuid(entityId) ? entityId : undefined);
+  const drawerDescription = rawDrawerLabel
+    ? formatEntityLabel(rawDrawerLabel, entityType, firstEntryGid, t, {
+        stripGid: false,
+      })
+    : formatEntityTypeLabel(entityType, t);
+
   return (
     <>
       <Drawer
@@ -374,7 +263,7 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
         onOpenChange={onOpenChange}
         side="right"
         title={t('history.drawer.title')}
-        description={entityLabel || entityId || undefined}
+        description={drawerDescription}
         className="sm:w-[480px]"
       >
         <div
@@ -386,6 +275,22 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
               <Spinner size="sm" />
               <span>{t('common.loading')}</span>
             </div>
+          ) : loadError ? (
+            <Alert variant="danger" data-testid="history-drawer-error">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>{loadError}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+                  onClick={loadHistory}
+                  className="min-h-10 sm:min-h-8"
+                >
+                  {t('common.retry')}
+                </Button>
+              </div>
+            </Alert>
           ) : entries.length === 0 ? (
             <EmptyState
               icon={<History className="h-6 w-6" />}
@@ -401,6 +306,17 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
                 const actorName =
                   entry.actor_name || t('history.unknownActor');
                 const actionOp = entry.action || entry.op;
+                const actionOpLower = (actionOp || '').toLowerCase();
+                const hasBeforeSnapshot = Boolean(
+                  entry.before_json ??
+                    (entry as { before?: Record<string, unknown> | null }).before
+                );
+                const canRevertEntry =
+                  entry.can_revert !== undefined
+                    ? entry.can_revert
+                    : actionOpLower !== 'create' &&
+                      actionOpLower !== 'created' &&
+                      hasBeforeSnapshot;
 
                 return (
                   <li
@@ -420,9 +336,19 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
                           <div className="text-xs font-semibold text-primary truncate">
                             {actorName}
                           </div>
-                          <div className="flex items-center gap-1 text-[11px] text-tertiary">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span>{formatTimestamp(entry.created_at)}</span>
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-tertiary">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              <span>{formatTimestamp(entry.created_at)}</span>
+                            </span>
+                            {entry.tx_label && (
+                              <>
+                                <span className="hidden sm:inline" aria-hidden="true">·</span>
+                                <span className="text-secondary font-medium">
+                                  {formatTxLabel(entry.tx_label, t)}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -469,21 +395,33 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
                                 key={`${diff.field}-${idx}`}
                                 className="grid grid-cols-1 gap-1 border-b border-border/60 pb-2 last:border-b-0 last:pb-0"
                               >
-                                <span className="font-mono text-[11px] font-semibold text-secondary">
-                                  {diff.field}
+                                <span className="text-[11px] font-semibold text-secondary">
+                                  {formatFieldLabel(diff.field, t)}
                                 </span>
-                                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                  <div className="rounded-lg bg-danger/10 px-2 py-1 text-secondary line-through break-words">
-                                    {formatDiffValue(
-                                      diff.before,
-                                      t('history.drawer.emptyValue')
-                                    )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                  <div className="rounded-lg bg-danger/10 px-2 py-1 text-secondary break-words">
+                                    <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary mr-1.5">
+                                      {t('history.diff.colBefore')}:
+                                    </span>
+                                    <span className="line-through">
+                                      {formatDiffValue(
+                                        diff.before,
+                                        t('history.drawer.emptyValue'),
+                                        { t, locale, field: diff.field }
+                                      )}
+                                    </span>
                                   </div>
                                   <div className="rounded-lg bg-success/10 px-2 py-1 font-medium text-primary break-words">
-                                    {formatDiffValue(
-                                      diff.after,
-                                      t('history.drawer.emptyValue')
-                                    )}
+                                    <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary mr-1.5">
+                                      {t('history.diff.colAfter')}:
+                                    </span>
+                                    <span>
+                                      {formatDiffValue(
+                                        diff.after,
+                                        t('history.drawer.emptyValue'),
+                                        { t, locale, field: diff.field }
+                                      )}
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -493,16 +431,19 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
                       </div>
                     )}
 
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
-                        onClick={() => setConfirmRestoreTarget(entry)}
-                      >
-                        {t('history.drawer.restoreVersionBtn')}
-                      </Button>
-                    </div>
+                    {canRevertEntry && (
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          size="md"
+                          variant="secondary"
+                          leftIcon={<RotateCcw className="h-4 w-4" />}
+                          onClick={() => setConfirmRestoreTarget(entry)}
+                          className="w-full sm:w-auto"
+                        >
+                          {t('history.drawer.restoreVersionBtn')}
+                        </Button>
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -520,12 +461,10 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
         size="sm"
         title={t('history.restore.confirmTitle')}
         description={t('history.restore.confirmDesc')}
-      >
-        <div className="space-y-4">
-          {restoreError && <Alert variant="danger">{restoreError}</Alert>}
-
-          <div className="flex justify-end gap-2">
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
             <Button
+              size="md"
               variant="secondary"
               onClick={() => setConfirmRestoreTarget(null)}
               disabled={restoring}
@@ -533,6 +472,7 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
               {t('common.cancel')}
             </Button>
             <Button
+              size="md"
               variant="primary"
               loading={restoring}
               leftIcon={<RotateCcw className="h-4 w-4" />}
@@ -541,6 +481,10 @@ export const RecordHistoryDrawer: React.FC<RecordHistoryDrawerProps> = ({
               {t('history.restore.confirmBtn')}
             </Button>
           </div>
+        }
+      >
+        <div className="space-y-4">
+          {restoreError && <Alert variant="danger">{restoreError}</Alert>}
         </div>
       </Dialog>
     </>

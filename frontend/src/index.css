@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
+  accent-color: var(--color-brand-primary);
   /* Surfaces & Neutrals (Light Mode) */
   --color-bg-canvas: #F8F9FA;
   --color-bg-surface: #FFFFFF;
@@ -41,6 +43,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+  accent-color: var(--color-brand-primary);
   /* Surfaces & Neutrals (Dark Mode) */
   --color-bg-canvas: #0E1116;
   --color-bg-surface: #171B22;

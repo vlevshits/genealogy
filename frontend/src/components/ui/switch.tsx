@@ -58,7 +58,7 @@ export const Switch: React.FC<SwitchProps> = ({
         disabled={disabled}
         onClick={handleToggle}
         className={cn(
-          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
+          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none touch-target-expand',
           isChecked ? 'bg-brand' : 'bg-surface-muted border-border'
         )}
         {...props}

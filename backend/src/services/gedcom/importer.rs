@@ -716,6 +716,8 @@ pub fn import_gedcom_into_store(
         ),
         before_json: None,
         after_json: None,
+        entity_gid: None,
+        diffs: Vec::new(),
         created_at: chrono::Utc::now().to_rfc3339(),
     });
 

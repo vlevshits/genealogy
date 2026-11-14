@@ -43,7 +43,7 @@ export function useUndoToast() {
             } catch (err) {
               addToast({
                 type: 'error',
-                title: t('common.errorLoading'),
+                title: t('history.undoErrorTitle'),
                 description: getLocalizedErrorMessage(err, t),
               });
             }

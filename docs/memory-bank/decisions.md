@@ -23,6 +23,7 @@ This document records the architectural, design, and structural decisions made a
 - [ADR-015: Family Link Editing Via Dedicated Detach/Move Endpoints With Two Dissolve Rules](#adr-015-family-link-editing-via-dedicated-detachmove-endpoints-with-two-dissolve-rules)
 - [ADR-016: Dual-Persistence MCP Personal Access Token Storage Without HTTP Hash Exposure](#adr-016-dual-persistence-mcp-personal-access-token-storage-without-http-hash-exposure)
 - [ADR-017: Duplicate Events Detection, Non-Destructive Merge, Union Consolidation & Undo Bundle](#adr-017-duplicate-events-detection-non-destructive-merge-union-consolidation--undo-bundle)
+- [ADR-018: Read-Time History Enrichment, Shared Overlay Stack & Non-Radio Conflict Default](#adr-018-read-time-history-enrichment-shared-overlay-stack--non-radio-conflict-default)
 
 ---
 
@@ -149,4 +150,14 @@ This document records the architectural, design, and structural decisions made a
   5. Expose Admin REST (`/api/v1/quality/events/{duplicates,merge,batch-merge}`) and Tier C MCP (`list_duplicate_events`, `merge_duplicate_events`) operations; in the UI, elevate `Customize` to `variant="primary"` when `has_conflict` is true and encode cleared custom fields as `""`.
 - **Consequences:** Reversible single-group, customized, and conflict-free batch merges across Web UI and MCP with zero silent metadata loss, private-event leakage, or child-relation corruption; see [GOT-020](gotchas.md#got-020-duplicate-event-colon-dismissal-keys-legacy-famc-vitals--union-child-slot-remapping), [GOT-021](gotchas.md#got-021-mcp-undo_transaction-parameter-order--custom-event-merge-field-clearing), and [GOT-022](gotchas.md#got-022-quality-frontend-guardrails--offline-fallback-icu-plurals-dialog-toast-exclusions--card-layouts).
 
-_Last curated: 2026-11-14 (ADR-017 duplicate events detection, merge & undo bundle)_
+### ADR-018: Read-Time History Enrichment, Shared Overlay Stack & Non-Radio Conflict Default
+- **Status:** Accepted
+- **Context:** Persisting raw `change_log` entries with UUID foreign keys, `GenDate` structs, and unlocalized technical labels caused unreadable audit feeds/drawers, while `Dialog`/`Drawer` stacking needed deterministic focus restoration, `ConflictResolutionModal` risked accidental field selections in an unrequested radio view, and Editors lacked access to per-record history on profiles.
+- **Decision:**
+  1. Enrich `ChangeLogEntryDto` (`entity_gid`, `diffs`) and `RecordHistoryItemDto` at read time via `HistoryLookupIndex::from_store` (`backend/src/services/history/enrich_index.rs`, `enrich.rs`, `enrich_diff.rs`, `enrich_format.rs`), marking `entity_gid` and `diffs` with `#[serde(default, skip_serializing_if = "...")]` (`backend/src/services/privacy/dto.rs`) so `log_change`, `execute_person_merge`, and `import_gedcom_into_store` leave them empty on write without bloating `live-store.json`.
+  2. Consolidate `Dialog` and `Drawer` focus trapping, Escape stacking (`overlayStack` / `isTopOverlay`), `[data-toast-region]` exclusion, and refcounted sibling `inert` locking in `useModalOverlay` (`frontend/src/components/ui/overlay-stack.ts`).
+  3. Render `ConflictResolutionModal` (`frontend/src/components/history/ConflictResolutionModal.tsx`) in a non-radio 3-column comparison mode (`mergeMode = false`) by default, exposing `RadioChoiceRow` inputs only when the user clicks **Merge Field by Field** and handling chained `409` retries recursively via `openConflictFromError` (`frontend/src/components/person/PersonEditDialog.tsx`).
+  4. Gate the profile `⋯` History menu item (`buildProfileOverflowItems` in `frontend/src/components/profile/ProfileHeroHeader.tsx`) with `capabilities.can_edit` instead of `capabilities.can_merge` so Editors can inspect per-record history while `/history` remains Admin-only.
+- **Consequences:** Legacy and new audit rows render clean localized labels, `gid`s, and diffs retroactively without storage bloat; nested dialogs/drawers trap and return focus reliably; concurrency resolution avoids premature radio selections; and Editor/Admin RBAC boundaries match spec; see [GOT-023](gotchas.md#got-023-history-gid-deduplication-non-empty-diffs-precedence--strict-offline-fallbacks), [GOT-024](gotchas.md#got-024-history-formatting--composite-labels-gendate-pedigree-delimiters--conflict-retry-state), and [GOT-025](gotchas.md#got-025-stacked-overlay-inert-order-dropdown-clamping-admin-bottomnav--dark-date-icons).
+
+_Last curated: 2026-11-14 (ADR-018 read-time history enrichment, overlay stack, conflict modal default & profile History RBAC)_

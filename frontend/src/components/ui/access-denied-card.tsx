@@ -29,18 +29,18 @@ export const AccessDeniedCard: React.FC<AccessDeniedCardProps> = ({
       role="alert"
       className={cn('max-w-xl mx-auto border-warning/40', className)}
     >
-      <CardHeader className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <CardHeader className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-warning/15 text-warning">
             <ShieldAlert className="h-5 w-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-sans text-base sm:text-lg font-semibold tracking-tight text-primary">
               {title || t('rbac.accessDeniedTitle')}
             </h2>
           </div>
         </div>
-        <Badge variant="warning" size="sm">
+        <Badge variant="warning" size="sm" className="shrink-0 whitespace-nowrap">
           {t('rbac.adminOnlyBadge')}
         </Badge>
       </CardHeader>
@@ -56,7 +56,7 @@ export const AccessDeniedCard: React.FC<AccessDeniedCardProps> = ({
           {onOpenProfile && (
             <Button
               variant="primary"
-              size="sm"
+              size="md"
               leftIcon={<User className="h-4 w-4" />}
               onClick={onOpenProfile}
             >
@@ -66,7 +66,7 @@ export const AccessDeniedCard: React.FC<AccessDeniedCardProps> = ({
           {onBackToTree && (
             <Button
               variant="secondary"
-              size="sm"
+              size="md"
               leftIcon={<ArrowLeft className="h-4 w-4" />}
               onClick={onBackToTree}
             >

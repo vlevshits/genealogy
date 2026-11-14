@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 
 export interface RadioOption<T extends string = string> {
@@ -165,6 +165,110 @@ export function RadioCardGroup<T extends string = string>({
               )}
             </div>
           </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export interface RadioChoiceRowOption<T extends string = string> {
+  value: T;
+  label: React.ReactNode;
+  mobileHeader?: React.ReactNode;
+  dataTestId?: string;
+}
+
+export interface RadioChoiceRowProps<T extends string = string> {
+  rowLabel: React.ReactNode;
+  ariaLabel: string;
+  options: RadioChoiceRowOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  name?: string;
+  'data-testid'?: string;
+  className?: string;
+}
+
+export function RadioChoiceRow<T extends string = string>({
+  rowLabel,
+  ariaLabel,
+  options,
+  value,
+  onChange,
+  name,
+  'data-testid': dataTestId,
+  className,
+}: RadioChoiceRowProps<T>) {
+  const generatedName = useId();
+  const groupName = name || generatedName;
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (
+      e.key !== 'ArrowLeft' &&
+      e.key !== 'ArrowRight' &&
+      e.key !== 'ArrowUp' &&
+      e.key !== 'ArrowDown'
+    ) {
+      return;
+    }
+    if (options.length === 0) return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+    const nextIdx = (index + delta + options.length) % options.length;
+    const nextOption = options[nextIdx];
+    if (nextOption) {
+      onChange(nextOption.value);
+      inputRefs.current[nextIdx]?.focus();
+    }
+  };
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      data-testid={dataTestId}
+      className={cn(
+        'grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 items-center text-xs',
+        className
+      )}
+    >
+      <div className="font-semibold text-primary">{rowLabel}</div>
+      {options.map((opt, idx) => {
+        const checked = value === opt.value;
+        return (
+          <label
+            key={opt.value}
+            data-testid={opt.dataTestId}
+            className={cn(
+              'flex min-h-11 items-center justify-between gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus',
+              checked
+                ? 'border-brand bg-brand/10 text-primary font-medium'
+                : 'border-border bg-canvas text-secondary hover:border-brand/40'
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              {opt.mobileHeader && (
+                <span className="sm:hidden text-[10px] font-semibold uppercase tracking-wide text-tertiary block mb-0.5">
+                  {opt.mobileHeader}
+                </span>
+              )}
+              <span className="break-words block">{opt.label}</span>
+            </div>
+            <input
+              ref={(el) => {
+                inputRefs.current[idx] = el;
+              }}
+              type="radio"
+              name={groupName}
+              value={opt.value}
+              checked={checked}
+              tabIndex={checked ? 0 : -1}
+              onChange={() => onChange(opt.value)}
+              onKeyDown={(e) => handleKeyDown(idx, e)}
+              className="h-4 w-4 shrink-0 accent-brand cursor-pointer focus:outline-none"
+            />
+          </label>
         );
       })}
     </div>

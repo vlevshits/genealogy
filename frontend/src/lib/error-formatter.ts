@@ -123,6 +123,17 @@ export function getLocalizedErrorMessage(
 }
 
 /**
+ * Returns true only for true offline / network connectivity errors (status 0 or `network_error`),
+ * allowing HTTP 4xx/5xx server errors (401, 403, 404, 409, 500) to propagate to real error UI.
+ */
+export function isOfflineFallbackError(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.status === 0 || err.code === 'network_error')
+  );
+}
+
+/**
  * Localizes backend and parser warning strings for GEDCOM imports and analyses.
  */
 export function formatGedcomWarning(rawWarning: string, t: TranslateFn): string {

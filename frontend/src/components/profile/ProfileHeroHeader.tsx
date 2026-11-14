@@ -25,6 +25,7 @@ import {
   Badge,
   Button,
   DropdownMenu,
+  IconButton,
   Select,
   Switch,
   TextInput,
@@ -59,6 +60,106 @@ export interface ProfileHeroHeaderProps {
   onOpenHistory?: () => void;
   onMergePerson?: () => void;
   onCopyLink?: () => void;
+}
+
+export interface BuildProfileOverflowItemsParams {
+  capabilities: ProfileCapabilitiesDto;
+  accessTier: string;
+  isPrivate: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+  onSetHomePerson: () => void;
+  onOpenEditModal: () => void;
+  onTogglePrivate: () => void;
+  onOpenHistory?: () => void;
+  onMergePerson?: () => void;
+  onCopyLink?: () => void;
+  onDeletePerson: () => void;
+}
+
+export function buildProfileOverflowItems({
+  capabilities,
+  accessTier,
+  isPrivate,
+  t,
+  onSetHomePerson,
+  onOpenEditModal,
+  onTogglePrivate,
+  onOpenHistory,
+  onMergePerson,
+  onCopyLink,
+  onDeletePerson,
+}: BuildProfileOverflowItemsParams) {
+  return [
+    ...(accessTier !== 'public_anonymous'
+      ? [
+          {
+            id: 'set-home',
+            label: t('profile.actions.setHomePerson'),
+            icon: <Home className="h-3.5 w-3.5" />,
+            onSelect: onSetHomePerson,
+          },
+        ]
+      : []),
+    ...(capabilities.can_edit
+      ? [
+          {
+            id: 'edit-modal',
+            label: t('profile.actions.fullIdentityDialog'),
+            icon: <PenTool className="h-3.5 w-3.5" />,
+            onSelect: onOpenEditModal,
+          },
+          {
+            id: 'toggle-private',
+            label: isPrivate
+              ? t('profile.actions.unmarkPrivate')
+              : t('profile.actions.markPrivate'),
+            icon: isPrivate ? (
+              <Unlock className="h-3.5 w-3.5" />
+            ) : (
+              <Lock className="h-3.5 w-3.5" />
+            ),
+            onSelect: onTogglePrivate,
+          },
+          {
+            id: 'history',
+            label: t('profile.actions.viewHistory'),
+            icon: <History className="h-3.5 w-3.5" />,
+            separatorBefore: true,
+            onSelect: () => onOpenHistory?.(),
+          },
+        ]
+      : []),
+    ...(capabilities.can_merge
+      ? [
+          {
+            id: 'merge',
+            label: t('profile.actions.mergeWith'),
+            icon: <GitMerge className="h-3.5 w-3.5" />,
+            separatorBefore: !capabilities.can_edit,
+            onSelect: () => onMergePerson?.(),
+          },
+        ]
+      : []),
+    {
+      id: 'copy-link',
+      label: t('profile.actions.copyLink'),
+      icon: <Copy className="h-3.5 w-3.5" />,
+      separatorBefore: accessTier !== 'public_anonymous',
+      onSelect: () => onCopyLink?.(),
+    },
+    ...(capabilities.can_delete
+      ? [
+          {
+            id: 'delete',
+            label: t('profile.actions.deletePerson'),
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+            danger: true,
+            separatorBefore: true,
+            onSelect: onDeletePerson,
+          },
+        ]
+      : []),
+  ];
 }
 
 export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
@@ -170,76 +271,19 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
     : null;
 
   // Build overflow menu items based on role capabilities (03 §3.1)
-  const overflowItems = [
-    ...(accessTier !== 'public_anonymous'
-      ? [
-          {
-            id: 'set-home',
-            label: t('profile.actions.setHomePerson'),
-            icon: <Home className="h-3.5 w-3.5" />,
-            onSelect: onSetHomePerson,
-          },
-        ]
-      : []),
-    ...(capabilities.can_edit
-      ? [
-          {
-            id: 'edit-modal',
-            label: t('profile.actions.fullIdentityDialog'),
-            icon: <PenTool className="h-3.5 w-3.5" />,
-            onSelect: onOpenEditModal,
-          },
-          {
-            id: 'toggle-private',
-            label: person.is_private
-              ? t('profile.actions.unmarkPrivate')
-              : t('profile.actions.markPrivate'),
-            icon: person.is_private ? (
-              <Unlock className="h-3.5 w-3.5" />
-            ) : (
-              <Lock className="h-3.5 w-3.5" />
-            ),
-            onSelect: onTogglePrivate,
-          },
-        ]
-      : []),
-    ...(capabilities.can_merge
-      ? [
-          {
-            id: 'history',
-            label: t('profile.actions.viewHistory'),
-            icon: <History className="h-3.5 w-3.5" />,
-            separatorBefore: true,
-            onSelect: () => onOpenHistory?.(),
-          },
-          {
-            id: 'merge',
-            label: t('profile.actions.mergeWith'),
-            icon: <GitMerge className="h-3.5 w-3.5" />,
-            onSelect: () => onMergePerson?.(),
-          },
-        ]
-      : []),
-    {
-      id: 'copy-link',
-      label: t('profile.actions.copyLink'),
-      icon: <Copy className="h-3.5 w-3.5" />,
-      separatorBefore: accessTier !== 'public_anonymous',
-      onSelect: () => onCopyLink?.(),
-    },
-    ...(capabilities.can_delete
-      ? [
-          {
-            id: 'delete',
-            label: t('profile.actions.deletePerson'),
-            icon: <Trash2 className="h-3.5 w-3.5" />,
-            danger: true,
-            separatorBefore: true,
-            onSelect: onDeletePerson,
-          },
-        ]
-      : []),
-  ];
+  const overflowItems = buildProfileOverflowItems({
+    capabilities,
+    accessTier,
+    isPrivate: Boolean(person.is_private),
+    t,
+    onSetHomePerson,
+    onOpenEditModal,
+    onTogglePrivate,
+    onOpenHistory,
+    onMergePerson,
+    onCopyLink,
+    onDeletePerson,
+  });
 
   const stripeColorClass =
     person.sex === 'M'
@@ -461,9 +505,13 @@ export const ProfileHeroHeader: React.FC<ProfileHeroHeaderProps> = ({
             align="end"
             ariaLabel={t('profile.actions.moreAria')}
             trigger={
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-secondary hover:bg-surface-muted hover:text-primary transition-colors">
+              <IconButton
+                label={t('profile.actions.moreAria')}
+                variant="secondary"
+                className="h-10 w-10 min-h-10 min-w-10 rounded-xl"
+              >
                 <MoreHorizontal className="h-4 w-4" />
-              </span>
+              </IconButton>
             }
             items={overflowItems}
           />
