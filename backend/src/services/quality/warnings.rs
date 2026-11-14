@@ -489,6 +489,39 @@ pub fn compute_quality_warnings(
         }
     }
 
+    // Rule 9: DUPLICATE_EVENT (Duplicate life events on individuals or couples)
+    let dup_event_groups = compute_duplicate_event_groups(store, true);
+    for group in dup_event_groups {
+        let wid = format!("{RULE_DUPLICATE_EVENT}:{}", group.id);
+        let dismissed = is_event_group_dismissed(store, &group.id);
+        if include_dismissed || !dismissed {
+            let event_ids: Vec<String> = group.events.iter().map(|e| e.id.clone()).collect();
+            warnings.push(QualityWarningDto {
+                id: wid,
+                code: RULE_DUPLICATE_EVENT.to_string(),
+                rule_code: RULE_DUPLICATE_EVENT.to_string(),
+                category: "duplicates".to_string(),
+                severity: "warning".to_string(),
+                entity_type: "event".to_string(),
+                entity_id: group.id.clone(),
+                person: group.person.clone(),
+                related_person: group.partner.clone(),
+                message: group.reason.clone(),
+                details: serde_json::json!({
+                    "group_id": group.id,
+                    "event_type": group.event_type,
+                    "scope": group.scope,
+                    "event_ids": event_ids,
+                    "has_conflict": group.has_conflict,
+                    "conflict_fields": group.conflict_fields,
+                    "confidence": group.confidence,
+                    "proposed": group.proposed,
+                }),
+                is_dismissed: dismissed,
+            });
+        }
+    }
+
     warnings.sort_by_key(|w| match w.severity.as_str() {
         "critical" => 0,
         "warning" => 1,

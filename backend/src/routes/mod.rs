@@ -38,14 +38,14 @@ use crate::{
         },
         health::health_check,
         rbac::{
-            analyze_gedcom, batch_fix_quality_places, commit_ai_story_draft_handler, create_event,
-            create_face_tag, create_family, create_manual_snapshot, create_mcp_token_handler,
-            create_media, create_media_link, create_note, create_person, create_place,
-            delete_ai_story_draft_handler, delete_event, delete_face_tag, delete_family,
-            delete_media, delete_media_link, delete_note, delete_person, delete_place,
-            detach_family_child, detach_family_partner, dismiss_quality_place_issue,
-            dismiss_quality_warning, dismiss_quality_warning_by_id, export_gedcom,
-            export_gedcom_post, export_printable_pdf, fix_quality_place_hierarchy,
+            analyze_gedcom, batch_fix_quality_places, batch_merge_duplicate_events_handler,
+            commit_ai_story_draft_handler, create_event, create_face_tag, create_family,
+            create_manual_snapshot, create_mcp_token_handler, create_media, create_media_link,
+            create_note, create_person, create_place, delete_ai_story_draft_handler, delete_event,
+            delete_face_tag, delete_family, delete_media, delete_media_link, delete_note,
+            delete_person, delete_place, detach_family_child, detach_family_partner,
+            dismiss_quality_place_issue, dismiss_quality_warning, dismiss_quality_warning_by_id,
+            export_gedcom, export_gedcom_post, export_printable_pdf, fix_quality_place_hierarchy,
             get_admin_ai_settings_handler, get_ai_story_draft_handler, get_anniversaries,
             get_audit_history, get_dashboard, get_data_quality_warnings, get_family, get_fan_chart,
             get_kinship, get_media_crop, get_media_detail, get_media_file, get_onboarding_status,
@@ -53,13 +53,15 @@ use crate::{
             get_person_profile, get_place_detail, get_places_map, get_quality_places_analysis,
             get_quality_summary, get_record_history, get_record_version, get_stats, get_tree,
             get_tree_view, global_search, import_gedcom, list_ai_story_drafts_handler,
-            list_duplicate_candidates, list_event_sources, list_events, list_families,
-            list_mcp_tokens_handler, list_media_archive, list_notes, list_people_directory,
-            list_people_surnames, list_places_directory, list_quality_warnings, list_snapshots,
-            mark_pair_not_duplicate, match_people_candidates, mcp_jsonrpc_handler, mcp_sse_handler,
-            merge_duplicate_people, merge_place, move_person_to_family, parse_ai_story_handler,
-            preview_merge_people_get, preview_merge_people_post, preview_quality_place_issue,
-            quick_add_relative, reconcile_ai_story_draft_handler, reconcile_gedcom_media_bundle,
+            list_duplicate_candidates, list_duplicate_events, list_event_sources, list_events,
+            list_families, list_mcp_tokens_handler, list_media_archive, list_notes,
+            list_people_directory, list_people_surnames, list_places_directory,
+            list_quality_warnings, list_snapshots, mark_pair_not_duplicate,
+            match_people_candidates, mcp_jsonrpc_handler, mcp_sse_handler,
+            merge_duplicate_events_handler, merge_duplicate_people, merge_place,
+            move_person_to_family, parse_ai_story_handler, preview_merge_people_get,
+            preview_merge_people_post, preview_quality_place_issue, quick_add_relative,
+            reconcile_ai_story_draft_handler, reconcile_gedcom_media_bundle,
             refine_ai_story_draft_by_id_handler, refine_ai_story_draft_handler,
             restore_deleted_person, revoke_mcp_token_handler, rollback_to_snapshot,
             start_with_self, transcribe_ai_story_handler, undo_history_transaction,
@@ -270,6 +272,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/quality/places/fix", post(fix_quality_place_hierarchy))
         .route("/quality/places/batch-fix", post(batch_fix_quality_places))
         .route("/quality/places/dismiss", post(dismiss_quality_place_issue))
+        .route("/quality/events/duplicates", get(list_duplicate_events))
+        .route(
+            "/quality/events/merge",
+            post(merge_duplicate_events_handler),
+        )
+        .route(
+            "/quality/events/batch-merge",
+            post(batch_merge_duplicate_events_handler),
+        )
         // AI Family Story Intake & Protected MCP Server
         .route(
             "/ai/transcribe",

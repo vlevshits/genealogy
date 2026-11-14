@@ -1,4 +1,5 @@
 import type {
+  LifeEventDto,
   MediaAssetSummaryDto,
   PersonDetailDto,
   PlaceDto,
@@ -93,6 +94,7 @@ export type QualityRuleCode =
   | 'MARRIED_TOO_YOUNG'
   | 'EVENT_AFTER_DEATH'
   | 'POSSIBLE_DUPLICATE'
+  | 'DUPLICATE_EVENT'
   | 'MISSING_BIRTH'
   | 'UNCONNECTED'
   | string;
@@ -147,12 +149,95 @@ export interface DuplicateCandidatePairDto {
   is_detached?: boolean;
 }
 
+export interface DuplicateEventItemDto {
+  id: string;
+  gid: string;
+  event_type: string;
+  custom_type?: string | null;
+  individual_id?: string | null;
+  family_id?: string | null;
+  date_text?: string | null;
+  date_sort?: number | null;
+  place_id?: string | null;
+  place_full_name?: string | null;
+  description?: string | null;
+  source_text?: string | null;
+  media_count: number;
+  is_private: boolean;
+}
+
+export interface ProposedMergedEventDto {
+  keep_event_id: string;
+  keep_event_gid: string;
+  event_type: string;
+  date_text?: string | null;
+  place_id?: string | null;
+  place_full_name?: string | null;
+  description?: string | null;
+  source_text?: string | null;
+  combined_media_count: number;
+}
+
+export interface DuplicateEventPersonRefDto {
+  id: string;
+  gid?: string;
+  display_name: string;
+  sex?: string;
+  birth_date?: string | null;
+  death_date?: string | null;
+}
+
+export interface DuplicateEventGroupDto {
+  id: string;
+  event_type: string;
+  scope: 'individual' | 'family' | string;
+  person: DuplicateEventPersonRefDto;
+  partner?: DuplicateEventPersonRefDto | null;
+  family_ids?: string[];
+  events: DuplicateEventItemDto[];
+  proposed: ProposedMergedEventDto;
+  has_conflict: boolean;
+  conflict_fields: string[];
+  confidence: 'high' | 'medium' | string;
+  reason: string;
+}
+
+export interface MergeDuplicateEventsRequest {
+  group_id?: string;
+  keep_event_id?: string;
+  merge_event_ids?: string[];
+  date_text?: string;
+  place_id?: string;
+  place_name?: string;
+  description?: string;
+  source_text?: string;
+}
+
+export interface MergeDuplicateEventsResponse {
+  status: string;
+  tx_id: string;
+  group_id?: string | null;
+  surviving_event?: LifeEventDto | DuplicateEventItemDto | null;
+  merged_event_ids: string[];
+  merged_family_ids?: string[];
+}
+
+export interface BatchMergeDuplicateEventsResponse {
+  status: string;
+  tx_id?: string | null;
+  merged_groups_count: number;
+  removed_events_count: number;
+  surviving_event_ids: string[];
+}
+
 export interface QualitySummaryResponse {
   total_open_warnings: number;
   critical_count: number;
   warning_count: number;
   info_count: number;
   duplicate_candidates_count: number;
+  duplicate_events_count?: number;
+  duplicate_events?: DuplicateEventGroupDto[];
   missing_birth_dates_count?: number;
   place_hierarchy_issues?: number;
   place_hierarchy_high_confidence?: number;
@@ -269,6 +354,8 @@ export interface BatchFixPlacesResponse {
 export interface QualityWarningsResponseDto {
   warnings: QualityWarningDto[];
   duplicates?: DuplicateCandidatePairDto[];
+  duplicate_events_count?: number;
+  duplicate_events?: DuplicateEventGroupDto[];
   counts?: {
     total: number;
     critical: number;

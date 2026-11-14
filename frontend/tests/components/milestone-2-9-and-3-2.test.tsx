@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { I18nProvider, type Locale } from '../../src/i18n';
 import { ThemeProvider } from '../../src/lib/theme';
+import { AuthProvider } from '../../src/lib/auth-context';
 import { ToastProvider } from '../../src/components/ui/toast';
 import { DataQualityPage } from '../../src/pages/DataQualityPage';
 import { PlacesPage } from '../../src/pages/PlacesPage';
@@ -16,7 +17,11 @@ import {
   PlaceHierarchySubView,
   PlacesQualityBanner,
 } from '../../src/components/quality';
-import { McpTokensPanel, SecurityPasskeysPanel } from '../../src/components/settings';
+import {
+  availableScopesForRole,
+  McpTokensPanel,
+  SecurityPasskeysPanel,
+} from '../../src/components/settings';
 import { Avatar } from '../../src/components/ui/avatar';
 import { Button } from '../../src/components/ui/button';
 import { SideNav } from '../../src/components/ui/side-nav';
@@ -320,6 +325,85 @@ describe('Milestone 2.9 & 3.2 — Place Hierarchy, Relationship Duplicate Reason
     );
     expect(securityWithMcpRu).toContain('Защищённый сервер MCP и персональные токены доступа');
     expect(securityWithMcpRu).toContain('Выпустить токен');
+  });
+
+  it('pre-selects all role-permitted MCP token scopes by default for admin, editor, and viewer', () => {
+    expect(availableScopesForRole('admin')).toEqual([
+      'read:tree',
+      'write:draft',
+      'write:direct',
+      'admin:maintenance',
+    ]);
+    expect(availableScopesForRole('editor')).toEqual([
+      'read:tree',
+      'write:draft',
+      'write:direct',
+    ]);
+    expect(availableScopesForRole('viewer')).toEqual(['read:tree']);
+    expect(availableScopesForRole('unknown')).toEqual(['read:tree']);
+
+    const expectScopeChecked = (html: string, scope: string) => {
+      const match = html.match(
+        new RegExp(`<input[^>]*data-testid="mcp-scope-${scope}"[^>]*>`)
+      );
+      expect(match, `Expected checkbox for ${scope}`).toBeTruthy();
+      expect(match![0]).toContain('aria-checked="true"');
+    };
+
+    const adminHtml = renderWithProviders(
+      <McpTokensPanel userRole="admin" initialTokens={[]} />,
+      'en'
+    );
+    expectScopeChecked(adminHtml, 'read:tree');
+    expectScopeChecked(adminHtml, 'write:draft');
+    expectScopeChecked(adminHtml, 'write:direct');
+    expectScopeChecked(adminHtml, 'admin:maintenance');
+
+    const editorHtml = renderWithProviders(
+      <McpTokensPanel userRole="editor" initialTokens={[]} />,
+      'en'
+    );
+    expectScopeChecked(editorHtml, 'read:tree');
+    expectScopeChecked(editorHtml, 'write:draft');
+    expectScopeChecked(editorHtml, 'write:direct');
+    expect(editorHtml).not.toContain('mcp-scope-admin:maintenance');
+
+    const viewerHtml = renderWithProviders(
+      <McpTokensPanel userRole="viewer" initialTokens={[]} />,
+      'en'
+    );
+    expectScopeChecked(viewerHtml, 'read:tree');
+    expect(viewerHtml).not.toContain('mcp-scope-write:draft');
+    expect(viewerHtml).not.toContain('mcp-scope-write:direct');
+    expect(viewerHtml).not.toContain('mcp-scope-admin:maintenance');
+
+    const authEditorHtml = renderWithProviders(
+      <AuthProvider
+        initialUser={{
+          id: 'u-editor',
+          email: 'editor@levshits.local',
+          first_name: 'Elena',
+          last_name: 'Levshits',
+          display_name: 'Elena Levshits',
+          role: 'editor',
+          person_id: null,
+          is_active: true,
+          has_password: true,
+          passkeys_count: 0,
+          remaining_recovery_codes: 10,
+          locale: 'ru',
+          theme: 'light',
+          home_person_id: null,
+        }}
+      >
+        <McpTokensPanel initialTokens={[]} />
+      </AuthProvider>,
+      'ru'
+    );
+    expectScopeChecked(authEditorHtml, 'read:tree');
+    expectScopeChecked(authEditorHtml, 'write:draft');
+    expectScopeChecked(authEditorHtml, 'write:direct');
+    expect(authEditorHtml).not.toContain('mcp-scope-admin:maintenance');
   });
 
   it('renders graceful image error fallbacks in Avatar and MediaCard (UX-108 & UX-112)', () => {

@@ -279,6 +279,19 @@ pub fn execute_person_merge(
             merged_gid: None,
         });
     }
+    if raw_keep.is_empty() || raw_merge.is_empty() {
+        let mut fields = HashMap::new();
+        if raw_keep.is_empty() {
+            fields.insert("keep_id".to_string(), "required".to_string());
+        }
+        if raw_merge.is_empty() {
+            fields.insert("merge_id".to_string(), "required".to_string());
+        }
+        return Err(AppError::ValidationFailed(
+            "Both keep_id and merge_id are required".to_string(),
+            Some(fields),
+        ));
+    }
 
     let keep_id = store
         .resolve_person_id(raw_keep)
@@ -680,6 +693,7 @@ pub fn execute_person_merge(
         after_json,
         created_at: Utc::now().to_rfc3339(),
     });
+    store.persist_if_production();
 
     Ok(PersonMergeResponse {
         status: "merged".to_string(),

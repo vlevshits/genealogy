@@ -8,13 +8,17 @@ import {
 import type {
   BatchFixPlacesRequest,
   BatchFixPlacesResponse,
+  BatchMergeDuplicateEventsResponse,
   DashboardPayloadDto,
   DuplicateCandidatePairDto,
+  DuplicateEventGroupDto,
   DuplicateQuickMatchDto,
   FanChartResponseDto,
   FixPlaceHierarchyRequest,
   FixPlaceHierarchyResponse,
   KinshipPathResponseDto,
+  MergeDuplicateEventsRequest,
+  MergeDuplicateEventsResponse,
   MergePeopleInput,
   MergePeopleResponseDto,
   PersonMergePreviewDto,
@@ -173,11 +177,18 @@ export const qualityApi = {
     if (params?.cursor) search.set('cursor', params.cursor);
     const qs = search.toString();
     const res = await apiFetch<
-      QualityWarningsResponseDto | { items: QualityWarningDto[] }
+      | QualityWarningsResponseDto
+      | {
+          items: QualityWarningDto[];
+          duplicate_events_count?: number;
+          duplicate_events?: DuplicateEventGroupDto[];
+        }
     >(`/quality/warnings${qs ? `?${qs}` : ''}`);
     if ('warnings' in res) return res;
     return {
       warnings: res.items ?? [],
+      duplicate_events_count: res.duplicate_events_count,
+      duplicate_events: res.duplicate_events,
     };
   },
 
@@ -187,6 +198,41 @@ export const qualityApi = {
     >('/quality/duplicates');
     if (Array.isArray(res)) return res;
     return res.items ?? [];
+  },
+
+  async getDuplicateEvents(): Promise<DuplicateEventGroupDto[]> {
+    const res = await apiFetch<
+      DuplicateEventGroupDto[] | { items: DuplicateEventGroupDto[]; total?: number }
+    >('/quality/events/duplicates');
+    if (Array.isArray(res)) return res;
+    return res.items ?? [];
+  },
+
+  async mergeDuplicateEvents(
+    payload: MergeDuplicateEventsRequest
+  ): Promise<MergeDuplicateEventsResponse> {
+    return apiFetch<MergeDuplicateEventsResponse>('/quality/events/merge', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async batchMergeDuplicateEvents(
+    groupIds?: string[],
+    onlyHighConfidence?: boolean
+  ): Promise<BatchMergeDuplicateEventsResponse> {
+    const body: { group_ids?: string[]; only_high_confidence?: boolean } = {};
+    if (groupIds !== undefined) body.group_ids = groupIds;
+    if (onlyHighConfidence !== undefined) {
+      body.only_high_confidence = onlyHighConfidence;
+    }
+    return apiFetch<BatchMergeDuplicateEventsResponse>(
+      '/quality/events/batch-merge',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }
+    );
   },
 
   async dismissWarning(

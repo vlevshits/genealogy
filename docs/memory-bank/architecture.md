@@ -42,7 +42,7 @@ graph TD
      - `rbac.rs`: Role permissions, policy evaluation, action authorization.
      - `privacy/`: Living-person detection (`is_living`), person/event/family redaction (`redact_person_for_caller`, `redact_person_for_tree_view`, `redact_event_for_tree_view`), privacy-404 generation.
      - `genealogy/`: Tree traversal, pedigree, descendants, hourglass, multi-trace kinship path finding.
-     - `quality/`: Data validation, duplicate detection, automated place hierarchy fixes.
+     - `quality/`: Data validation, duplicate person & duplicate event detection/merge (`events_duplicates*.rs`), automated place hierarchy fixes.
      - `gedcom/` & `media_bundle.rs`: GEDCOM 5.5.1 / 7 parser, export, ZIP archive media reconciliation.
      - `pdf/`: Layout computation and vector rendering for single-page and tiled printable trees.
      - `story_intake/` & `mcp/`: AI story transcription/draft staging (`gemini.rs`), protected MCP server with Personal Access Tokens (`rpc_read.rs`, `tools_mutation.rs`).
@@ -133,8 +133,9 @@ frontend/src/
 │   ├── tree/           # Canvas, layout nodes, kinship finder, navigation HUD
 │   ├── profile/        # Person profile cards, timeline, facts, family groups
 │   ├── media/          # Lightbox studio, face tagging canvas, metadata editor
-│   ├── quality/        # Data validation issues, merge preview, duplicate pairs
+│   ├── quality/        # Data validation issues, merge preview, duplicate pairs & duplicate events
 │   ├── print/          # PDF export controls, tile cut-mark previews
+│   ├── settings/       # Security & MCP Personal Access Token settings UI (`McpTokensPanel`)
 │   └── stories/        # AI story audio recorder, text intake, draft review
 ├── pages/              # Top-level page views (PeoplePage, PlacesPage, TreeCanvas...)
 ├── lib/
@@ -165,4 +166,4 @@ Every mutating genealogy operation (`POST`, `PATCH`, `DELETE` on persons, famili
 - Mutations supply `If-Match: "<version>"` or an equivalent payload version.
 - On mismatch, the backend yields a `409 Conflict` (`version_conflict`), which triggers the frontend conflict reconciliation dialog.
 
-_Last curated: 2026-11-07 (Batch 3 modularization, security hardening & staleness audit)_
+_Last curated: 2026-11-14 (Duplicate Events service/UI & MCP settings component tree)_

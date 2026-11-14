@@ -19,6 +19,10 @@ This document records the architectural, design, and structural decisions made a
 - [ADR-011: Server-Side Gemini 3.8 Flash Extraction and Audio Transcription via GEMINI_API_KEY](#adr-011-server-side-gemini-38-flash-extraction-and-audio-transcription-via-gemini_api_key)
 - [ADR-012: On-Demand GitHub Releases and Native LXC / Bare-Metal Deployment Pipeline](#adr-012-on-demand-github-releases-and-native-lxc--bare-metal-deployment-pipeline)
 - [ADR-013: Panics Caught Gracefully via CatchPanicLayer & Dead Cookie Eviction on 401](#adr-013-panics-caught-gracefully-via-catchpaniclayer--dead-cookie-eviction-on-401)
+- [ADR-014: Enforce Pure LLM Extraction via Gemini 3.8 Flash and Drop Local Regex Fallback](#adr-014-enforce-pure-llm-extraction-via-gemini-38-flash-and-drop-local-regex-fallback)
+- [ADR-015: Family Link Editing Via Dedicated Detach/Move Endpoints With Two Dissolve Rules](#adr-015-family-link-editing-via-dedicated-detachmove-endpoints-with-two-dissolve-rules)
+- [ADR-016: Dual-Persistence MCP Personal Access Token Storage Without HTTP Hash Exposure](#adr-016-dual-persistence-mcp-personal-access-token-storage-without-http-hash-exposure)
+- [ADR-017: Duplicate Events Detection, Non-Destructive Merge, Union Consolidation & Undo Bundle](#adr-017-duplicate-events-detection-non-destructive-merge-union-consolidation--undo-bundle)
 
 ---
 
@@ -123,4 +127,26 @@ This document records the architectural, design, and structural decisions made a
 - **Decision:** `POST /persons/{id}/move-to-family`, `DELETE /families/{id}/children/{child_id}` and `DELETE /families/{id}/partners/{person_id}` (`backend/src/routes/rbac/family_moves.rs`), all undoable via one `tx_id`. A family is dissolved when it has no children and <=1 partner (`is_orphaned_family`); removing a marriage event dissolves any childless union (`is_childless_union`). Single-parent families are allowed.
 - **Consequences:** Profiles are never deleted; see [GOT-016](#got-016-family-edits--partner-slots-undo-logging-order-vec-index-shift-lf-endings). Child relation editor, union type editor and reorder are deferred (P2).
 
-_Last curated: 2026-11-13 (ADR-015 family link editing)_
+### ADR-016: Dual-Persistence MCP Personal Access Token Storage Without HTTP Hash Exposure
+- **Status:** Accepted
+- **Context:** `PersonalAccessTokenDto.token_hash` (`backend/src/services/privacy/masking.rs`) intentionally carries `#[serde(skip_serializing, default)]` so HTTP responses (`GET/POST /api/v1/mcp/tokens`) never expose token hashes. Because `GenealogyPrivacyStore` serialized `personal_access_tokens` directly into `live-store.json`, every disk write stripped all `token_hash` values to `""`, breaking Bearer authentication after server restart or setup/GEDCOM store resets. Relying solely on PostgreSQL or solely on disk also left startup hydration, runtime token operations, and store resets out of sync.
+- **Decision:**
+  1. Keep `#[serde(skip_serializing, default)]` on `PersonalAccessTokenDto.token_hash` for HTTP responses, while serializing `GenealogyPrivacyStore.personal_access_tokens` on disk via `PersistedMcpTokenRecord` and `serialize_persisted_tokens` (`backend/src/services/mcp/db_tokens.rs`, wired on `backend/src/services/privacy/store.rs`).
+  2. Atomically persist PATs to both `live-store.json` and `mcp-tokens.json` (`GenealogyPrivacyStore::persist_to_dir`), and synchronize creation/revocation (`upsert_mcp_token_in_db`, `revoke_mcp_token_in_db`), startup hydration (`AuthService::hydrate_from_db` + `merge_mcp_tokens_into_store` + optional `SEED_MCP_PAT` / `seed-pat.txt` via `load_seed_mcp_token`), and request-time auth lookup (`resolve_mcp_caller` + `find_mcp_token_by_hash_in_db` + `touch_mcp_token_last_used_in_db`) with PostgreSQL `personal_access_tokens`.
+  3. Preserve `personal_access_tokens` and `ai_config` across store replacement resets in `complete_initial_setup` (`backend/src/routes/auth/login.rs`) and `import_gedcom_into_store` (`backend/src/services/gedcom/importer.rs`).
+  4. Allow orphaned-user admin fallback strictly when `is_seed_or_legacy_admin_token` is true and the referenced user is not deactivated (`is_user_deactivated_in_db`); reject regular orphaned PATs with `401 NotAuthenticated`.
+  5. Default empty/omitted token creation `scopes` on backend (`create_mcp_token` → `allowed_scopes_for_access`) and frontend (`McpTokensPanel` → `availableScopesForRole`) to all scopes permitted by the caller's role.
+- **Consequences:** Token hashes remain hidden from HTTP API payloads while surviving restarts, initial setup, and GEDCOM replace imports in both PostgreSQL-backed and file-backed modes. Code review note: `is_seed_or_legacy_admin_token` retains a legacy name/scope heuristic (`"Production MCP Agent"` + `"admin:maintenance"`).
+
+### ADR-017: Duplicate Events Detection, Non-Destructive Merge, Union Consolidation & Undo Bundle
+- **Status:** Accepted
+- **Context:** Duplicate life events (singleton vitals such as birth/death, compatible repeatable events such as residence, and union events such as marriage) arise from GEDCOM imports, story extraction, or manual entry. Merging duplicates must preserve all descriptions, archival source citations, media links, notes, privacy flags, child relationships, and legacy `FAMC` `individual_id` ownership, while allowing lossless 1-click Undo.
+- **Decision:**
+  1. Cluster duplicate events (`compute_duplicate_event_groups`, `backend/src/services/quality/events_duplicates.rs`) and emit `RULE_DUPLICATE_EVENT` (`"DUPLICATE_EVENT"`) quality warnings alongside structured `DuplicateEventGroupDto` proposals (`has_conflict`, `conflict_fields`, `proposed`).
+  2. Enforce `is_union_context(canon, has_family_id)` (`backend/src/services/quality/events_duplicates_types.rs`) across validation, execution, and pre-merge Undo bundling so singleton vitals (`birth`, `baptism`, `death`, `burial`, `cremation`) with legacy `FAMC` `family_id` stay scoped to `surviving.individual_id` and never consolidate parent unions.
+  3. During union family consolidation (`consolidate_union_families`, `backend/src/services/quality/events_duplicates_merge.rs`), remap `FamilyChildDto.rel_to_partner1` / `rel_to_partner2` by matching partner ID rather than slot position, deduplicate notes/media links, and OR-join `is_private` (`keep || any(merged)`).
+  4. Snapshot affected events, families, notes, media, and persons into a scoped `"event_merge_bundle"` before-image restored by `undo_transaction` (`backend/src/services/history/undo.rs`) without reverting unrelated subsequent mutations.
+  5. Expose Admin REST (`/api/v1/quality/events/{duplicates,merge,batch-merge}`) and Tier C MCP (`list_duplicate_events`, `merge_duplicate_events`) operations; in the UI, elevate `Customize` to `variant="primary"` when `has_conflict` is true and encode cleared custom fields as `""`.
+- **Consequences:** Reversible single-group, customized, and conflict-free batch merges across Web UI and MCP with zero silent metadata loss, private-event leakage, or child-relation corruption; see [GOT-020](gotchas.md#got-020-duplicate-event-colon-dismissal-keys-legacy-famc-vitals--union-child-slot-remapping), [GOT-021](gotchas.md#got-021-mcp-undo_transaction-parameter-order--custom-event-merge-field-clearing), and [GOT-022](gotchas.md#got-022-quality-frontend-guardrails--offline-fallback-icu-plurals-dialog-toast-exclusions--card-layouts).
+
+_Last curated: 2026-11-14 (ADR-017 duplicate events detection, merge & undo bundle)_

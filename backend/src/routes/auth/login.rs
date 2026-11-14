@@ -97,8 +97,10 @@ pub async fn complete_initial_setup(
         let mut store = state.privacy_store.write().await;
         if store.is_demo_seed {
             let ai_cfg = store.ai_config.clone();
+            let preserved_tokens = std::mem::take(&mut store.personal_access_tokens);
             *store = crate::services::privacy::GenealogyPrivacyStore::empty();
             store.ai_config = ai_cfg;
+            store.personal_access_tokens = preserved_tokens;
         }
     }
     Ok((

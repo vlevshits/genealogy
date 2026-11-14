@@ -65,14 +65,18 @@ pub(crate) use crate::{
             TreeSnapshotDto, VitalEventSummaryDto,
         },
         quality::{
-            analyze_place_hierarchies, batch_fix_places, build_quality_summary,
-            compute_duplicate_candidates, compute_quality_warnings, dismiss_place_issue_in_store,
-            dismiss_warning_in_store, execute_person_merge, fix_place_hierarchy,
-            mark_not_duplicate_in_store, match_prospective_person, preview_person_merge,
-            preview_place_hierarchy_issue, BatchFixPlacesRequest, BatchFixPlacesResponse,
-            DismissPlaceIssueRequest, DismissWarningRequest, DismissWarningResponse,
-            DuplicateCandidatesFilterQuery, DuplicateCandidatesListResponse,
-            FixPlaceHierarchyRequest, FixPlaceHierarchyResponse, MergePreviewQuery,
+            analyze_place_hierarchies, batch_fix_places, batch_merge_duplicate_events_in_store,
+            build_quality_summary, compute_duplicate_candidates, compute_duplicate_event_groups,
+            compute_quality_warnings, dismiss_place_issue_in_store, dismiss_warning_in_store,
+            execute_person_merge, filter_duplicate_event_groups, fix_place_hierarchy,
+            mark_not_duplicate_in_store, match_prospective_person, merge_duplicate_events_in_store,
+            preview_person_merge, preview_place_hierarchy_issue, BatchFixPlacesRequest,
+            BatchFixPlacesResponse, BatchMergeDuplicateEventsRequest,
+            BatchMergeDuplicateEventsResponse, DismissPlaceIssueRequest, DismissWarningRequest,
+            DismissWarningResponse, DuplicateCandidatesFilterQuery,
+            DuplicateCandidatesListResponse, DuplicateEventsFilterQuery,
+            DuplicateEventsListResponse, FixPlaceHierarchyRequest, FixPlaceHierarchyResponse,
+            MergeDuplicateEventsRequest, MergeDuplicateEventsResponse, MergePreviewQuery,
             MergePreviewResponse, NotDuplicatePairRequest, NotDuplicatePairResponse,
             PersonMatchQuery, PersonMatchResponse, PersonMergeRequest as QualityPersonMergeRequest,
             PersonMergeResponse, PlaceHierarchyAnalysisQuery, PlaceHierarchyAnalysisResponseDto,
@@ -120,6 +124,8 @@ pub mod gedcom_pdf;
 pub use gedcom_pdf::*;
 pub mod history_quality;
 pub use history_quality::*;
+pub mod quality_events;
+pub use quality_events::*;
 pub mod dashboard_kinship;
 pub use dashboard_kinship::*;
 pub mod ai_mcp;

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { ControlSize } from '../../types/common';
 
@@ -42,13 +42,29 @@ export function SegmentedControl<T extends string = string>({
   const currentValue = value !== undefined ? value : internalValue;
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const selectValue = (nextValue: T) => {
+  const selectValue = (nextValue: T, idx?: number) => {
     if (disabled) return;
     if (value === undefined) {
       setInternalValue(nextValue);
     }
+    if (idx !== undefined) {
+      itemRefs.current[idx]?.scrollIntoView?.({
+        inline: 'nearest',
+        block: 'nearest',
+      });
+    }
     onChange?.(nextValue);
   };
+
+  useEffect(() => {
+    const activeIdx = options.findIndex((opt) => opt.value === currentValue);
+    if (activeIdx !== -1) {
+      itemRefs.current[activeIdx]?.scrollIntoView?.({
+        inline: 'nearest',
+        block: 'nearest',
+      });
+    }
+  }, [currentValue, options]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const enabledIndices = options
@@ -75,14 +91,14 @@ export function SegmentedControl<T extends string = string>({
     if (nextPos !== -1) {
       const targetIdx = enabledIndices[nextPos];
       const opt = options[targetIdx];
-      selectValue(opt.value);
+      selectValue(opt.value, targetIdx);
       itemRefs.current[targetIdx]?.focus();
     }
   };
 
   const sizeClasses: Record<ControlSize, string> = {
-    sm: 'min-h-7 px-2.5 py-1 text-xs',
-    md: 'min-h-9 px-3 py-1.5 text-xs sm:text-sm',
+    sm: 'min-h-8 px-2.5 py-1 text-xs touch-target-expand',
+    md: 'min-h-10 px-3 py-2 text-xs sm:text-sm touch-target-expand',
     lg: 'min-h-11 px-4 py-2 text-sm',
   };
 
@@ -110,10 +126,10 @@ export function SegmentedControl<T extends string = string>({
             aria-checked={isSelected}
             disabled={disabled || opt.disabled}
             tabIndex={isSelected ? 0 : -1}
-            onClick={() => selectValue(opt.value)}
+            onClick={() => selectValue(opt.value, idx)}
             onKeyDown={(e) => handleKeyDown(e, idx)}
             className={cn(
-              'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer text-center leading-tight h-full [&>svg]:shrink-0',
+              'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer text-center leading-tight [&>svg]:shrink-0',
               sizeClasses[size],
               isSelected
                 ? cn('bg-surface text-primary shadow-xs', opt.accentClassName)

@@ -1,3 +1,7 @@
+export * from './default-quality-fixtures';
+export * from './DuplicateEventCard';
+export * from './DuplicateEventCustomizeModal';
+export * from './DuplicateEventsSubView';
 export * from './PlaceHierarchyCard';
 export * from './PlaceHierarchyCustomizeModal';
 export * from './BatchAutoFixConfirmModal';

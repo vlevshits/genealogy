@@ -16,6 +16,10 @@ pub struct GenealogyPrivacyStore {
     pub not_duplicate_pairs: Vec<(String, String)>,
     pub gid_aliases: HashMap<String, String>,
     pub story_drafts: Vec<StoryIntakeDraftDto>,
+    #[serde(
+        default,
+        serialize_with = "crate::services::mcp::serialize_persisted_tokens"
+    )]
     pub personal_access_tokens: Vec<PersonalAccessTokenDto>,
     pub ai_config: AiInstanceConfigDto,
     pub next_gid_seq: u32,
@@ -52,29 +56,44 @@ impl GenealogyPrivacyStore {
         }
     }
 
-    /// Persists the live store to `{BACKUP_PATH}/live-store.json` when running as the server binary (`BACKUP_PATH` set).
+    /// Persists the live store to `{backup_dir}/live-store.json` and `{backup_dir}/mcp-tokens.json`
+    /// when running in production/non-test environments.
     pub fn persist_if_production(&self) {
         if cfg!(test) || std::env::var("APP_ENV").as_deref() == Ok("test") {
             return;
         }
-        let Ok(backup_dir) = std::env::var("BACKUP_PATH") else {
-            return;
-        };
-        if backup_dir.trim().is_empty() {
-            return;
-        }
-        if self.is_demo_seed || (self.persons.is_empty() && self.personal_access_tokens.is_empty())
-        {
-            return;
-        }
-        let dir_path = std::path::Path::new(&backup_dir);
-        let _ = std::fs::create_dir_all(dir_path);
-        let tmp_path = dir_path.join("live-store.json.tmp");
-        let final_path = dir_path.join("live-store.json");
-        if let Ok(bytes) = serde_json::to_vec(self) {
-            if std::fs::write(&tmp_path, bytes).is_ok() {
-                let _ = std::fs::rename(&tmp_path, &final_path);
+        let backup_dir = match std::env::var("BACKUP_PATH") {
+            Ok(val) if !val.trim().is_empty() => val.trim().to_string(),
+            _ if std::path::Path::new("/app/data/backups").exists()
+                || std::path::Path::new("/app/data").exists() =>
+            {
+                "/app/data/backups".to_string()
             }
+            _ if std::path::Path::new("./data/backups").exists() => "./data/backups".to_string(),
+            _ => return,
+        };
+        self.persist_to_dir(std::path::Path::new(&backup_dir));
+    }
+
+    /// Atomically persists `live-store.json` and `mcp-tokens.json` into `dir_path`.
+    pub fn persist_to_dir(&self, dir_path: &std::path::Path) {
+        if self.is_demo_seed {
+            return;
+        }
+        let has_tree_or_tokens =
+            !self.persons.is_empty() || !self.personal_access_tokens.is_empty();
+        if has_tree_or_tokens {
+            let _ = std::fs::create_dir_all(dir_path);
+            let tmp_path = dir_path.join("live-store.json.tmp");
+            let final_path = dir_path.join("live-store.json");
+            if let Ok(bytes) = serde_json::to_vec(self) {
+                if std::fs::write(&tmp_path, bytes).is_ok() {
+                    let _ = std::fs::rename(&tmp_path, &final_path);
+                }
+            }
+        }
+        if !self.personal_access_tokens.is_empty() || dir_path.join("mcp-tokens.json").exists() {
+            crate::services::mcp::persist_mcp_tokens_to_dir(dir_path, &self.personal_access_tokens);
         }
     }
 

@@ -88,6 +88,8 @@ pub struct QualitySummaryResponse {
     pub info_count: usize,
     pub duplicate_candidates_count: usize,
     #[serde(default)]
+    pub duplicate_events_count: usize,
+    #[serde(default)]
     pub place_hierarchy_issues: usize,
     #[serde(default)]
     pub place_hierarchy_high_confidence: usize,
@@ -97,6 +99,8 @@ pub struct QualitySummaryResponse {
     pub by_rule: HashMap<String, usize>,
     pub warnings: Vec<QualityWarningDto>,
     pub duplicates: Vec<DuplicateCandidatePairDto>,
+    #[serde(default)]
+    pub duplicate_events: Vec<DuplicateEventGroupDto>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]

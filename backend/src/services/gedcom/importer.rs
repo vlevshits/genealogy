@@ -66,8 +66,12 @@ pub fn import_gedcom_into_store(
 
     if mode == "new" || is_replace_mode || store.is_demo_seed {
         let preserved_snapshots = std::mem::take(&mut store.snapshots);
+        let preserved_tokens = std::mem::take(&mut store.personal_access_tokens);
+        let preserved_ai_config = store.ai_config.clone();
         *store = GenealogyPrivacyStore::empty();
         store.snapshots = preserved_snapshots;
+        store.personal_access_tokens = preserved_tokens;
+        store.ai_config = preserved_ai_config;
     }
 
     let initial_places_count = store.places.len();

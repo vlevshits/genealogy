@@ -601,35 +601,99 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
             Ok(json!({ "items": items, "total": items.len() }))
         }
         "merge_duplicate_individuals" => {
-            let primary_person_id = args
-                .get("surviving_id")
-                .or_else(|| args.get("primary_person_id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let secondary_person_id = args
-                .get("duplicate_id")
-                .or_else(|| args.get("secondary_person_id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let res = execute_person_merge(
+            let pick_trimmed = |keys: &[&str]| -> String {
+                keys.iter()
+                    .find_map(|key| args.get(*key).and_then(|v| v.as_str()))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_default()
+            };
+            let surviving_id = pick_trimmed(&[
+                "surviving_id",
+                "keep_id",
+                "target_id",
+                "primary_person_id",
+                "surviving_person_id",
+                "person_a_id",
+            ]);
+            let duplicate_id = pick_trimmed(&[
+                "duplicate_id",
+                "merge_id",
+                "source_id",
+                "secondary_person_id",
+                "duplicate_person_id",
+                "person_b_id",
+            ]);
+            if surviving_id.is_empty() || duplicate_id.is_empty() {
+                let mut fields = HashMap::new();
+                if surviving_id.is_empty() {
+                    fields.insert("surviving_id".to_string(), "required".to_string());
+                }
+                if duplicate_id.is_empty() {
+                    fields.insert("duplicate_id".to_string(), "required".to_string());
+                }
+                return Err(AppError::ValidationFailed(
+                    "Both surviving_id (or keep_id/target_id) and duplicate_id (or merge_id/source_id) are required".to_string(),
+                    Some(fields),
+                ));
+            }
+
+            let field_choices: HashMap<String, String> = args
+                .get("field_choices")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let field_overrides: HashMap<String, Value> = args
+                .get("field_overrides")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let backup_dir = std::env::var("BACKUP_PATH")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "/app/data/backups".to_string());
+
+            let mut res = execute_person_merge(
                 store,
                 PersonMergeRequest {
-                    keep_id: Some(primary_person_id.clone()),
-                    merge_id: Some(secondary_person_id.clone()),
+                    keep_id: Some(surviving_id.clone()),
+                    merge_id: Some(duplicate_id.clone()),
                     target_id: None,
                     source_id: None,
-                    primary_person_id: Some(primary_person_id),
-                    duplicate_person_id: Some(secondary_person_id),
-                    field_choices: HashMap::new(),
-                    field_overrides: HashMap::new(),
+                    primary_person_id: Some(surviving_id),
+                    duplicate_person_id: Some(duplicate_id),
+                    field_choices,
+                    field_overrides,
                 },
                 Some(caller.user_id.clone()),
                 Some(caller.username.clone()),
-                "./data/backups",
+                &backup_dir,
             )?;
-            Ok(serde_json::to_value(res).unwrap_or_else(|_| json!({})))
+
+            if let Some(chosen_surv) = res.surviving_person.clone() {
+                recompute_all_places_metadata(store);
+                recompute_all_individuals_vitals(store, current_year, age_threshold);
+                if let Some(person) = store.persons.iter_mut().find(|p| p.id == chosen_surv.id) {
+                    if chosen_surv.birth.is_some() {
+                        person.birth = chosen_surv.birth;
+                        person.birth_sort = chosen_surv.birth_sort;
+                    }
+                    if chosen_surv.death.is_some() {
+                        person.death = chosen_surv.death;
+                        person.death_sort = chosen_surv.death_sort;
+                        person.has_death_event = chosen_surv.has_death_event;
+                    }
+                    res.surviving_person = Some(person.clone());
+                }
+            }
+            store.persist_if_production();
+
+            let merged_person_id_opt = res.merged_id.clone();
+            let mut val = serde_json::to_value(res).unwrap_or_else(|_| json!({}));
+            if let (Some(obj), Some(mid)) = (val.as_object_mut(), merged_person_id_opt) {
+                obj.entry("merged_person_id".to_string())
+                    .or_insert_with(|| Value::String(mid));
+            }
+            Ok(val)
         }
         "analyze_place_hierarchy_issues" => {
             let res = analyze_place_hierarchies(store, &PlaceHierarchyAnalysisQuery::default());
@@ -659,6 +723,15 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
             )?;
             Ok(serde_json::to_value(res).unwrap_or_else(|_| json!({})))
         }
+        "list_duplicate_events" => execute_mcp_list_duplicate_events(store, args),
+        "merge_duplicate_events" => execute_mcp_merge_duplicate_events(
+            store,
+            args,
+            Some(caller.user_id.clone()),
+            Some(caller.username.clone()),
+            current_year,
+            age_threshold,
+        ),
         "undo_transaction" => {
             let tx_id = args.get("tx_id").and_then(|v| v.as_str()).unwrap_or("");
             let res = undo_transaction(
@@ -667,8 +740,8 @@ pub(crate) fn execute_mcp_mutation_or_admin_tool(
                 &caller.user_id,
                 Some(caller.username.clone()),
                 caller.access.is_admin(),
-                age_threshold,
                 current_year,
+                age_threshold,
             )?;
             Ok(serde_json::to_value(res).unwrap_or_else(|_| json!({})))
         }

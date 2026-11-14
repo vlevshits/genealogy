@@ -10,7 +10,7 @@ Full audit change logging, transactional undo/restore, optimistic concurrency co
 | :--- | :--- | :--- |
 | Migrations | `backend/migrations/` | `change_log` table, `tree_snapshots` table, `version` columns across tables |
 | Routes | `backend/src/routes/rbac/mod.rs` | Audit endpoints, undo transaction, snapshot CRUD, version check |
-| Service | `backend/src/services/history/mod.rs` | `record_change`, `undo_transaction`, `create_snapshot`, `rollback_snapshot` |
+| Service | `backend/src/services/history/mod.rs` | `record_change`, `undo_transaction`, `create_snapshot`, `rollback_snapshot`; `undo.rs` restores `"event_merge_bundle"` snapshots |
 | History Page | `frontend/src/pages/HistoryPage.tsx` | Tree audit log table, user filter, date filter, snapshot manager |
 | History Drawer | `frontend/src/components/history/` | `RecordHistoryDrawer.tsx` (entity-level timeline diff view) |
 | Hooks | `frontend/src/hooks/` | `useLiveVersion.ts` (polling version updates), `useUndoToast.ts` (transient undo action) |
@@ -40,5 +40,6 @@ Full audit change logging, transactional undo/restore, optimistic concurrency co
 
 ## 6. Gotchas & Known Limitations
 - Undoing a parent deletion must automatically re-bind the restored parent to existing family container nodes.
+- **Scoped `"event_merge_bundle"` Undo (`ADR-017`):** Duplicate event merges log `"kind": "event_merge_bundle"` containing only affected events, families, notes, media links, and persons so `undo_transaction` (`backend/src/services/history/undo.rs`) restores merged records without overwriting unrelated subsequent edits. Verify `(current_year, age_threshold)` arg order when calling from MCP (`GOT-021`).
 
-_Last curated: 2026-11-04 (memory bank bootstrap)_
+_Last curated: 2026-11-14 (Scoped event_merge_bundle Undo snapshot for duplicate events)_

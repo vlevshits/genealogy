@@ -125,7 +125,7 @@ pub fn create_mcp_token(
             }
         }
         if validated.is_empty() {
-            vec!["read:tree".to_string()]
+            allowed.into_iter().map(ToString::to_string).collect()
         } else {
             validated
         }

@@ -195,6 +195,7 @@ pub fn match_prospective_person(
 pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryResponse {
     let warnings = compute_quality_warnings(store, false);
     let duplicates = compute_duplicate_candidates(store, 75);
+    let duplicate_events = compute_duplicate_event_groups(store, false);
     let place_analysis = analyze_place_hierarchies(store, &PlaceHierarchyAnalysisQuery::default());
 
     let mut chronology = 0;
@@ -237,6 +238,7 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
         warning_count,
         info_count,
         duplicate_candidates_count: duplicates.len(),
+        duplicate_events_count: duplicate_events.len(),
         place_hierarchy_issues: place_analysis.counts.total_issues,
         place_hierarchy_high_confidence: place_analysis.counts.high_confidence_count,
         dismissed_count: store.dismissed_warnings.len(),
@@ -255,6 +257,7 @@ pub fn build_quality_summary(store: &GenealogyPrivacyStore) -> QualitySummaryRes
         by_rule,
         warnings,
         duplicates,
+        duplicate_events,
     }
 }
 
@@ -280,22 +283,49 @@ pub fn dismiss_warning_in_store(
     let mut secondary_id = req.secondary_id;
 
     if (rule_code.is_empty() || entity_id.is_empty()) && !raw_id.trim().is_empty() {
-        let parts: Vec<&str> = raw_id.trim().split(':').collect();
-        if parts.len() >= 2 {
+        let trimmed_raw = raw_id.trim();
+        if let Some(rest) = trimmed_raw.strip_prefix("DUPLICATE_EVENT:") {
             if rule_code.is_empty() {
-                rule_code = parts[0].to_uppercase();
+                rule_code = RULE_DUPLICATE_EVENT.to_string();
             }
             if entity_id.is_empty() {
-                entity_id = parts[1].to_string();
+                entity_id = rest.to_string();
             }
-            if parts.len() >= 3 && secondary_id.is_none() {
-                secondary_id = Some(parts[2].to_string());
+            secondary_id = None;
+        } else if trimmed_raw.starts_with("dup_event:") {
+            if rule_code.is_empty() {
+                rule_code = RULE_DUPLICATE_EVENT.to_string();
+            }
+            if entity_id.is_empty() {
+                entity_id = trimmed_raw.to_string();
+            }
+            secondary_id = None;
+        } else {
+            let parts: Vec<&str> = trimmed_raw.split(':').collect();
+            if parts.len() >= 2 {
+                if rule_code.is_empty() {
+                    rule_code = parts[0].to_uppercase();
+                }
+                if entity_id.is_empty() {
+                    entity_id = parts[1].to_string();
+                }
+                if parts.len() >= 3 && secondary_id.is_none() {
+                    secondary_id = Some(parts[2].to_string());
+                }
             }
         }
     }
 
     let mut inferred_entity_type = req.entity_type.clone();
-    if let Some(resolved) = store.resolve_person_id(&entity_id) {
+    if rule_code == RULE_DUPLICATE_EVENT || entity_id.starts_with("dup_event:") {
+        if rule_code.is_empty() {
+            rule_code = RULE_DUPLICATE_EVENT.to_string();
+        }
+        if inferred_entity_type.is_none() {
+            inferred_entity_type = Some("event".to_string());
+        }
+        secondary_id = None;
+    } else if let Some(resolved) = store.resolve_person_id(&entity_id) {
         entity_id = resolved;
         if inferred_entity_type.is_none() {
             inferred_entity_type = Some("individual".to_string());

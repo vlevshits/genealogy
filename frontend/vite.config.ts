@@ -49,6 +49,7 @@ export default defineConfig({
           if (
             id.includes('src/pages/DataQualityPage') ||
             id.includes('src/pages/PersonMergePage') ||
+            id.includes('src/components/quality/DuplicateEvent') ||
             id.includes('src/components/quality/PlaceHierarchy') ||
             id.includes('src/components/quality/BatchAutoFix')
           ) {

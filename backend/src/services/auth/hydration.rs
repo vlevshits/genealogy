@@ -300,95 +300,58 @@ impl AuthService {
                 }
             }
 
-            if let Some(mut s) = hydrated_store {
-                // Also load any persisted or seed MCP tokens
-                let tokens_path = backup_dir.join("mcp-tokens.json");
-                if tokens_path.exists() {
-                    if let Ok(bytes) = std::fs::read(&tokens_path) {
-                        if let Ok(tokens) = serde_json::from_slice::<
-                            Vec<crate::services::privacy::PersonalAccessTokenDto>,
-                        >(&bytes)
-                        {
-                            for t in tokens {
-                                if !s
-                                    .personal_access_tokens
-                                    .iter()
-                                    .any(|ex| ex.token_hash == t.token_hash)
-                                {
-                                    s.personal_access_tokens.push(t);
-                                }
-                            }
-                        }
-                    }
-                }
+            let hydrated_from_disk = hydrated_store.is_some();
+            let mut s = match hydrated_store {
+                Some(loaded) => loaded,
+                None => state.privacy_store.read().await.clone(),
+            };
 
-                let seed_pat_raw = std::env::var("SEED_MCP_PAT").ok().or_else(|| {
-                    std::fs::read_to_string(backup_dir.join("seed-pat.txt"))
-                        .ok()
-                        .map(|v| v.trim().to_string())
-                });
-                if let Some(raw_spec) = seed_pat_raw.filter(|v| !v.is_empty()) {
-                    let (uid, raw_token) = if let Some((u, t)) = raw_spec.split_once(':') {
-                        (u.trim().to_string(), t.trim().to_string())
-                    } else {
-                        (
-                            admin_user_id_str.clone().unwrap_or_default(),
-                            raw_spec.trim().to_string(),
-                        )
-                    };
-                    if !uid.is_empty() && !raw_token.is_empty() {
-                        let token_hash = crate::services::mcp::hash_mcp_token(&raw_token);
-                        if !s
-                            .personal_access_tokens
-                            .iter()
-                            .any(|ex| ex.token_hash == token_hash)
-                        {
-                            s.personal_access_tokens.push(
-                                crate::services::privacy::PersonalAccessTokenDto {
-                                    id: Uuid::new_v4().to_string(),
-                                    user_id: uid,
-                                    name: "Production MCP Agent".to_string(),
-                                    token_prefix: raw_token.chars().take(16).collect(),
-                                    token_hash,
-                                    scopes: vec![
-                                        "read:tree".to_string(),
-                                        "write:draft".to_string(),
-                                        "write:direct".to_string(),
-                                        "admin:maintenance".to_string(),
-                                    ],
-                                    last_used_at: None,
-                                    expires_at: None,
-                                    revoked_at: None,
-                                    created_at: Utc::now().to_rfc3339(),
-                                },
-                            );
-                        }
-                    }
-                }
+            let file_tokens = crate::services::mcp::load_mcp_tokens_from_dir(backup_dir);
+            if !file_tokens.is_empty() {
+                crate::services::mcp::merge_mcp_tokens_into_store(&mut s, file_tokens);
+            }
 
-                let seed_merge_path = backup_dir.join("seed-merge.ged");
-                if seed_merge_path.exists() {
-                    if let Ok(ged_bytes) = std::fs::read(&seed_merge_path) {
-                        let _ = crate::services::gedcom::import_gedcom_into_store(
-                            &mut s,
-                            &ged_bytes,
-                            "merge",
-                            None,
-                            current_year,
-                            age_threshold,
-                        );
-                    }
-                    let _ = std::fs::remove_file(&seed_merge_path);
-                }
+            let db_tokens = crate::services::mcp::load_mcp_tokens_from_db(pool).await;
+            if !db_tokens.is_empty() {
+                crate::services::mcp::merge_mcp_tokens_into_store(&mut s, db_tokens);
+            }
 
-                s.persist_if_production();
+            if let Some(seed_pat) =
+                crate::services::mcp::load_seed_mcp_token(backup_dir, admin_user_id_str.as_deref())
+            {
+                crate::services::mcp::merge_mcp_tokens_into_store(&mut s, vec![seed_pat]);
+            }
+
+            for pat in &s.personal_access_tokens {
+                if !pat.token_hash.trim().is_empty() {
+                    crate::services::mcp::upsert_mcp_token_in_db(pool, pat).await;
+                }
+            }
+
+            let seed_merge_path = backup_dir.join("seed-merge.ged");
+            if seed_merge_path.exists() {
+                if let Ok(ged_bytes) = std::fs::read(&seed_merge_path) {
+                    let _ = crate::services::gedcom::import_gedcom_into_store(
+                        &mut s,
+                        &ged_bytes,
+                        "merge",
+                        None,
+                        current_year,
+                        age_threshold,
+                    );
+                }
+                let _ = std::fs::remove_file(&seed_merge_path);
+            }
+
+            if hydrated_from_disk || !s.personal_access_tokens.is_empty() || !s.persons.is_empty() {
+                s.persist_to_dir(backup_dir);
                 tracing::info!(
                     persons = s.persons.len(),
                     families = s.families.len(),
                     events = s.events.len(),
                     places = s.places.len(),
                     pats = s.personal_access_tokens.len(),
-                    "GenealogyPrivacyStore hydrated from backup storage"
+                    "GenealogyPrivacyStore hydrated from backup storage and PostgreSQL"
                 );
                 *state.privacy_store.write().await = s;
             }

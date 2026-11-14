@@ -11,14 +11,14 @@ pub(crate) use crate::{
     services::{
         genealogy::{
             allocate_gid, build_place_breadcrumbs, ensure_no_ancestor_cycle, ensure_no_place_cycle,
-            recompute_all_individuals_vitals, recompute_all_places_metadata,
+            normalize_event_type, recompute_all_individuals_vitals, recompute_all_places_metadata,
         },
         history::{create_snapshot, log_change},
         privacy::{
             fold_slavic_surname_stem, normalize_russian_orthography_word, redact_person_for_caller,
             suggest_slavic_patronymic, ChangeLogEntryDto, DismissedWarningDto, FamilyChildDto,
-            GenealogyPrivacyStore, IndividualAltNameDto, LifeEventDto, MediaLinkDto, PersonNameDto,
-            PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
+            FamilyDto, GenealogyPrivacyStore, IndividualAltNameDto, LifeEventDto, MediaLinkDto,
+            PersonNameDto, PlaceAltNameDto, PlaceBreadcrumbDto, PlaceSummaryDto, TreePersonNodeDto,
             VitalEventSummaryDto,
         },
         rbac::CallerAccess,
@@ -43,3 +43,11 @@ pub mod places_fix;
 pub use places_fix::*;
 pub mod places_batch_tests;
 pub use places_batch_tests::*;
+pub mod events_duplicates_types;
+pub use events_duplicates_types::*;
+pub mod events_duplicates;
+pub use events_duplicates::*;
+pub mod events_duplicates_merge;
+pub use events_duplicates_merge::*;
+pub mod events_duplicates_batch;
+pub use events_duplicates_batch::*;

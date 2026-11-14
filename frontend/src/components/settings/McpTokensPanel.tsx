@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -34,6 +34,29 @@ export interface McpTokensPanelProps {
   userRole?: 'admin' | 'editor' | 'viewer';
 }
 
+/**
+ * Returns all MCP PAT scopes permitted for the given user role,
+ * mirroring backend `allowed_scopes_for_access` in canonical order.
+ */
+export function availableScopesForRole(
+  role?: 'admin' | 'editor' | 'viewer' | string
+): McpTokenScope[] {
+  if (role === 'admin') {
+    return ['read:tree', 'write:draft', 'write:direct', 'admin:maintenance'];
+  }
+  if (role === 'editor') {
+    return ['read:tree', 'write:draft', 'write:direct'];
+  }
+  return ['read:tree'];
+}
+
+const SCOPE_LABEL_KEYS: Record<McpTokenScope, string> = {
+  'read:tree': 'settings.mcp.scopeReadTree',
+  'write:draft': 'settings.mcp.scopeWriteDraft',
+  'write:direct': 'settings.mcp.scopeWriteDirect',
+  'admin:maintenance': 'settings.mcp.scopeAdminMaintenance',
+};
+
 export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
   initialTokens,
   userRole,
@@ -42,24 +65,32 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
   const { user } = useAuth();
   const { addToast } = useToast();
 
-  const effectiveRole = userRole ?? user?.role ?? 'admin';
-  const canWrite = effectiveRole === 'admin' || effectiveRole === 'editor';
-  const isAdmin = effectiveRole === 'admin';
+  const rawRole = userRole ?? user?.role ?? 'admin';
+  const effectiveRole: 'admin' | 'editor' | 'viewer' =
+    rawRole === 'admin' || rawRole === 'editor' ? rawRole : 'viewer';
+  const availableScopes = availableScopesForRole(effectiveRole);
 
   const [tokens, setTokens] = useState<McpPersonalAccessTokenDto[]>(
     initialTokens ?? []
   );
   const [tokenName, setTokenName] = useState('');
-  const [selectedScopes, setSelectedScopes] = useState<McpTokenScope[]>([
-    'read:tree',
-    ...(canWrite ? (['write:draft'] as McpTokenScope[]) : []),
-  ]);
+  const [selectedScopes, setSelectedScopes] = useState<McpTokenScope[]>(() =>
+    availableScopesForRole(effectiveRole)
+  );
+  const prevRoleRef = useRef(effectiveRole);
   const [creating, setCreating] = useState(false);
   const [freshRawToken, setFreshRawToken] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [confirmRevokeToken, setConfirmRevokeToken] =
     useState<McpPersonalAccessTokenDto | null>(null);
+
+  useEffect(() => {
+    if (prevRoleRef.current !== effectiveRole) {
+      prevRoleRef.current = effectiveRole;
+      setSelectedScopes(availableScopesForRole(effectiveRole));
+    }
+  }, [effectiveRole]);
 
   useEffect(() => {
     if (initialTokens !== undefined) return;
@@ -84,7 +115,9 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
     setSelectedScopes((prev) =>
       prev.includes(scope)
         ? prev.filter((s) => s !== scope)
-        : [...prev, scope]
+        : availableScopesForRole(effectiveRole).filter(
+            (s) => s === scope || prev.includes(s)
+          )
     );
   };
 
@@ -100,6 +133,7 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
       setTokens((prev) => [res.token, ...prev]);
       setFreshRawToken(res.raw_token);
       setTokenName('');
+      setSelectedScopes(availableScopesForRole(effectiveRole));
       addToast({
         type: 'success',
         title: t('settings.mcp.createdToast'),
@@ -260,33 +294,20 @@ export const McpTokensPanel: React.FC<McpTokensPanelProps> = ({
               <div className="text-xs font-medium text-secondary">
                 {t('settings.mcp.scopesLabel')}
               </div>
-              <div className="flex flex-col gap-2">
-                <Checkbox
-                  checked={selectedScopes.includes('read:tree')}
-                  onCheckedChange={() => toggleScope('read:tree')}
-                  label={t('settings.mcp.scopeReadTree')}
-                />
-                {canWrite && (
-                  <>
-                    <Checkbox
-                      checked={selectedScopes.includes('write:draft')}
-                      onCheckedChange={() => toggleScope('write:draft')}
-                      label={t('settings.mcp.scopeWriteDraft')}
-                    />
-                    <Checkbox
-                      checked={selectedScopes.includes('write:direct')}
-                      onCheckedChange={() => toggleScope('write:direct')}
-                      label={t('settings.mcp.scopeWriteDirect')}
-                    />
-                  </>
-                )}
-                {isAdmin && (
+              <div
+                role="group"
+                aria-label={t('settings.mcp.scopesLabel')}
+                className="flex flex-col gap-2"
+              >
+                {availableScopes.map((scope) => (
                   <Checkbox
-                    checked={selectedScopes.includes('admin:maintenance')}
-                    onCheckedChange={() => toggleScope('admin:maintenance')}
-                    label={t('settings.mcp.scopeAdminMaintenance')}
+                    key={scope}
+                    data-testid={`mcp-scope-${scope}`}
+                    checked={selectedScopes.includes(scope)}
+                    onCheckedChange={() => toggleScope(scope)}
+                    label={t(SCOPE_LABEL_KEYS[scope])}
                   />
-                )}
+                ))}
               </div>
             </div>
 

@@ -301,6 +301,81 @@ pub(crate) fn revert_single_change_entry(
                 }
                 return Ok(Some(entry.entity_id.clone()));
             }
+            if before_val.get("kind").and_then(|v| v.as_str()) == Some("event_merge_bundle") {
+                let mut restored_event_ids = std::collections::HashSet::new();
+                let mut restored_family_ids = std::collections::HashSet::new();
+                if let Some(evs_val) = before_val.get("events_before") {
+                    if let Ok(evs) = serde_json::from_value::<Vec<LifeEventDto>>(evs_val.clone()) {
+                        for ev in evs {
+                            restored_event_ids.insert(ev.id.clone());
+                            if let Some(cur) = store.events.iter_mut().find(|e| e.id == ev.id) {
+                                *cur = ev;
+                            } else {
+                                store.events.push(ev);
+                            }
+                        }
+                    }
+                }
+                if let Some(fams_val) = before_val.get("families_before") {
+                    if let Ok(fams) = serde_json::from_value::<Vec<FamilyDto>>(fams_val.clone()) {
+                        for fam in fams {
+                            restored_family_ids.insert(fam.id.clone());
+                            if let Some(cur) = store.families.iter_mut().find(|f| f.id == fam.id) {
+                                *cur = fam;
+                            } else {
+                                store.families.push(fam);
+                            }
+                        }
+                    }
+                }
+                if let Some(notes_val) = before_val.get("notes_before") {
+                    if let Ok(notes) = serde_json::from_value::<Vec<NoteDto>>(notes_val.clone()) {
+                        store.notes.retain(|n| {
+                            !((n.entity_type == "event"
+                                && restored_event_ids.contains(&n.entity_id))
+                                || (n.entity_type == "family"
+                                    && restored_family_ids.contains(&n.entity_id)))
+                        });
+                        for note in notes {
+                            if !store.notes.iter().any(|n| n.id == note.id) {
+                                store.notes.push(note);
+                            }
+                        }
+                    }
+                }
+                if let Some(media_val) = before_val.get("media_before") {
+                    if let Ok(media) =
+                        serde_json::from_value::<Vec<MediaAssetSummaryDto>>(media_val.clone())
+                    {
+                        for m in media {
+                            if let Some(cur) = store.media.iter_mut().find(|x| x.id == m.id) {
+                                *cur = m;
+                            } else {
+                                store.media.push(m);
+                            }
+                        }
+                    }
+                }
+                if let Some(persons_val) = before_val.get("persons_before") {
+                    if let Ok(persons) =
+                        serde_json::from_value::<Vec<TreePersonNodeDto>>(persons_val.clone())
+                    {
+                        for pb in persons {
+                            if let Some(cur) = store.persons.iter_mut().find(|p| p.id == pb.id) {
+                                cur.birth = pb.birth;
+                                cur.birth_sort = pb.birth_sort;
+                                cur.death = pb.death;
+                                cur.death_sort = pb.death_sort;
+                                cur.has_death_event = pb.has_death_event;
+                                cur.version += 1;
+                            } else {
+                                store.persons.push(pb);
+                            }
+                        }
+                    }
+                }
+                return Ok(Some(entry.entity_id.clone()));
+            }
             Ok(None)
         }
         _ => Ok(None),

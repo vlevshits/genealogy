@@ -58,25 +58,27 @@ const SingleToastCard: React.FC<{
       aria-live="polite"
       data-testid={`toast-${item.type}`}
       className={cn(
-        'relative overflow-hidden flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-xs sm:text-sm text-primary shadow-lg transition-all'
+        'relative overflow-hidden flex items-start justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-xs sm:text-sm text-primary shadow-lg transition-all'
       )}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        {item.type === 'success' && <CheckCircle2 className="h-4 w-4 text-success shrink-0" />}
-        {item.type === 'error' && <AlertCircle className="h-4 w-4 text-danger shrink-0" />}
-        {item.type === 'info' && <Info className="h-4 w-4 text-brand shrink-0" />}
+      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+        {item.type === 'success' && <CheckCircle2 className="mt-0.5 h-4 w-4 text-success shrink-0" />}
+        {item.type === 'error' && <AlertCircle className="mt-0.5 h-4 w-4 text-danger shrink-0" />}
+        {item.type === 'info' && <Info className="mt-0.5 h-4 w-4 text-brand shrink-0" />}
         {item.type === 'undo' && (
           <span
             data-testid="undo-toast-countdown"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand/15 font-mono text-[11px] font-bold text-brand shrink-0"
+            className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand/15 font-mono text-[11px] font-bold text-brand shrink-0"
           >
             {remaining}s
           </span>
         )}
-        <div className="min-w-0">
-          <div className="font-medium truncate">{item.title}</div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium break-words leading-snug">{item.title}</div>
           {item.description && (
-            <div className="text-xs text-secondary truncate">{item.description}</div>
+            <div className="mt-0.5 text-xs text-secondary break-words leading-snug">
+              {item.description}
+            </div>
           )}
         </div>
       </div>
@@ -148,7 +150,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       <div
         aria-live="polite"
         aria-label="Notifications"
-        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-4 left-1/2 z-50 flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 sm:left-auto sm:right-4 sm:translate-x-0"
+        data-toast-region="true"
+        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-4 left-1/2 z-50 flex w-full max-w-sm sm:max-w-md -translate-x-1/2 flex-col gap-2 px-4 sm:left-auto sm:right-4 sm:translate-x-0"
       >
         {toasts.map((item) => (
           <SingleToastCard key={item.id} item={item} onDismiss={dismissToast} />

@@ -60,10 +60,22 @@ pub fn handle_mcp_jsonrpc(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .trim();
-            let args = params
+            let args = match params
                 .get("arguments")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+                .or_else(|| params.get("args"))
+                .or_else(|| params.get("input"))
+            {
+                Some(Value::String(raw)) => {
+                    let trimmed = raw.trim();
+                    if trimmed.is_empty() {
+                        json!({})
+                    } else {
+                        serde_json::from_str::<Value>(trimmed).unwrap_or_else(|_| json!({}))
+                    }
+                }
+                Some(Value::Null) | None => params.clone(),
+                Some(other) => other.clone(),
+            };
 
             let all_tools = all_mcp_tools();
             let Some(tool_def) = all_tools.iter().find(|t| t.name == tool_name) else {

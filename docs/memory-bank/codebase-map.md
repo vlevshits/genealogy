@@ -22,7 +22,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `routes/` | | **HTTP Handlers & Adapters** |
 | `routes/mod.rs` | 428 | Router creation (`create_router`), OpenAPI spec definition (`ApiDoc`), panic handling layer (`CatchPanicLayer`, `handle_panic`), middleware assembly, native static SPA fallback (`ServeDir` / `ServeFile`). |
 | `routes/auth/` | ~600 | Modular authentication routes: passkey registration/login, magic links, passwords, sessions (with dead cookie eviction on 401 in `passkeys_sessions.rs`), recovery codes. |
-| `routes/rbac/` | ~4,000 | Modular domain routes: tree view (`tree_view.rs`), person/family/event CRUD (`person_profile.rs`, `person_mutations.rs`, `person_delete_families.rs`, `events.rs`, `quick_add.rs`), places (`places.rs`), media (`media_list_create.rs`, `media_tags_links.rs`, `notes_media_files.rs`), search/directory (`search.rs`, `people_directory.rs`), history & quality (`history_quality.rs`), GEDCOM/PDF (`gedcom_pdf.rs`), dashboard/kinship (`dashboard_kinship.rs`), onboarding (`onboarding_tree.rs`), AI story intake (`ai_stories.rs`), and MCP (`mcp.rs`). |
+| `routes/rbac/` | ~4,100 | Modular domain routes: tree view (`tree_view.rs`), person/family/event CRUD (`person_profile.rs`, `person_mutations.rs`, `person_delete_families.rs`, `events.rs`, `quick_add.rs`), places (`places.rs`), media (`media_list_create.rs`, `media_tags_links.rs`, `notes_media_files.rs`), search/directory (`search.rs`, `people_directory.rs`), history & quality (`history_quality.rs`, `quality_events.rs`), GEDCOM/PDF (`gedcom_pdf.rs`), dashboard/kinship (`dashboard_kinship.rs`), onboarding (`onboarding_tree.rs`), AI story intake (`ai_stories.rs`), and MCP (`mcp.rs`). |
 | `routes/system.rs` | 383 | Health check, system information (`ai_enabled` flag), and database readiness endpoints. |
 | `routes/health.rs` | ~40 | Minimal liveness and readiness ping handler. |
 | `services/` | | **Business Logic & Workflows** |
@@ -31,14 +31,14 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `services/dashboard.rs` | 744 | Dashboard aggregation, home person metrics, upcoming birthdays and anniversaries. |
 | `services/db_init.rs` | ~150 | Database startup connectivity check, exponential retry loop, advisory lock acquisition. |
 | `services/email.rs` | 630 | SMTP mailer, HTML email templates (invitations, magic links, account recovery). |
-| `services/gedcom/` | ~1,200 | Modularized GEDCOM parser, exporter, record linkage, and family relations. |
+| `services/gedcom/` | ~1,200 | Modularized GEDCOM parser, exporter, record linkage, and family relations; `importer.rs` preserves PATs and `ai_config` across resets. |
 | `services/genealogy/` | ~1,100 | Modularized traversal, pedigree trees, descendant trees, and multi-trace kinship paths. |
 | `services/history/` | ~800 | Modularized change log recording, snapshots, undo transaction engine. |
-| `services/mcp/` | ~850 | Modularized Model Context Protocol (MCP) server: tool registry, JSON-RPC, SSE transport, PAT validation. |
+| `services/mcp/` | 2,775 | Modularized MCP server (6 files): `catalog.rs`, `db_tokens.rs` (PAT file/DB persistence, expiration, seed bootstrap), `rpc_read.rs`, `tools_mutation.rs` (incl. `merge_duplicate_individuals`, `list_duplicate_events`, `merge_duplicate_events`, `undo_transaction`), `types_tokens.rs`. |
 | `services/media_bundle.rs` | 433 | Batch ZIP upload extraction, checksum validation, automatic reconciliation with GEDCOM stubs. |
 | `services/pdf/` | ~1,500 | Modularized printable tree PDF engine: layout planning (`layout/`), vector rendering (`render/`), and themes. |
-| `services/privacy/` | ~800 | Modularized living-person determination (110-year rule), masking, privacy-404 generation. |
-| `services/quality/` | ~1,800 | Modularized validation checks, duplicate detection scoring, place hierarchy repair. |
+| `services/privacy/` | 1,677 | Modularized living-person rules (`living.rs`), masking (`masking.rs`), DTOs (`dto.rs`), and store persistence (`store.rs` → `persist_to_dir` writing `live-store.json` + `mcp-tokens.json`). |
+| `services/quality/` | 7,687 | Modularized validation checks (`warnings.rs`), duplicate candidate scoring (`candidates.rs`, `scoring.rs`), duplicate person merge (`merge.rs`), duplicate event detection & merge (`events_duplicates*.rs`), place hierarchy repair (`places_*.rs`). |
 | `services/rbac.rs` | 248 | Role verification, permission policy checks (Admin, Editor, Viewer, Public), `PublicOrAuth` extractor with graceful fallback. |
 | `services/scheduler.rs` | ~200 | Periodic background task runner (daily snapshot, automated backup, cleanup). |
 | `services/security/` | ~500 | Modularized rate limiter, CSRF/Origin enforcement, RequestContext middleware. |
@@ -65,7 +65,8 @@ A complete directory and module responsibility map of the Genealogy repository.
 | :--- | :--- |
 | `auth_test.rs` | Passkey authentication, magic links, passwords, session revocation, lockout. |
 | `core_data_model_test.rs` | Schema validation, foreign keys, cascading rules, `gid` uniqueness. |
-| `data_quality_places_test.rs` | Soft validation warnings, duplicate detection, place hierarchy repair. |
+| `data_quality_events_test.rs` | Duplicate life/union event detection, conflicts, custom/batch merge, `FAMC` vital isolation, `"event_merge_bundle"` Undo, dismissal, MCP tools (6 tests). |
+| `data_quality_places_test.rs` | Soft validation warnings, duplicate candidate detection, place hierarchy repair. |
 | `gedcom_test.rs` | Import and export roundtrip of GEDCOM 5.5.1 and 7.0 sample files. |
 | `gendate_fixtures_test.rs` | Complex genealogical date string parsing, serialization, and comparisons. |
 | `health_test.rs` | Health check route, system status, uptime. |
@@ -92,7 +93,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 | Directory | Responsibility |
 | :--- | :--- |
 | `api/` | Modular typed API clients: `core.ts` (`apiFetch` with auto-purge on 401, defensive token sanitization, `ApiError`), `client.ts` (re-export facade), `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `delight-types.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, `stories-mcp-api.ts` (story intake & MCP), `gemini-story-extractor.ts` (extraction engine selector), `openapi-types.ts`, and `openapi-types-domain.ts`. |
-| `components/ui/` | Reusable Design System primitives: `Button`, `IconButton`, `TextInput`, `Select`, `Modal`, `Card`, `Badge`, `Spinner`, `Tabs`, `ThemeToggle`, `LanguageToggle`. |
+| `components/ui/` | Reusable Design System primitives: `Button`, `IconButton`, `TextInput`, `Select`, `Dialog` (`Modal` with focus trap & toast-exempt `inert`), `Card`, `Badge`, `Toast` (`data-toast-region`, multi-line wrapping), `Spinner`, `Tabs`, `SegmentedControl`, `ThemeToggle`, `LanguageToggle`. |
 | `components/domain/` | Domain-specific widgets: `GenDateInput`, `PlacePicker`, `RoleBadge`, `GenderIcon`. |
 | `components/auth/` | Auth UI: `LoginCard`, `MagicLinkVerifyCard`, `RecoveryCodesCard`, `RegisterInviteCard`. |
 | `components/tree/` | Interactive canvas: `TreeCanvas`, `PersonNodeCard`, `FanChartCanvas`, `KinshipFinderDialog`, `TreePrivacyPreviewCard`. |
@@ -100,23 +101,27 @@ A complete directory and module responsibility map of the Genealogy repository.
 | `components/person/` | Person creation and edit modals (`PersonEditDialog`, quick-add components). |
 | `components/media/` | Gallery components: `MediaLightboxStudio`, `FaceTagCanvas`, `MediaMetadataPanel`. |
 | `components/places/` | Place hierarchy tree, place edit modal, interactive Leaflet/SVG place maps. |
-| `components/quality/` | Quality dashboard cards, candidate duplicate comparisons, place issue fixes. |
+| `components/quality/` | Quality dashboard cards, candidate duplicate comparisons, duplicate events (`DuplicateEventsSubView`, `DuplicateEventCard`, `DuplicateEventCustomizeModal`, `default-quality-fixtures.ts`), place issue fixes. |
 | `components/print/` | PDF configuration options, tile cut-mark previews (`PrintPreviewCanvas`). |
 | `components/history/` | Audit log tables, diff viewers, `RecordHistoryDrawer`. |
 | `components/stories/` | Audio recording widget (`AudioRecorderWidget`), story input panel (`StoryInputPanel`), speaker selector (`SpeakerSelectorCard`), draft review canvas (`DraftSubtreeCanvas`, `ReconciliationMatrixCard`, `DraftClarificationBar`). |
+| `components/settings/` | Settings management panels (`McpTokensPanel` with `availableScopesForRole` default scope helper, re-exported via `index.ts`). |
 | `components/onboarding/`| First-run setup wizards (`EmptyTreeOnboardingCard`). |
 | `hooks/` | Custom React hooks (`useLiveVersion`, `useUndoToast`). |
 | `i18n/` | Localization engine (`index.tsx`), translation dictionaries (`en.json`, `ru.json`). |
 | `lib/` | Utilities: `cn.ts` (Tailwind merge), `auth-context.tsx`, `theme.tsx`, `kinship.ts`, `patronymic.ts`, `webauthn.ts`, `error-formatter.ts`, `tree-layouts/` (`hourglass/`, `hourglass-layout.ts`, `all-nodes-layout.ts`, `pedigree-layout.ts`, `descendants-layout.ts`). |
-| `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `AiStoryIntakePage`, `PrintExportPage`, `DevUiWorkbench`, etc.). |
+| `pages/` | Top-level routing views (`PeoplePage`, `PlacesPage`, `MediaPage`, `HistoryPage`, `DataQualityPage`, `PersonMergePage`, `AiStoryIntakePage`, `PrintExportPage`, `DevUiWorkbench`, etc.). |
 | `types/` | Domain data types (`person.ts`, `place.ts`, `event.ts`, `gendate.ts`). |
 
-### 2.2 Key Frontend Unit & Integration Tests (`frontend/tests/`)
+### 2.2 Key Frontend Unit & Integration Tests (`frontend/tests/` & `frontend/e2e/`)
 
 | Test Suite | Coverage Scope |
 | :--- | :--- |
-| `api/auth-token-resilience.test.ts` | Defensive token sanitization (`cleanToken`), 401 auto-purge in `apiFetch`, and `AuthProvider` token cleanup. |
-| `i18n/parity.test.ts` | Bilingual key parity between `en.json` and `ru.json`, and emoji/icon prohibition. |
+| `tests/api/auth-token-resilience.test.ts` | Defensive token sanitization (`cleanToken`), 401 auto-purge in `apiFetch`, and `AuthProvider` token cleanup. |
+| `tests/components/milestone-2-9-and-3-2.test.tsx` | Story intake UI, Gemini engine controls, and `McpTokensPanel` PAT role-ceiling scope & lifecycle flows. |
+| `tests/components/person-merge-and-quality.test.tsx` | Person merge preview, Duplicate Events cards/customize modal/offline guard, `Dialog` focus trap & `SegmentedControl` tests (18 tests). |
+| `tests/i18n/parity.test.ts` | Bilingual key parity between `en.json` and `ru.json`, and emoji/icon prohibition. |
+| `e2e/duplicate-events.spec.ts` | Playwright Desktop/Mobile E2E tests for Duplicate Events (`e2e/fixtures/quality-api-mock.ts`, `e2e/pages/quality.page.ts`, `playwright.config.ts` with `serviceWorkers: 'block'`; 16 tests / 52 runs). |
 
 ---
 
@@ -137,7 +142,7 @@ A complete directory and module responsibility map of the Genealogy repository.
 ## 4. File Size Compliance & Bundle Splitting
 
 Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/modular-architecture-and-file-size.md), the hard ceiling for source code files is **800 lines**.
-- **Zero hotspots remain:** Every `.rs` file in `backend/src/` (max 795 lines) and every `.ts`/`.tsx` file in `frontend/src/` (max 744 lines) is strictly ≤ 800 lines.
+- **Zero hotspots remain:** Every `.rs` file in `backend/src/` (max 781 lines in `backend/src/routes/rbac/tree_view.rs`) and every `.ts`/`.tsx` file in `frontend/src/` (max 794 lines in `frontend/src/pages/PersonMergePage.tsx`) is strictly ≤ 800 lines.
 - **Former hotspots decomposed:**
   - `frontend/src/api/client.ts` → split into `core.ts`, `auth-api.ts`, `genealogy-api.ts`, `delight-api.ts`, `history-api.ts`, `media-gedcom-pdf-api.ts`, and `stories-mcp-api.ts`.
   - `frontend/src/api/openapi-types.ts` → split into `openapi-types.ts` and `openapi-types-domain.ts`.
@@ -158,4 +163,4 @@ Per [`.agents/rules/modular-architecture-and-file-size.md`](../../.agents/rules/
 - **New Page:** Add to `frontend/src/pages/` and register route in `frontend/src/App.tsx`.
 - **New User-Facing String:** Add identical keys to both `frontend/src/i18n/en.json` and `frontend/src/i18n/ru.json`.
 
-_Last curated: 2026-11-09 (CatchPanicLayer, dead cookie eviction on 401, PublicOrAuth fallback, defensive token sanitization)_
+_Last curated: 2026-11-14 (Duplicate Events backend/UI/E2E modules, Dialog/Toast polish & verified module line counts)_

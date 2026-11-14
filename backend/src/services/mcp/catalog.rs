@@ -368,15 +368,41 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
         },
         McpToolDefinitionDto {
             name: "merge_duplicate_individuals".to_string(),
-            description: "Atomically merge two duplicate individuals.".to_string(),
+            description: "Atomically merge two duplicate individuals into a surviving record (requires pre-merge snapshot). Accepts surviving_id (aliases: keep_id, target_id, primary_person_id, surviving_person_id, person_a_id) and duplicate_id (aliases: merge_id, source_id, secondary_person_id, duplicate_person_id, person_b_id).".to_string(),
             tier: "C".to_string(),
             required_scope: "admin:maintenance".to_string(),
             input_schema: json!({
                 "type": "object",
                 "required": ["surviving_id", "duplicate_id"],
                 "properties": {
-                    "surviving_id": { "type": "string" },
-                    "duplicate_id": { "type": "string" }
+                    "surviving_id": {
+                        "type": "string",
+                        "description": "UUID or GID of the surviving individual record (aliases: keep_id, target_id, primary_person_id, surviving_person_id, person_a_id)"
+                    },
+                    "duplicate_id": {
+                        "type": "string",
+                        "description": "UUID or GID of the duplicate individual record to merge and remove (aliases: merge_id, source_id, secondary_person_id, duplicate_person_id, person_b_id)"
+                    },
+                    "keep_id": { "type": "string", "description": "Alias for surviving_id" },
+                    "merge_id": { "type": "string", "description": "Alias for duplicate_id" },
+                    "target_id": { "type": "string", "description": "Alias for surviving_id" },
+                    "source_id": { "type": "string", "description": "Alias for duplicate_id" },
+                    "primary_person_id": { "type": "string", "description": "Alias for surviving_id" },
+                    "secondary_person_id": { "type": "string", "description": "Alias for duplicate_id" },
+                    "surviving_person_id": { "type": "string", "description": "Alias for surviving_id" },
+                    "duplicate_person_id": { "type": "string", "description": "Alias for duplicate_id" },
+                    "person_a_id": { "type": "string", "description": "Alias for surviving_id" },
+                    "person_b_id": { "type": "string", "description": "Alias for duplicate_id" },
+                    "field_choices": {
+                        "type": "object",
+                        "description": "Optional per-field winner selection ('keep' or 'merge')",
+                        "additionalProperties": { "type": "string" }
+                    },
+                    "field_overrides": {
+                        "type": "object",
+                        "description": "Optional custom field override values applied to the surviving record",
+                        "additionalProperties": true
+                    }
                 }
             }),
         },
@@ -398,6 +424,54 @@ pub fn all_mcp_tools() -> Vec<McpToolDefinitionDto> {
                 "properties": {
                     "issue_ids": { "type": "array", "items": { "type": "string" } },
                     "dry_run": { "type": "boolean" }
+                }
+            }),
+        },
+        McpToolDefinitionDto {
+            name: "list_duplicate_events".to_string(),
+            description: "List duplicate life event groups (births, deaths, marriages, and compatible repeatable events) with proposed merged values and conflict metadata."
+                .to_string(),
+            tier: "C".to_string(),
+            required_scope: "admin:maintenance".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "include_dismissed": { "type": "boolean" },
+                    "event_type": { "type": "string" },
+                    "scope": { "type": "string", "enum": ["individual", "family"] },
+                    "confidence": { "type": "string", "enum": ["high", "medium"] }
+                }
+            }),
+        },
+        McpToolDefinitionDto {
+            name: "merge_duplicate_events".to_string(),
+            description: "Atomically merge duplicate life events into one surviving event (or batch-merge high-confidence groups) under one Undo transaction."
+                .to_string(),
+            tier: "C".to_string(),
+            required_scope: "admin:maintenance".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "group_id": { "type": "string", "description": "Duplicate event group ID from list_duplicate_events" },
+                    "keep_event_id": { "type": "string", "description": "Optional surviving event UUID/GID (aliases: target_event_id, surviving_event_id)" },
+                    "target_event_id": { "type": "string", "description": "Alias for keep_event_id" },
+                    "surviving_event_id": { "type": "string", "description": "Alias for keep_event_id" },
+                    "merge_event_ids": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Duplicate event UUIDs/GIDs to merge into surviving event (aliases: event_ids, duplicate_event_ids, source_event_ids)"
+                    },
+                    "event_ids": { "type": "array", "items": { "type": "string" }, "description": "Alias for merge_event_ids" },
+                    "duplicate_event_ids": { "type": "array", "items": { "type": "string" }, "description": "Alias for merge_event_ids" },
+                    "source_event_ids": { "type": "array", "items": { "type": "string" }, "description": "Alias for merge_event_ids" },
+                    "date_text": { "type": "string" },
+                    "place_id": { "type": "string" },
+                    "place_name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "source_text": { "type": "string" },
+                    "batch": { "type": "boolean", "description": "If true, batch-merge eligible groups in one transaction" },
+                    "group_ids": { "type": "array", "items": { "type": "string" } },
+                    "only_high_confidence": { "type": "boolean" }
                 }
             }),
         },

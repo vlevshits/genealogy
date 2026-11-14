@@ -11,7 +11,7 @@ use genealogy_backend::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-async fn setup_test_env() -> (axum::Router, String, String, String) {
+async fn setup_test_env_with_state() -> (AppState, axum::Router, String, String, String) {
     let temp_dir =
         std::env::temp_dir().join(format!("genealogy_story_mcp_test_{}", uuid::Uuid::new_v4()));
     let _ = std::fs::create_dir_all(&temp_dir);
@@ -99,8 +99,13 @@ async fn setup_test_env() -> (axum::Router, String, String, String) {
 
     let editor_auth = create_role("editor", "editor@levshits.family", "Elena").await;
     let viewer_auth = create_role("viewer", "viewer@levshits.family", "Viktor").await;
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
+    (state, app, admin_auth, editor_auth, viewer_auth)
+}
+
+async fn setup_test_env() -> (axum::Router, String, String, String) {
+    let (_state, app, admin_auth, editor_auth, viewer_auth) = setup_test_env_with_state().await;
     (app, admin_auth, editor_auth, viewer_auth)
 }
 
@@ -1143,4 +1148,483 @@ async fn test_gemini_config_system_info_and_missing_api_key_audio_transcription_
     let persons = p_draft["extracted_data"]["persons"].as_array().unwrap();
     assert!(!persons.is_empty());
     assert_eq!(persons[0]["given_name"], "William");
+}
+
+#[tokio::test]
+async fn test_mcp_merge_duplicate_individuals_executes_real_merge_with_aliases_and_rejects_empty() {
+    let (_state, app, admin_auth, editor_auth, viewer_auth) = setup_test_env_with_state().await;
+
+    // Role-aware empty-scopes defaults when `scopes: []` or omitted
+    let (adm_st, adm_pat) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &admin_auth,
+        json!({ "name": "Admin Default Scopes", "scopes": [] }),
+    )
+    .await;
+    assert_eq!(adm_st, StatusCode::CREATED);
+    assert_eq!(
+        adm_pat["token_info"]["scopes"],
+        json!([
+            "read:tree",
+            "write:draft",
+            "write:direct",
+            "admin:maintenance"
+        ])
+    );
+    let admin_pat = adm_pat["token"].as_str().unwrap().to_string();
+
+    let (ed_st, ed_pat) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &editor_auth,
+        json!({ "name": "Editor Default Scopes", "scopes": [] }),
+    )
+    .await;
+    assert_eq!(ed_st, StatusCode::CREATED);
+    assert_eq!(
+        ed_pat["token_info"]["scopes"],
+        json!(["read:tree", "write:draft", "write:direct"])
+    );
+
+    let (vw_st, vw_pat) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &viewer_auth,
+        json!({ "name": "Viewer Default Scopes", "scopes": [] }),
+    )
+    .await;
+    assert_eq!(vw_st, StatusCode::CREATED);
+    assert_eq!(vw_pat["token_info"]["scopes"], json!(["read:tree"]));
+
+    // 1. Empty arguments to MCP `merge_duplicate_individuals` MUST return validation error (-32602),
+    // never the REST smoke-test no-op `"Duplicate person merge authorized for administrator"`.
+    let (empty_st, empty_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 100,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "arguments": {}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(empty_st, StatusCode::OK);
+    assert_eq!(empty_res["error"]["code"], -32602);
+    assert!(
+        empty_res.get("result").is_none(),
+        "Empty MCP merge must fail validation rather than returning a fake ok result"
+    );
+
+    // Missing one ID also fails validation (-32602)
+    let (partial_st, partial_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "arguments": { "surviving_id": "I0100" }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(partial_st, StatusCode::OK);
+    assert_eq!(partial_res["error"]["code"], -32602);
+
+    // Helper closure to create two duplicate test individuals via REST API
+    let create_person = |given: &str, surname: &str, birth_date: Option<&str>| {
+        let app_c = app.clone();
+        let auth_c = admin_auth.clone();
+        let given_s = given.to_string();
+        let surname_s = surname.to_string();
+        let birth_s = birth_date.map(ToString::to_string);
+        async move {
+            let mut body = json!({
+                "given_name": given_s,
+                "surname": surname_s,
+                "sex": "M",
+                "is_living": false
+            });
+            if let Some(bd) = birth_s {
+                body["birth_date"] = json!(bd);
+            }
+            let (st, created) = post_json(&app_c, "/api/v1/persons", &auth_c, body).await;
+            assert_eq!(st, StatusCode::CREATED);
+            created["id"].as_str().unwrap().to_string()
+        }
+    };
+
+    // Case A: Standard `surviving_id` + `duplicate_id` with `field_choices` & `field_overrides`
+    let p1 = create_person("Ivan", "Petrov", Some("1900")).await;
+    let p2 = create_person("Ivan", "Petroff", Some("12 MAY 1900")).await;
+    let (m1_st, m1_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 102,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "arguments": {
+                    "surviving_id": p1,
+                    "duplicate_id": p2,
+                    "field_choices": { "surname": "merge", "birth_date": "merge" },
+                    "field_overrides": { "surname": "Petroff" }
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(m1_st, StatusCode::OK);
+    let m1_out = &m1_res["result"]["structuredContent"];
+    assert_eq!(m1_out["status"], "merged");
+    assert_eq!(m1_out["surviving_person_id"], p1);
+    assert_eq!(m1_out["merged_id"], p2);
+    assert_eq!(m1_out["merged_person_id"], p2);
+    assert!(m1_out["tx_id"].as_str().is_some_and(|s| !s.is_empty()));
+
+    let (gone_st, _) = get_json(&app, &format!("/api/v1/persons/{p2}"), &admin_auth).await;
+    assert_eq!(gone_st, StatusCode::NOT_FOUND);
+    let (kept_st, kept_body) = get_json(&app, &format!("/api/v1/persons/{p1}"), &admin_auth).await;
+    assert_eq!(kept_st, StatusCode::OK);
+    assert_eq!(kept_body["primary_name"]["surname"], "Petroff");
+    assert_eq!(kept_body["birth"]["date"], "12 MAY 1900");
+
+    // Case B: `keep_id` + `merge_id` aliases
+    let p3 = create_person("Boris", "Sidorov", None).await;
+    let p4 = create_person("Boris", "Sidorov", Some("1910")).await;
+    let (m2_st, m2_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 103,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "arguments": { "keep_id": p3, "merge_id": p4 }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(m2_st, StatusCode::OK);
+    assert_eq!(m2_res["result"]["structuredContent"]["status"], "merged");
+    assert_eq!(m2_res["result"]["structuredContent"]["merged_id"], p4);
+
+    // Case C: `args` stringified JSON + `target_id` / `source_id` aliases
+    let p5 = create_person("Sergey", "Volkov", None).await;
+    let p6 = create_person("Sergey", "Volkov", None).await;
+    let stringified = json!({ "target_id": p5, "source_id": p6 }).to_string();
+    let (m3_st, m3_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 104,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "args": stringified
+            }
+        }),
+    )
+    .await;
+    assert_eq!(m3_st, StatusCode::OK);
+    assert_eq!(m3_res["result"]["structuredContent"]["status"], "merged");
+    assert_eq!(
+        m3_res["result"]["structuredContent"]["merged_person_id"],
+        p6
+    );
+
+    // Case D: Top-level tool params (`arguments`/`args` omitted) + `person_a_id` / `person_b_id`
+    let p7 = create_person("Nikolai", "Morozov", None).await;
+    let p8 = create_person("Nikolai", "Morozov", None).await;
+    let (m4_st, m4_res) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {admin_pat}"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 105,
+            "method": "tools/call",
+            "params": {
+                "name": "merge_duplicate_individuals",
+                "person_a_id": p7,
+                "person_b_id": p8
+            }
+        }),
+    )
+    .await;
+    assert_eq!(m4_st, StatusCode::OK);
+    assert_eq!(m4_res["result"]["structuredContent"]["status"], "merged");
+    assert_eq!(
+        m4_res["result"]["structuredContent"]["surviving_person_id"],
+        p7
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_token_expiration_and_persistence_across_resets() {
+    let (state, app, admin_auth, _editor_auth, _viewer_auth) = setup_test_env_with_state().await;
+
+    // 1. Mint never-expiring token (`expires_in_days: None`) and future offset token
+    let (st_never, body_never) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &admin_auth,
+        json!({ "name": "Never Expire", "expires_in_days": null }),
+    )
+    .await;
+    assert_eq!(st_never, StatusCode::CREATED);
+    assert!(body_never["token_info"].get("expires_at").is_none());
+    let never_pat = body_never["token"].as_str().unwrap().to_string();
+
+    let (st_exp, body_exp) = post_json(
+        &app,
+        "/api/v1/mcp/tokens",
+        &admin_auth,
+        json!({ "name": "Expired Soon", "expires_in_days": 7 }),
+    )
+    .await;
+    assert_eq!(st_exp, StatusCode::CREATED);
+    let exp_pat_id = body_exp["token_info"]["id"].as_str().unwrap().to_string();
+    let exp_pat = body_exp["token"].as_str().unwrap().to_string();
+
+    // Force `exp_pat` to a past RFC-3339 timestamp with timezone offset (+03:00 vs Z check)
+    {
+        let mut store = state.privacy_store.write().await;
+        let rec = store
+            .personal_access_tokens
+            .iter_mut()
+            .find(|t| t.id == exp_pat_id)
+            .unwrap();
+        rec.expires_at = Some("2020-01-01T00:00:00+03:00".to_string());
+    }
+
+    let (exp_call_st, _) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {exp_pat}"),
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(exp_call_st, StatusCode::UNAUTHORIZED);
+
+    let (ok_call_st, _) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {never_pat}"),
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(ok_call_st, StatusCode::OK);
+
+    // 2. Preserve PATs across GEDCOM `replace` import
+    let gedcom = "0 HEAD\n1 SOUR TEST\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME Anton /Kuznetsov/\n1 SEX M\n0 TRLR\n";
+    let (imp_st, _) = post_json(
+        &app,
+        "/api/v1/gedcom/import",
+        &admin_auth,
+        json!({
+            "data": gedcom,
+            "mode": "replace",
+            "confirm_text": "REPLACE"
+        }),
+    )
+    .await;
+    assert_eq!(imp_st, StatusCode::OK);
+
+    let (after_imp_st, _) = post_json(
+        &app,
+        "/api/v1/mcp",
+        &format!("Bearer {never_pat}"),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(after_imp_st, StatusCode::OK);
+
+    // 3. Production backup persistence & simulated restart recovery (`mcp-tokens.json` + `live-store.json`)
+    let restart_temp =
+        std::env::temp_dir().join(format!("genealogy_mcp_restart_{}", uuid::Uuid::new_v4()));
+    let prod_cfg = AppConfig {
+        app_env: "production".to_string(),
+        backup_path: restart_temp.to_string_lossy().to_string(),
+        enable_public_access: false,
+        ..AppConfig::default()
+    };
+    let prod_state = AppState::new(None, prod_cfg.clone());
+    let (setup_res, _) = AuthService::setup_initial_admin(
+        &prod_state,
+        SetupRequest {
+            tree_title: None,
+            first_name: "Prod".to_string(),
+            last_name: "Admin".to_string(),
+            email: "prodadmin@example.com".to_string(),
+            passkey: None,
+            password: Some("AdminStrongPass123!".to_string()),
+            emergency_token: None,
+        },
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    let prod_admin_auth = format!("Bearer {}", setup_res.session_token);
+    let prod_app = create_router(prod_state.clone());
+
+    let (mint_st, mint_body) = post_json(
+        &prod_app,
+        "/api/v1/mcp/tokens",
+        &prod_admin_auth,
+        json!({ "name": "Survives Restart" }),
+    )
+    .await;
+    assert_eq!(mint_st, StatusCode::CREATED);
+    let persistent_pat = mint_body["token"].as_str().unwrap().to_string();
+    assert!(restart_temp.join("mcp-tokens.json").exists());
+    assert!(restart_temp.join("live-store.json").exists());
+
+    // Simulate brand-new AppState loading tokens back from disk backup
+    let restarted_state = AppState::new(None, prod_cfg);
+    {
+        let users = prod_state.auth_store.read().await.users.clone();
+        let mut auth_store = restarted_state.auth_store.write().await;
+        auth_store.users = users;
+    }
+    {
+        let file_tokens = genealogy_backend::services::mcp::load_mcp_tokens_from_dir(&restart_temp);
+        let mut pstore = restarted_state.privacy_store.write().await;
+        genealogy_backend::services::mcp::merge_mcp_tokens_into_store(&mut pstore, file_tokens);
+    }
+    let restarted_app = create_router(restarted_state);
+    let (restarted_st, _) = post_json(
+        &restarted_app,
+        "/api/v1/mcp",
+        &format!("Bearer {persistent_pat}"),
+        json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(restarted_st, StatusCode::OK);
+    let _ = std::fs::remove_dir_all(&restart_temp);
+
+    // 4. Demo-seed initial setup reset preserves previously added PATs
+    let demo_state = AppState::new_demo(
+        None,
+        AppConfig {
+            app_env: "test".to_string(),
+            enable_public_access: false,
+            ..AppConfig::default()
+        },
+    );
+    let demo_admin_id = uuid::Uuid::new_v4();
+    let demo_raw = "mcp_pat_preserved_demo_secret_123456";
+    let demo_hash = genealogy_backend::services::mcp::hash_mcp_token(demo_raw);
+    let seed_raw = "mcp_pat_seed_agent_secret_abcdef";
+    let seed_hash = genealogy_backend::services::mcp::hash_mcp_token(seed_raw);
+    {
+        let mut pstore = demo_state.privacy_store.write().await;
+        pstore.personal_access_tokens.push(
+            genealogy_backend::services::privacy::PersonalAccessTokenDto {
+                id: uuid::Uuid::new_v4().to_string(),
+                user_id: demo_admin_id.to_string(),
+                name: "Pre-Setup Regular".to_string(),
+                token_prefix: "mcp_pat_preserv".to_string(),
+                token_hash: demo_hash,
+                scopes: vec!["read:tree".to_string()],
+                last_used_at: None,
+                expires_at: None,
+                revoked_at: None,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        );
+        pstore.personal_access_tokens.push(
+            genealogy_backend::services::privacy::PersonalAccessTokenDto {
+                id: genealogy_backend::services::mcp::deterministic_seed_pat_id(&seed_hash),
+                user_id: "seed-admin".to_string(),
+                name: "Production MCP Agent".to_string(),
+                token_prefix: "mcp_pat_seed_age".to_string(),
+                token_hash: seed_hash,
+                scopes: vec!["read:tree".to_string(), "admin:maintenance".to_string()],
+                last_used_at: None,
+                expires_at: None,
+                revoked_at: None,
+                created_at: chrono::Utc::now().to_rfc3339(),
+            },
+        );
+    }
+    let demo_app = create_router(demo_state.clone());
+    let (setup_st, _) = post_json(
+        &demo_app,
+        "/api/v1/auth/setup",
+        "",
+        json!({
+            "first_name": "Fresh",
+            "last_name": "Owner",
+            "email": "fresh@example.com",
+            "password": "FreshOwnerPass123!"
+        }),
+    )
+    .await;
+    assert_eq!(setup_st, StatusCode::CREATED);
+    assert!(
+        demo_state
+            .privacy_store
+            .read()
+            .await
+            .personal_access_tokens
+            .iter()
+            .any(|t| t.token_prefix == "mcp_pat_preserv"),
+        "Initial setup clearing demo seed must preserve personal_access_tokens"
+    );
+
+    // Non-seed token belonging to an absent user MUST NOT escalate to active admin
+    let (reg_missing_st, _) = post_json(
+        &demo_app,
+        "/api/v1/mcp",
+        &format!("Bearer {demo_raw}"),
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(reg_missing_st, StatusCode::UNAUTHORIZED);
+
+    // Seeded admin agent token authenticates cleanly after initial setup
+    let (seed_ok_st, _) = post_json(
+        &demo_app,
+        "/api/v1/mcp",
+        &format!("Bearer {seed_raw}"),
+        json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(seed_ok_st, StatusCode::OK);
+
+    // Deactivated user's token MUST fail with 401 even if named "Production MCP Agent"
+    let owner_id = demo_state.auth_store.read().await.users[0].id;
+    {
+        let mut astore = demo_state.auth_store.write().await;
+        astore.users[0].is_active = false;
+        let mut pstore = demo_state.privacy_store.write().await;
+        pstore.personal_access_tokens[1].user_id = owner_id.to_string();
+    }
+    let (deactivated_st, _) = post_json(
+        &demo_app,
+        "/api/v1/mcp",
+        &format!("Bearer {seed_raw}"),
+        json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/list" }),
+    )
+    .await;
+    assert_eq!(deactivated_st, StatusCode::UNAUTHORIZED);
 }

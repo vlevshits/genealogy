@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
+  Calendar,
   CheckCircle2,
   GitMerge,
   Info,
@@ -21,11 +23,16 @@ import {
   useToast,
 } from '../components/ui';
 import {
+  buildDefaultDuplicateEventGroups,
+  buildDefaultDuplicatePairs,
   buildDefaultPlaceHierarchyIssues,
+  buildDefaultQualityWarnings,
+  DuplicateEventsSubView,
   PlaceHierarchySubView,
 } from '../components/quality';
 import {
   DuplicateCandidatePairDto,
+  DuplicateEventGroupDto,
   peopleApi,
   PlaceHierarchyIssueDto,
   qualityApi,
@@ -48,79 +55,28 @@ export type QualityFilterTab =
 export interface DataQualityPageProps {
   initialWarnings?: QualityWarningDto[];
   initialDuplicates?: DuplicateCandidatePairDto[];
+  initialDuplicateEvents?: DuplicateEventGroupDto[];
   initialPlaceIssues?: PlaceHierarchyIssueDto[];
   initialFilter?: QualityFilterTab;
   userRole?: 'admin' | 'editor' | 'viewer';
   onNavigate?: (path: string) => void;
 }
 
-export function buildDefaultQualityWarnings(): QualityWarningDto[] {
-  return [
-    {
-      id: 'warn-1',
-      rule_code: 'DEATH_BEFORE_BIRTH',
-      severity: 'critical',
-      entity_type: 'person',
-      entity_id: 'node-deceased-1',
-      person_id: 'node-deceased-1',
-      person_name: 'Pyotr Fyodorovich Shcheglov',
-      person_gid: 'I0012',
-    },
-    {
-      id: 'warn-2',
-      rule_code: 'PARENT_TOO_YOUNG',
-      severity: 'warning',
-      entity_type: 'person',
-      entity_id: 'node-deceased-2',
-      person_id: 'node-deceased-2',
-      person_name: 'Sofia Yakovlevna Levshits',
-      person_gid: 'I0002',
-    },
-    {
-      id: 'warn-3',
-      rule_code: 'MISSING_BIRTH',
-      severity: 'info',
-      entity_type: 'person',
-      entity_id: 'node-private-1',
-      person_id: 'node-private-1',
-      person_name: 'Mikhail Levshits',
-      person_gid: 'I0099',
-    },
-  ];
-}
-
-export function buildDefaultDuplicatePairs(): DuplicateCandidatePairDto[] {
-  return [
-    {
-      id: 'dup-1',
-      person_a_id: 'node-deceased-1',
-      person_a_gid: 'I0012',
-      person_a_name: 'Pyotr Fyodorovich Shcheglov',
-      person_a_birth: 'abt 1868',
-      person_a_death: '1931',
-      person_b_id: 'node-dup-2',
-      person_b_gid: 'I0388',
-      person_b_name: 'Pyotr Shcheglov',
-      person_b_birth: '1868-02-03',
-      person_b_death: '1931',
-      score: 92,
-      reasons: ['shared_parents', 'patronymic_match', 'vital_dates', 'detached_record'],
-      is_detached: true,
-    },
-  ];
-}
+export { buildDefaultDuplicatePairs, buildDefaultQualityWarnings };
 
 export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   initialWarnings,
   initialDuplicates,
+  initialDuplicateEvents,
   initialPlaceIssues,
   initialFilter,
   userRole,
   onNavigate,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const { addToast } = useToast();
+  const normalizedLocale = locale === 'ru' ? 'ru' : 'en';
 
   const effectiveRole = userRole ?? user?.role ?? 'admin';
   const isAdmin = effectiveRole === 'admin';
@@ -150,6 +106,21 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
   const [duplicates, setDuplicates] = useState<DuplicateCandidatePairDto[]>(
     () => initialDuplicates ?? buildDefaultDuplicatePairs()
   );
+  const [duplicateEvents, setDuplicateEvents] = useState<
+    DuplicateEventGroupDto[]
+  >(
+    () =>
+      initialDuplicateEvents ??
+      (initialWarnings || initialDuplicates
+        ? []
+        : buildDefaultDuplicateEventGroups(normalizedLocale))
+  );
+  const hasServerDupEventsRef = useRef(
+    Boolean(initialDuplicateEvents || initialWarnings || initialDuplicates)
+  );
+  const [highlightedDupEventId, setHighlightedDupEventId] = useState<
+    string | null
+  >(null);
   const [placeIssues, setPlaceIssues] = useState<PlaceHierarchyIssueDto[]>(
     () => initialPlaceIssues ?? buildDefaultPlaceHierarchyIssues()
   );
@@ -167,32 +138,44 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
     [onNavigate]
   );
 
-  const loadQualityData = useCallback(() => {
-    if (!isAdmin || initialWarnings) return;
-    setLoading(true);
-    Promise.all([
-      qualityApi.getWarnings().catch(() => null),
-      qualityApi.getDuplicates().catch(() => null),
-      qualityApi.getPlaceHierarchyAnalysis().catch(() => null),
-    ])
-      .then(([warnRes, dupRes, placeRes]) => {
-        if (warnRes && Array.isArray(warnRes.warnings)) {
-          setWarnings(warnRes.warnings);
-          if (Array.isArray(warnRes.duplicates)) {
-            setDuplicates(warnRes.duplicates);
+  const loadQualityData = useCallback(
+    (silent = false) => {
+      if (!isAdmin || initialWarnings) return;
+      if (!silent) setLoading(true);
+      Promise.all([
+        qualityApi.getWarnings().catch(() => null),
+        qualityApi.getDuplicates().catch(() => null),
+        qualityApi.getDuplicateEvents().catch(() => null),
+        qualityApi.getPlaceHierarchyAnalysis().catch(() => null),
+      ])
+        .then(([warnRes, dupRes, dupEventRes, placeRes]) => {
+          if (warnRes && Array.isArray(warnRes.warnings)) {
+            setWarnings(warnRes.warnings);
+            if (Array.isArray(warnRes.duplicates)) {
+              setDuplicates(warnRes.duplicates);
+            }
+            if (Array.isArray(warnRes.duplicate_events)) {
+              hasServerDupEventsRef.current = true;
+              setDuplicateEvents(warnRes.duplicate_events);
+            }
           }
-        }
-        if (Array.isArray(dupRes)) {
-          setDuplicates(dupRes);
-        }
-        if (placeRes && Array.isArray(placeRes.items)) {
-          setPlaceIssues(placeRes.items);
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [isAdmin, initialWarnings]);
+          if (Array.isArray(dupRes)) {
+            setDuplicates(dupRes);
+          }
+          if (Array.isArray(dupEventRes)) {
+            hasServerDupEventsRef.current = true;
+            setDuplicateEvents(dupEventRes);
+          }
+          if (placeRes && Array.isArray(placeRes.items)) {
+            setPlaceIssues(placeRes.items);
+          }
+        })
+        .finally(() => {
+          if (!silent) setLoading(false);
+        });
+    },
+    [isAdmin, initialWarnings]
+  );
 
   useEffect(() => {
     loadQualityData();
@@ -205,6 +188,51 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
     if (activeTab === 'all') return warnings;
     return warnings.filter((w) => w.severity === activeTab);
   }, [warnings, activeTab]);
+
+  useEffect(() => {
+    if (!hasServerDupEventsRef.current) {
+      setDuplicateEvents(buildDefaultDuplicateEventGroups(normalizedLocale));
+    }
+  }, [normalizedLocale]);
+
+  useEffect(() => {
+    if (!highlightedDupEventId || typeof window === 'undefined') return;
+    const timer = window.setTimeout(() => setHighlightedDupEventId(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [highlightedDupEventId]);
+
+  const handleDuplicateEventRemoved = useCallback((groupId: string) => {
+    let removedEventIds: Set<string> | null = null;
+    setDuplicateEvents((prev) => {
+      const target = prev.find((g) => g.id === groupId);
+      if (target) {
+        removedEventIds = new Set(target.events.map((ev) => ev.id));
+      }
+      return prev.filter((g) => g.id !== groupId);
+    });
+    setWarnings((prev) =>
+      prev.filter(
+        (w) =>
+          !(
+            (w.rule_code || w.code) === 'DUPLICATE_EVENT' &&
+            (w.entity_id === groupId ||
+              (removedEventIds !== null && removedEventIds.has(w.entity_id)))
+          )
+      )
+    );
+  }, []);
+
+  const handleReviewDuplicateEvent = useCallback((groupId: string) => {
+    setActiveTab('duplicates');
+    setHighlightedDupEventId(groupId);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const card = document.getElementById(`duplicate-event-card-${groupId}`);
+        card?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        card?.focus?.();
+      });
+    }
+  }, []);
 
   if (!isAdmin) {
     return (
@@ -229,6 +257,7 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
       MARRIED_TOO_YOUNG: 'quality.rules.marriedTooYoung',
       EVENT_AFTER_DEATH: 'quality.rules.eventAfterDeath',
       POSSIBLE_DUPLICATE: 'quality.rules.possibleDuplicate',
+      DUPLICATE_EVENT: 'quality.rules.duplicateEvent',
       MISSING_BIRTH: 'quality.rules.missingBirth',
       UNCONNECTED: 'quality.rules.unconnected',
       PLACE_UNPARSED_PATH: 'quality.rules.placeUnparsedPath',
@@ -309,6 +338,9 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
             )
         )
       );
+      if (code === 'DUPLICATE_EVENT' && entityId) {
+        setDuplicateEvents((prev) => prev.filter((g) => g.id !== entityId));
+      }
       addToast({
         type: 'success',
         title: t('quality.dismissedToast'),
@@ -371,6 +403,14 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
             <Badge variant="brand">
               {t('quality.summaryDuplicates', { count: duplicates.length })}
             </Badge>
+            <Badge
+              variant={duplicateEvents.length > 0 ? 'brand' : 'neutral'}
+              icon={<Calendar className="h-3 w-3" />}
+            >
+              {t('quality.summaryDuplicateEvents', {
+                count: duplicateEvents.length,
+              })}
+            </Badge>
             <Badge variant="neutral" icon={<MapPin className="h-3 w-3" />}>
               {t('quality.summaryPlaces', { count: placeIssues.length })}
             </Badge>
@@ -378,13 +418,14 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
         }
       />
 
-      {/* Filter Tabs — wrapped with horizontal scroll safety for 390px mobile (UX-110) */}
+      {/* Filter Tabs — single-line pills wrapping cleanly on 390px mobile (UX-110, UX-131) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="max-w-full overflow-x-auto pb-1">
+        <div className="w-full sm:w-auto">
           <SegmentedControl<QualityFilterTab>
             ariaLabel={t('quality.filterAria')}
             value={activeTab}
             onChange={setActiveTab}
+            className="flex w-full flex-wrap gap-1 sm:inline-flex sm:w-auto sm:flex-nowrap sm:gap-0.5"
             options={[
               {
                 value: 'all',
@@ -405,7 +446,7 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
               {
                 value: 'duplicates',
                 label: t('quality.tabs.duplicates', {
-                  count: duplicates.length,
+                  count: duplicates.length + duplicateEvents.length,
                 }),
               },
               {
@@ -450,10 +491,32 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
               ) : (
                 filteredWarnings.map((w, idx) => {
                   const key = w.id || `${w.rule_code}-${w.entity_id}-${idx}`;
-                  const personId = w.person?.id || w.person_id || w.entity_id;
+                  const matchingDupEventGroup =
+                    (w.rule_code || w.code) === 'DUPLICATE_EVENT'
+                      ? duplicateEvents.find((g) => g.id === w.entity_id) ??
+                        duplicateEvents.find((g) =>
+                          g.events.some((ev) => ev.id === w.entity_id)
+                        ) ??
+                        duplicateEvents.find(
+                          (g) =>
+                            g.person?.id === (w.person_id || w.entity_id) ||
+                            g.partner?.id === (w.person_id || w.entity_id)
+                        )
+                      : undefined;
+                  const personId =
+                    w.person?.id ||
+                    w.person_id ||
+                    matchingDupEventGroup?.person.id ||
+                    w.entity_id;
                   const personName =
-                    w.person?.display_name || w.person_name || personId;
-                  const personGid = w.person?.gid || w.person_gid;
+                    w.person?.display_name ||
+                    w.person_name ||
+                    matchingDupEventGroup?.person.display_name ||
+                    personId;
+                  const personGid =
+                    w.person?.gid ||
+                    w.person_gid ||
+                    matchingDupEventGroup?.person.gid;
                   return (
                     <Card
                       key={key}
@@ -483,7 +546,22 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full sm:shrink-0">
+                        {matchingDupEventGroup && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            data-testid={`warning-review-dup-events-btn-${matchingDupEventGroup.id}`}
+                            rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                            onClick={() =>
+                              handleReviewDuplicateEvent(
+                                matchingDupEventGroup.id
+                              )
+                            }
+                          >
+                            {t('quality.duplicateEvents.reviewDuplicatesBtn')}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="secondary"
@@ -515,13 +593,11 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
               </div>
 
               {duplicates.length === 0 ? (
-                <Card className="p-6">
-                  <EmptyState
-                    icon={<CheckCircle2 className="h-6 w-6 text-success" />}
-                    title={t('quality.duplicates.emptyTitle')}
-                    description={t('quality.duplicates.emptyDesc')}
-                  />
-                </Card>
+                <EmptyState
+                  icon={<CheckCircle2 className="h-6 w-6 text-success" />}
+                  title={t('quality.duplicates.emptyTitle')}
+                  description={t('quality.duplicates.emptyDesc')}
+                />
               ) : (
                 duplicates.map((pair, idx) => {
                   const personAId = pair.person_a?.id || pair.person_a_id || '';
@@ -617,7 +693,7 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full sm:shrink-0">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -655,6 +731,18 @@ export const DataQualityPage: React.FC<DataQualityPageProps> = ({
                 })
               )}
             </div>
+          )}
+
+          {/* Duplicate Events Section */}
+          {(activeTab === 'all' || activeTab === 'duplicates') && (
+            <DuplicateEventsSubView
+              groups={duplicateEvents}
+              highlightedGroupId={highlightedDupEventId}
+              onMerged={handleDuplicateEventRemoved}
+              onDismissed={handleDuplicateEventRemoved}
+              onReload={() => loadQualityData(true)}
+              onNavigate={navigateTo}
+            />
           )}
         </div>
       )}
